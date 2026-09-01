@@ -1,0 +1,19 @@
+# Configuration de l'engine NLP de Presidio Analyzer
+# Déclare le modèle spaCy français pour que l'analyzer accepte language="fr"
+
+nlp_engine_name: spacy
+models:
+  - lang_code: fr
+    model_name: fr_core_news_md
+  - lang_code: en
+    model_name: en_core_web_lg
+
+ner_model_configuration:
+  model_to_presidio_entity_mapping:
+    PER: PERSON
+    LOC: LOCATION
+    ORG: ORGANIZATION
+    MISC: MISC
+  low_confidence_score_multiplier: 0.4
+  low_score_entity_names:
+    - MISC

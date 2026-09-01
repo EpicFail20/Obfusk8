@@ -1,0 +1,18 @@
+# Secrets — ne jamais versionner
+.env
+
+# Fichiers générés par Docker / l'application (pas du code source)
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Données Keycloak (volume Docker, pas du code)
+keycloak-data/
+
+# Certificats Traefik générés dynamiquement (si présents en local)
+traefik/certs/*.pem
+traefik/certs/*.key
+
+# Éditeurs
+.vscode/
+*.swp

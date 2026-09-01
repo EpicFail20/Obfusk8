@@ -1,0 +1,59 @@
+{
+  "label": "Comptabilité",
+  "score_threshold": 0.4,
+  "allow_list": [],
+  "ad_hoc_recognizers": [
+    {
+      "name": "SiretRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "SIRET (14 chiffres)",
+          "regex": "\\b\\d{3}\\s?\\d{3}\\s?\\d{3}\\s?\\d{5}\\b",
+          "score": 0.55
+        }
+      ],
+      "context": ["siret"],
+      "supported_entity": "FR_SIRET"
+    },
+    {
+      "name": "SirenRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "SIREN (9 chiffres)",
+          "regex": "\\b\\d{3}\\s?\\d{3}\\s?\\d{3}\\b",
+          "score": 0.3
+        }
+      ],
+      "context": ["siren"],
+      "supported_entity": "FR_SIREN"
+    },
+    {
+      "name": "TvaIntracomRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "TVA intracommunautaire FR",
+          "regex": "\\bFR\\s?\\d{2}\\s?\\d{9}\\b",
+          "score": 0.7
+        }
+      ],
+      "context": ["tva", "intracommunautaire"],
+      "supported_entity": "FR_TVA"
+    },
+    {
+      "name": "InvoiceNumberRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "numéro de facture",
+          "regex": "\\b(?:FAC|FACT|INV)[-_/]?\\d{4,10}\\b",
+          "score": 0.5
+        }
+      ],
+      "context": ["facture", "invoice"],
+      "supported_entity": "INVOICE_ID"
+    }
+  ]
+}
