@@ -160,6 +160,49 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Anonymiseur de documents - PDF", lifespan=lifespan)
 
+ERROR_TITLES = {
+    400: "Requête invalide",
+    404: "Introuvable",
+    413: "Fichier trop volumineux",
+    422: "Formulaire incomplet",
+    502: "Service indisponible",
+}
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """
+    Affiche une page d'erreur lisible pour un navigateur (formulaire soumis
+    normalement), tout en gardant une réponse JSON classique pour un appel
+    scripté/API (curl, outillage) qui ne demande pas explicitement du HTML.
+    """
+    wants_html = "text/html" in request.headers.get("accept", "")
+    if not wants_html:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    title = ERROR_TITLES.get(exc.status_code, "Une erreur est survenue")
+    return HTMLResponse(
+        status_code=exc.status_code,
+        content=f"""
+        <!doctype html>
+        <html lang="fr">
+        <head><meta charset="utf-8"><title>{title} - Anonymiseur</title></head>
+        <body style="font-family: sans-serif; max-width: 560px; margin: 80px auto; text-align:center;">
+          <div style="font-size:3em; margin-bottom:8px;">⚠️</div>
+          <h1 style="margin-bottom:8px;">{title}</h1>
+          <p style="color:#555; font-size:1.1em;">{exc.detail}</p>
+          <p style="margin-top:32px;">
+            <a href="/" style="
+                display:inline-block; padding:10px 24px; background:#0d6efd;
+                color:white; text-decoration:none; border-radius:4px;">
+              &larr; Retour à l'accueil
+            </a>
+          </p>
+        </body>
+        </html>
+        """,
+    )
+
 
 def _schedule_cleanup(path: Path, delay: int = FILE_TTL_SECONDS):
     """Supprime le fichier après `delay` secondes (purge automatique)."""
@@ -191,7 +234,7 @@ def _normalize_allcaps(text: str) -> str:
 def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
     """Appelle presidio-analyzer sur un morceau de texte, renvoie les entités trouvées.
 
-    Si un thème est fourni, ses recognizers personnalisés (ad_hoc_recognizers),
+    Si un thème est fourni, ses reconnaisseurs personnalisés (ad_hoc_recognizers),
     sa liste d'exclusions (allow_list) et son seuil de sensibilité
     (score_threshold) sont envoyés avec la requête — sans jamais toucher à
     la config statique du conteneur presidio-analyzer.
@@ -284,36 +327,13 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     return detections
 
 
-def _apply_selected_redactions(doc: fitz.Document, detections: list[dict], excluded_ids: set) -> dict:
-    """
-    Applique le caviardage uniquement pour les détections dont l'id n'est
-    PAS dans excluded_ids (celles que l'utilisateur a décochées en révision).
-    """
-    summary: dict[str, int] = {}
-    by_page: dict[int, list[dict]] = {}
-    for d in detections:
-        if d["id"] not in excluded_ids:
-            by_page.setdefault(d["page"], []).append(d)
-
-    for page_index, page_detections in by_page.items():
-        page = doc[page_index]
-        for d in page_detections:
-            page.add_redact_annot(fitz.Rect(d["page_rect"]), fill=(0, 0, 0))
-            summary[d["entity_type"]] = summary.get(d["entity_type"], 0) + 1
-        page.apply_redactions()
-
-    return summary
-
-
-def _rect_iou(a: list, b: list) -> float:
-    """Intersection-over-union entre deux rectangles [x0,y0,x1,y1]."""
+def _rect_iou(a: list[float], b: list[float]) -> float:
+    """Calcule l'IoU (intersection sur union) entre deux rectangles [x0, y0, x1, y1]."""
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
     ix0, iy0 = max(ax0, bx0), max(ay0, by0)
     ix1, iy1 = min(ax1, bx1), min(ay1, by1)
     inter = max(0, ix1 - ix0) * max(0, iy1 - iy0)
-    if inter == 0:
-        return 0.0
     area_a = max(0, ax1 - ax0) * max(0, ay1 - ay0)
     area_b = max(0, bx1 - bx0) * max(0, by1 - by0)
     union = area_a + area_b - inter
@@ -381,11 +401,10 @@ def upload_form():
 
     return f"""
     <!doctype html>
-    <html lang="fr">
-    <head><meta charset="utf-8"><title>Anonymiseur de documents</title></head>
+    <html lang="fr"><head><meta charset="utf-8"><title>Anonymiseur de documents</title></head>
     <body style="font-family: sans-serif; max-width: 600px; margin: 40px auto;">
       <h1>Anonymiseur de documents (PDF)</h1>
-      <p>Dépose un PDF. Tu pourras vérifier et ajuster les zones détectées avant le caviardage final.</p>
+      <p>Déposez un PDF. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.</p>
       <form action="/api/detect" method="post" enctype="multipart/form-data">
         <p>
           <label for="theme">Type de document :</label><br>
@@ -409,7 +428,8 @@ async def detect_pdf(
     Phase 1 du flux avec révision : détecte les entités sans les caviarder,
     stocke le job en mémoire, renvoie une page HTML avec les pages du PDF
     en image et les zones détectées surlignées et cliquables (clic = exclure
-    du caviardage final).
+    du caviardage final). L'utilisateur peut aussi tracer manuellement de
+    nouvelles zones à caviarder (faux négatifs corrigés à la main).
     """
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="Seuls les fichiers PDF sont acceptés")
@@ -443,6 +463,13 @@ async def detect_pdf(
         doc = fitz.open(stream=raw, filetype="pdf")
     except Exception as exc:
         raise HTTPException(status_code=400, detail="PDF illisible ou corrompu") from exc
+
+    if doc.needs_pass:
+        doc.close()
+        raise HTTPException(
+            status_code=400,
+            detail="Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
+        )
 
     detections = _detect_pdf(doc, theme=selected_theme)
     clusters = _cluster_detections(detections)
@@ -485,7 +512,7 @@ async def detect_pdf(
             for c in clusters if c["page"] == page_index
         )
         pages_html.append(f"""
-        <div class="page-container" style="position:relative; width:{width}px; height:{height}px; margin-bottom:16px;">
+        <div class="page-container" data-page="{page_index}" style="position:relative; width:{width}px; height:{height}px; margin-bottom:16px;">
           <img src="/api/preview_image/{job_id}/{page_index}" width="{width}" height="{height}" style="display:block;">
           {overlays}
         </div>
@@ -510,6 +537,19 @@ async def detect_pdf(
           background: rgba(40, 170, 40, 0.15);
           border: 1px dashed rgba(40, 140, 40, 0.7);
         }}
+        .manual-zone {{
+          position: absolute;
+          background: rgba(40, 80, 220, 0.35);
+          border: 1px solid rgba(40, 80, 220, 0.9);
+          cursor: pointer;
+        }}
+        .page-container.manual-mode {{ cursor: crosshair; }}
+        .drag-preview {{
+          position: absolute;
+          border: 2px dashed rgba(40, 80, 220, 0.9);
+          background: rgba(40, 80, 220, 0.15);
+          pointer-events: none;
+        }}
         .toolbar {{
           position: sticky; top: 0; background: white; padding: 12px 0;
           border-bottom: 1px solid #ddd; margin-bottom: 16px; z-index: 10;
@@ -521,12 +561,18 @@ async def detect_pdf(
         <p><a href="/">&larr; Recommencer</a></p>
         <p>
           <strong>{total_detections}</strong> zone(s) détectée(s), surlignées en rouge.
-          Clique sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé).
+          Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé).
         </p>
+        <button type="button" id="manual-mode-btn" onclick="toggleManualMode()" style="
+            padding:8px 16px; background:#e9ecef; border:1px solid #ccc;
+            border-radius:4px; cursor:pointer; margin-bottom:8px;">
+          ✏️ Ajouter une zone à masquer
+        </button>
         <form id="finalize-form" action="/api/finalize" method="post">
           <input type="hidden" name="job_id" value="{job_id}">
           <input type="hidden" name="format" value="html">
           <input type="hidden" id="excluded_ids" name="excluded_ids" value="">
+          <input type="hidden" id="manual_zones" name="manual_zones" value="[]">
           <button type="button" onclick="submitFinalize()" style="
               padding:10px 20px; background:#0d6efd; color:white; border:none;
               border-radius:4px; cursor:pointer; font-size:1em;">
@@ -538,10 +584,84 @@ async def detect_pdf(
       {''.join(pages_html)}
 
       <script>
+        let manualModeActive = false;
+        let manualZones = [];
+        let dragState = null;
+
+        function toggleManualMode() {{
+          manualModeActive = !manualModeActive;
+          document.querySelectorAll('.page-container').forEach(el =>
+            el.classList.toggle('manual-mode', manualModeActive));
+          document.getElementById('manual-mode-btn').textContent = manualModeActive
+            ? '✅ Mode ajout actif (clique-glisse sur le document)'
+            : '✏️ Ajouter une zone à masquer';
+        }}
+
+        document.querySelectorAll('.page-container').forEach(container => {{
+          const pageIndex = parseInt(container.dataset.page, 10);
+
+          container.addEventListener('mousedown', (e) => {{
+            if (!manualModeActive || e.target.closest('.manual-zone')) return;
+            const rect = container.getBoundingClientRect();
+            dragState = {{
+              startX: e.clientX - rect.left,
+              startY: e.clientY - rect.top,
+              preview: document.createElement('div'),
+            }};
+            dragState.preview.className = 'drag-preview';
+            container.appendChild(dragState.preview);
+            e.preventDefault();
+          }});
+
+          container.addEventListener('mousemove', (e) => {{
+            if (!dragState) return;
+            const rect = container.getBoundingClientRect();
+            const curX = e.clientX - rect.left, curY = e.clientY - rect.top;
+            const x0 = Math.min(dragState.startX, curX), y0 = Math.min(dragState.startY, curY);
+            Object.assign(dragState.preview.style, {{
+              left: x0 + 'px', top: y0 + 'px',
+              width: Math.abs(curX - dragState.startX) + 'px',
+              height: Math.abs(curY - dragState.startY) + 'px',
+            }});
+          }});
+
+          container.addEventListener('mouseup', (e) => {{
+            if (!dragState) return;
+            const rect = container.getBoundingClientRect();
+            const curX = e.clientX - rect.left, curY = e.clientY - rect.top;
+            const x0 = Math.min(dragState.startX, curX), y0 = Math.min(dragState.startY, curY);
+            const x1 = Math.max(dragState.startX, curX), y1 = Math.max(dragState.startY, curY);
+            dragState.preview.remove();
+
+            if (x1 - x0 > 6 && y1 - y0 > 6) {{
+              const id = 'manual-' + Date.now() + '-' + Math.floor(Math.random() * 1000);
+              manualZones.push({{ id, page: pageIndex, x0, y0, x1, y1 }});
+              const zoneEl = document.createElement('div');
+              zoneEl.className = 'manual-zone';
+              zoneEl.dataset.id = id;
+              zoneEl.title = 'Zone manuelle - cliquez pour supprimer';
+              Object.assign(zoneEl.style, {{
+                left: x0 + 'px', top: y0 + 'px',
+                width: (x1 - x0) + 'px', height: (y1 - y0) + 'px',
+              }});
+              zoneEl.onclick = (ev) => {{
+                ev.stopPropagation();
+                manualZones = manualZones.filter(z => z.id !== id);
+                zoneEl.remove();
+              }};
+              container.appendChild(zoneEl);
+            }}
+            dragState = null;
+          }});
+        }});
+
         function submitFinalize() {{
           const excluded = Array.from(document.querySelectorAll('.detection.excluded'))
                                  .map(el => el.dataset.id);
           document.getElementById('excluded_ids').value = excluded.join(',');
+          document.getElementById('manual_zones').value = JSON.stringify(
+            manualZones.map(({{page, x0, y0, x1, y1}}) => ({{page, rect: [x0, y0, x1, y1]}}))
+          );
           document.getElementById('finalize-form').submit();
         }}
       </script>
@@ -571,22 +691,82 @@ def preview_image(job_id: str, page_index: int):
     return Response(content=png_bytes, media_type="image/png")
 
 
+def _apply_selected_redactions(doc: fitz.Document, detections: list[dict], excluded_ids: set) -> dict:
+    """
+    Applique le caviardage uniquement pour les détections dont l'id n'est
+    PAS dans excluded_ids (celles que l'utilisateur a décochées en révision).
+    """
+    summary: dict[str, int] = {}
+    by_page: dict[int, list[dict]] = {}
+    for d in detections:
+        if d["id"] not in excluded_ids:
+            by_page.setdefault(d["page"], []).append(d)
+
+    for page_index, page_detections in by_page.items():
+        page = doc[page_index]
+        for d in page_detections:
+            page.add_redact_annot(fitz.Rect(d["page_rect"]), fill=(0, 0, 0))
+            summary[d["entity_type"]] = summary.get(d["entity_type"], 0) + 1
+        page.apply_redactions()
+
+    return summary
+
+
+def _apply_manual_redactions(doc: fitz.Document, manual_zones: list[dict]) -> int:
+    """
+    Applique un caviardage sur des zones tracées manuellement par l'utilisateur
+    (faux négatifs corrigés à la main). Les coordonnées reçues sont en pixels
+    d'aperçu (display_rect), reconverties en coordonnées PDF via PREVIEW_ZOOM,
+    exactement comme pour les détections automatiques.
+    """
+    count = 0
+    by_page: dict[int, list] = {}
+    for zone in manual_zones[:200]:  # garde-fou anti-abus
+        page_index = zone.get("page")
+        rect = zone.get("rect")
+        if not isinstance(page_index, int) or not rect or len(rect) != 4:
+            continue
+        by_page.setdefault(page_index, []).append(rect)
+
+    for page_index, rects in by_page.items():
+        if page_index < 0 or page_index >= len(doc):
+            continue
+        page = doc[page_index]
+        page_bounds = page.rect
+        for x0, y0, x1, y1 in rects:
+            pdf_rect = fitz.Rect(
+                x0 / PREVIEW_ZOOM, y0 / PREVIEW_ZOOM,
+                x1 / PREVIEW_ZOOM, y1 / PREVIEW_ZOOM,
+            )
+            pdf_rect.intersect(page_bounds)
+            if pdf_rect.is_empty:
+                continue
+            page.add_redact_annot(pdf_rect, fill=(0, 0, 0))
+            count += 1
+        page.apply_redactions()
+
+    return count
+
+
 @app.post("/api/finalize")
 async def finalize_pdf(
     request: Request,
     job_id: str = Form(...),
     excluded_ids: str = Form(default=""),
+    manual_zones: str = Form(default="[]"),
     response_format: str = Form(default="json", alias="format"),
 ):
     """
     Phase 2 du flux avec révision : applique le caviardage uniquement sur
-    les détections que l'utilisateur n'a pas exclues, produit le PDF final.
+    les détections que l'utilisateur n'a pas exclues, plus les zones
+    ajoutées manuellement (faux négatifs corrigés à la main), produit le
+    PDF final.
     """
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.pop(job_id, None)
 
     if job is None:
-        raise HTTPException(status_code=404, detail="Job introuvable ou expiré, relance l'analyse")
+        raise HTTPException(status_code=404, detail="Job introuvable ou expiré, veuillez relancer l'analyse")
 
     excluded_cluster_ids = {i for i in excluded_ids.split(",") if i}
 
@@ -599,8 +779,18 @@ async def finalize_pdf(
     for cluster_id in excluded_cluster_ids:
         excluded_set.update(job["clusters"].get(cluster_id, []))
 
+    try:
+        manual_zones_data = json.loads(manual_zones)
+        if not isinstance(manual_zones_data, list):
+            manual_zones_data = []
+    except (json.JSONDecodeError, TypeError):
+        manual_zones_data = []
+
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
     summary = _apply_selected_redactions(doc, job["detections"], excluded_set)
+    manual_count = _apply_manual_redactions(doc, manual_zones_data)
+    if manual_count:
+        summary["MANUEL"] = summary.get("MANUEL", 0) + manual_count
 
     theme = job["theme"]
     theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
@@ -611,8 +801,8 @@ async def finalize_pdf(
     total = sum(summary.values())
     excluded_count = len(excluded_cluster_ids)
     log.info(
-        "Job %s finalisé: %d entité(s) caviardée(s), %d zone(s) exclue(s) manuellement",
-        job_id, total, excluded_count,
+        "Job %s finalisé: %d entité(s) caviardée(s), %d zone(s) exclue(s), %d zone(s) manuelle(s)",
+        job_id, total, excluded_count, manual_count,
     )
 
     _record_audit_event(
@@ -624,6 +814,7 @@ async def finalize_pdf(
         entities_found=summary,
         total_redactions=total,
         manually_excluded=excluded_count,
+        manually_added=manual_count,
     )
 
     _schedule_cleanup(output_path)
@@ -686,6 +877,7 @@ async def finalize_pdf(
             "entities_found": summary,
             "total_redactions": total,
             "manually_excluded": excluded_count,
+            "manually_added": manual_count,
             "download_url": download_url,
         }
     )
