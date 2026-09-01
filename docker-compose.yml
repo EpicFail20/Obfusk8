@@ -18,6 +18,14 @@ volumes:
   traefik-certs:
   keycloak-data:
 
+secrets:
+  oauth2_client_secret:
+    file: ./secrets/oauth2_client_secret.txt
+  oauth2_cookie_secret:
+    file: ./secrets/oauth2_cookie_secret.txt
+  keycloak_admin_password:
+    file: ./secrets/keycloak_admin_password.txt
+
 services:
 
   # -------------------------------------------------------------------------
@@ -54,11 +62,20 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
-    command: ["start-dev"]
+    # Keycloak n'a pas de variante "_FILE" native fiable pour le mot de passe
+    # admin (contrairement à oauth2-proxy) : on lit le secret depuis le
+    # fichier monté par Docker au démarrage, dans une variable d'env locale
+    # au conteneur, jamais visible via `docker inspect`.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$(cat /run/secrets/keycloak_admin_password)"
+        exec /opt/keycloak/bin/kc.sh start-dev
     environment:
-      - KEYCLOAK_ADMIN=admin
-      - KEYCLOAK_ADMIN_PASSWORD=admin
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
       - KC_HOSTNAME=http://keycloak.lab.local:8080
+    secrets:
+      - keycloak_admin_password
     ports:
       - "8080:8080"   # console admin exposée directement pour le lab
     volumes:
@@ -72,10 +89,16 @@ services:
   # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
   # -------------------------------------------------------------------------
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.6.0
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 était très en retard (CVE + pas de cookie_secret_file) — vérifie la dernière version au déploiement
     restart: unless-stopped
     env_file:
-      - .env
+      - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
+    environment:
+      - OAUTH2_PROXY_CLIENT_SECRET_FILE=/run/secrets/oauth2_client_secret
+      - OAUTH2_PROXY_COOKIE_SECRET_FILE=/run/secrets/oauth2_cookie_secret
+    secrets:
+      - oauth2_client_secret
+      - oauth2_cookie_secret
     volumes:
       - ./oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
     command: ["--config=/etc/oauth2-proxy.cfg"]

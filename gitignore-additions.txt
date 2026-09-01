@@ -1,0 +1,5 @@
+# --- Secrets : ne jamais commiter ---
+secrets/
+.env
+*.env
+!.env.example
