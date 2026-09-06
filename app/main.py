@@ -83,12 +83,17 @@ def _record_audit_event(**fields):
 
 
 THEMES_DIR = Path(__file__).parent / "themes"
+COMMON_RECOGNIZERS_FILENAME = "common.json"
 
 
 def _load_themes() -> dict:
-    """Charge tous les fichiers de thèmes disponibles (app/themes/*.json)."""
+    """Charge tous les fichiers de thèmes sélectionnables (app/themes/*.json),
+    à l'exception de common.json qui n'est pas un thème mais un socle de
+    reconnaisseurs appliqué à tous les thèmes (voir _load_common_recognizers)."""
     themes = {}
     for path in sorted(THEMES_DIR.glob("*.json")):
+        if path.name == COMMON_RECOGNIZERS_FILENAME:
+            continue
         try:
             with open(path, encoding="utf-8") as f:
                 themes[path.stem] = json.load(f)
@@ -97,8 +102,26 @@ def _load_themes() -> dict:
     return themes
 
 
+def _load_common_recognizers() -> list[dict]:
+    """Reconnaisseurs communs (ex: adresses postales) appliqués quel que soit
+    le thème choisi, y compris si aucun thème n'est sélectionné — pour les
+    faux négatifs qui ne sont pas spécifiques à un domaine métier."""
+    path = THEMES_DIR / COMMON_RECOGNIZERS_FILENAME
+    if not path.exists():
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("ad_hoc_recognizers", [])
+    except (json.JSONDecodeError, OSError) as exc:
+        log.error("Reconnaisseurs communs illisibles, ignorés: %s", exc)
+        return []
+
+
 THEMES = _load_themes()
+COMMON_RECOGNIZERS = _load_common_recognizers()
 log.info("Thèmes chargés: %s", list(THEMES.keys()))
+log.info("Reconnaisseurs communs chargés: %d", len(COMMON_RECOGNIZERS))
 
 
 def _sweep_orphaned_files():
@@ -235,6 +258,22 @@ def _normalize_allcaps(text: str) -> str:
     return re.sub(r"\b[A-ZÀ-Ý]{2,}\b", lambda m: m.group(0).capitalize(), text)
 
 
+# Variantes Unicode de tiret rencontrées dans des PDF réels (selon l'outil de
+# génération/la police utilisée) qui ne correspondent pas au trait d'union
+# ASCII standard attendu par les regex de reconnaissance de dates. Un
+# remplacement 1-pour-1 préserve la longueur du texte, donc les positions
+# (start/end) renvoyées par l'analyzer restent valides sur le texte original.
+_DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
+
+
+def _normalize_dashes(text: str) -> str:
+    """Remplace les tirets typographiques (demi-cadratin, cadratin, signe
+    moins mathématique...) par un trait d'union ASCII standard, pour que les
+    dates au format JJ-MM-AAAA (ou similaire) soient reconnues quel que soit
+    le caractère de séparation réellement utilisé dans le PDF source."""
+    return text.translate({ord(c): "-" for c in _DASH_VARIANTS})
+
+
 def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
     """Appelle presidio-analyzer sur un morceau de texte, renvoie les entités trouvées.
 
@@ -247,9 +286,15 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
         return []
 
     payload = {"text": text, "language": LANGUAGE}
+
+    # Les reconnaisseurs communs s'appliquent toujours, thème choisi ou non.
+    ad_hoc = list(COMMON_RECOGNIZERS)
+    if theme and theme.get("ad_hoc_recognizers"):
+        ad_hoc.extend(theme["ad_hoc_recognizers"])
+    if ad_hoc:
+        payload["ad_hoc_recognizers"] = ad_hoc
+
     if theme:
-        if theme.get("ad_hoc_recognizers"):
-            payload["ad_hoc_recognizers"] = theme["ad_hoc_recognizers"]
         if theme.get("allow_list"):
             payload["allow_list"] = theme["allow_list"]
         if theme.get("allow_list_match"):
@@ -289,6 +334,34 @@ def _anonymize_text(text: str, entities: list[dict]) -> str:
 
 PREVIEW_ZOOM = 2.0  # facteur d'agrandissement pour le rendu des pages en image
 
+# Types d'entités propagés sur tout le document une fois confirmés au moins
+# une fois — un nom de patient qui échappe au NER dans un contexte dense
+# (ex: page listant de nombreux biologistes) reste néanmoins une donnée
+# identifiante qui se répète tel quel ailleurs dans le document.
+PROPAGATED_ENTITY_TYPES = {"PERSON", "LOCATION"}
+
+
+def _name_variants(name: str) -> set[str]:
+    """
+    Génère les variantes plausibles d'un nom déjà confirmé, pour le
+    retrouver ailleurs dans le document même si sa casse ou l'ordre
+    prénom/nom diffère d'un endroit à l'autre (observé en pratique : une
+    page a \"Xavier CARROLAGGI\", une autre \"CARROLAGGI XAVIER\").
+    Se limite à l'inversion de deux mots — au-delà, l'ordre réel est trop
+    ambigu pour être deviné sans risque.
+    """
+    words = name.split()
+    orders = [words]
+    if len(words) == 2:
+        orders.append([words[1], words[0]])
+
+    variants = set()
+    for order in orders:
+        variants.add(" ".join(order))
+        variants.add(" ".join(w.title() for w in order))
+        variants.add(" ".join(w.upper() for w in order))
+    return variants
+
 
 def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     """
@@ -297,13 +370,24 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     le caviardage final) et sa position à l'échelle de l'aperçu image (pour
     l'affichage cliquable côté navigateur) — les deux calculées avec la même
     matrice de zoom pour rester parfaitement alignées.
+
+    Deux passes : (1) détection standard page par page via Presidio, (2)
+    propagation des noms confirmés en passe 1 vers le reste du document, là
+    où le NER a pu échapper une occurrence identique (contexte dense,
+    formulaire, page différente) — voir PROPAGATED_ENTITY_TYPES.
     """
     matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
     detections: list[dict] = []
 
+    page_texts: list[str] = []
+    propagate_candidates: dict[str, str] = {}
+    already_covered: set[tuple[int, tuple[float, float, float, float]]] = set()
+
+    # --- Passe 1 : détection standard, page par page ---
     for page_index, page in enumerate(doc):
         page_text = page.get_text()
-        normalized_text = _normalize_allcaps(page_text)
+        page_texts.append(page_text)
+        normalized_text = _normalize_dashes(_normalize_allcaps(page_text))
         entities = _analyze_text(normalized_text, theme=theme)
 
         for entity in entities:
@@ -313,13 +397,22 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                 continue
 
             entity_type = entity.get("entity_type", "UNKNOWN")
+            # Un nom de famille isolé est trop ambigu pour être propagé sans
+            # risque, mais un nom de ville isolé (ex: "Ajaccio") est un bon
+            # candidat même seul — d'où la règle différente selon le type.
+            is_propagatable = entity_type in PROPAGATED_ENTITY_TYPES and (
+                entity_type == "LOCATION" or " " in stripped
+            )
             for rect in page.search_for(entity_text):
                 display_rect = rect * matrix
+                key = (page_index, (rect.x0, rect.y0, rect.x1, rect.y1))
+                already_covered.add(key)
                 detections.append(
                     {
                         "id": uuid.uuid4().hex[:12],
                         "page": page_index,
                         "entity_type": entity_type,
+                        "group_key": stripped if is_propagatable else None,
                         "page_rect": [rect.x0, rect.y0, rect.x1, rect.y1],
                         "display_rect": [
                             display_rect.x0, display_rect.y0,
@@ -327,6 +420,36 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                         ],
                     }
                 )
+
+            # Un nom propre ou une ville confirmés une fois deviennent
+            # candidats à la propagation sur le reste du document, avec le
+            # type d'entité d'origine conservé pour l'audit/le résumé.
+            if is_propagatable:
+                propagate_candidates[stripped] = entity_type
+
+    # --- Passe 2 : propagation des noms/villes confirmés vers les autres pages ---
+    for name, propagated_entity_type in propagate_candidates.items():
+        for variant in _name_variants(name):
+            for page_index, page in enumerate(doc):
+                for rect in page.search_for(variant):
+                    key = (page_index, (rect.x0, rect.y0, rect.x1, rect.y1))
+                    if key in already_covered:
+                        continue
+                    already_covered.add(key)
+                    display_rect = rect * matrix
+                    detections.append(
+                        {
+                            "id": uuid.uuid4().hex[:12],
+                            "page": page_index,
+                            "entity_type": propagated_entity_type,
+                            "group_key": name,
+                            "page_rect": [rect.x0, rect.y0, rect.x1, rect.y1],
+                            "display_rect": [
+                                display_rect.x0, display_rect.y0,
+                                display_rect.x1, display_rect.y1,
+                            ],
+                        }
+                    )
 
     return detections
 
@@ -379,6 +502,7 @@ def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> l
             y0 = min(g["display_rect"][1] for g in group)
             x1 = max(g["display_rect"][2] for g in group)
             y1 = max(g["display_rect"][3] for g in group)
+            group_key = next((g.get("group_key") for g in group if g.get("group_key")), None)
             clusters.append(
                 {
                     "id": uuid.uuid4().hex[:12],
@@ -386,6 +510,7 @@ def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> l
                     "display_rect": [x0, y0, x1, y1],
                     "entity_types": sorted({g["entity_type"] for g in group}),
                     "member_ids": [g["id"] for g in group],
+                    "group_key": group_key,
                 }
             )
 
@@ -545,11 +670,12 @@ async def detect_pdf(
     for page_index, (width, height) in enumerate(page_sizes):
         overlays = "".join(
             f'<div class="detection" data-id="{c["id"]}" '
+            f'data-group="{hashlib.md5(c["group_key"].encode()).hexdigest()[:12] if c.get("group_key") else ""}" '
             f'title="{", ".join(c["entity_types"])}" '
             f'style="left:{c["display_rect"][0]:.0f}px; top:{c["display_rect"][1]:.0f}px; '
             f'width:{c["display_rect"][2] - c["display_rect"][0]:.0f}px; '
             f'height:{c["display_rect"][3] - c["display_rect"][1]:.0f}px;" '
-            f'onclick="this.classList.toggle(\'excluded\')"></div>'
+            f'onclick="toggleDetection(this)"></div>'
             for c in clusters if c["page"] == page_index
         )
         pages_html.append(f"""
@@ -602,7 +728,8 @@ async def detect_pdf(
         <p><a href="/">&larr; Recommencer</a></p>
         <p>
           <strong>{total_detections}</strong> zone(s) détectée(s), surlignées en rouge.
-          Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé).
+          Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé) —
+          si la même personne apparaît ailleurs dans le document, toutes ses occurrences seront exclues en même temps.
         </p>
         <button type="button" id="manual-mode-btn" onclick="toggleManualMode()" style="
             padding:8px 16px; background:#e9ecef; border:1px solid #ccc;
@@ -695,6 +822,20 @@ async def detect_pdf(
             dragState = null;
           }});
         }});
+
+        function toggleDetection(el) {{
+          el.classList.toggle('excluded');
+          const group = el.dataset.group;
+          if (!group) return;
+          // Une même personne peut être détectée plusieurs fois dans le
+          // document (voir propagation côté serveur) — exclure une
+          // occurrence exclut toutes les autres du même groupe, pour éviter
+          // de devoir cliquer chaque occurrence individuellement.
+          const state = el.classList.contains('excluded');
+          document.querySelectorAll(`.detection[data-group="${{group}}"]`).forEach(sibling => {{
+            sibling.classList.toggle('excluded', state);
+          }});
+        }}
 
         function submitFinalize() {{
           const excluded = Array.from(document.querySelectorAll('.detection.excluded'))
