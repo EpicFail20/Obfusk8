@@ -40,11 +40,6 @@ services:
   docker-socket-proxy:
     image: tecnativa/docker-socket-proxy:v0.4.2
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     environment:
@@ -62,11 +57,6 @@ services:
   traefik:
     image: traefik:v3.6
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -109,11 +99,6 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     # Keycloak n'a pas de variante "_FILE" native fiable pour le mot de passe
     # admin (contrairement à oauth2-proxy) : on lit le secret depuis le
     # fichier monté par Docker au démarrage, dans une variable d'env locale
@@ -143,11 +128,6 @@ services:
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 était très en retard (CVE + pas de cookie_secret_file)
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     env_file:
       - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
     environment:
@@ -183,11 +163,6 @@ services:
   app:
     build: ./app
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -241,11 +216,6 @@ services:
   presidio-analyzer:
     build: ./presidio/analyzer-build
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -272,11 +242,6 @@ services:
   presidio-anonymizer:
     image: ghcr.io/data-privacy-stack/presidio-anonymizer:2.2.364
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop:

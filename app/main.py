@@ -29,7 +29,7 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-import fitz  # PyMuPDF
+import pymupdf as fitz  # PyMuPDF — alias 'fitz' conservé, 'import fitz' est déprécié
 import requests
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
@@ -42,6 +42,10 @@ ANONYMIZER_URL = os.environ.get("PRESIDIO_ANONYMIZER_URL", "http://presidio-anon
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "25"))
 FILE_TTL_SECONDS = int(os.environ.get("FILE_TTL_SECONDS", "600"))
 JOB_REVIEW_TTL_SECONDS = int(os.environ.get("JOB_REVIEW_TTL_SECONDS", "900"))
+MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "20"))
+MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "200"))
+MAX_MANUAL_ZONES = int(os.environ.get("MAX_MANUAL_ZONES", "500"))
+MAX_EXCLUDED_IDS = int(os.environ.get("MAX_EXCLUDED_IDS", "2000"))
 LANGUAGE = os.environ.get("ANALYZER_LANGUAGE", "fr")
 
 WORKDIR = Path("/data/tmp")
@@ -452,6 +456,16 @@ async def detect_pdf(
             detail=f"Fichier trop volumineux ({size_mb:.1f} Mo, max {MAX_UPLOAD_MB} Mo)",
         )
 
+    # Quota global de jobs en attente de révision (indépendant du débit
+    # limité par Traefik) : empêche l'accumulation de PDF bruts en mémoire
+    # au-delà d'un seuil sûr, même en restant sous la limite de débit par IP.
+    with _PENDING_JOBS_LOCK:
+        if len(PENDING_JOBS) >= MAX_PENDING_JOBS:
+            raise HTTPException(
+                status_code=503,
+                detail="Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
+            )
+
     selected_theme = THEMES.get(theme) if theme else None
     if theme and selected_theme is None:
         log.warning("Thème inconnu demandé (%r), poursuite sans thème", theme)
@@ -471,14 +485,41 @@ async def detect_pdf(
             detail="Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
         )
 
-    detections = _detect_pdf(doc, theme=selected_theme)
-    clusters = _cluster_detections(detections)
+    if len(doc) > MAX_PDF_PAGES:
+        page_count = len(doc)
+        doc.close()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ce PDF contient trop de pages ({page_count}, max {MAX_PDF_PAGES}) — "
+            "une taille de fichier faible ne garantit pas un nombre de pages raisonnable.",
+        )
 
-    page_sizes = []
-    for page in doc:
-        r = page.rect
-        page_sizes.append((round(r.width * PREVIEW_ZOOM), round(r.height * PREVIEW_ZOOM)))
-    doc.close()
+    try:
+        detections = _detect_pdf(doc, theme=selected_theme)
+        clusters = _cluster_detections(detections)
+
+        page_sizes = []
+        for page in doc:
+            r = page.rect
+            page_sizes.append((round(r.width * PREVIEW_ZOOM), round(r.height * PREVIEW_ZOOM)))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # PyMuPDF peut réussir à ouvrir un PDF (fitz.open ne lève rien) mais
+        # échouer plus tard, en cours de traitement, sur une structure
+        # invalide découverte tardivement (ex. cycle dans les ressources
+        # d'un objet). Sans ce filet, l'exception brute remonte jusqu'à
+        # Starlette et affiche sa page d'erreur générique non stylée — pas
+        # dangereux en soi, mais une fuite d'information inutile (chemins
+        # internes, nom de bibliothèque) pour un rejet qui reste, au fond,
+        # un simple "PDF invalide".
+        log.warning("Échec du traitement PDF après ouverture réussie : %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Ce PDF est corrompu ou contient une structure invalide qui empêche son traitement.",
+        ) from exc
+    finally:
+        doc.close()
 
     job_id = uuid.uuid4().hex
     with _PENDING_JOBS_LOCK:
@@ -679,14 +720,23 @@ def preview_image(job_id: str, page_index: int):
         raise HTTPException(status_code=404, detail="Job introuvable ou expiré")
 
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
-    if page_index < 0 or page_index >= len(doc):
-        doc.close()
-        raise HTTPException(status_code=404, detail="Page introuvable")
+    try:
+        if page_index < 0 or page_index >= len(doc):
+            raise HTTPException(status_code=404, detail="Page introuvable")
 
-    matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
-    pix = doc[page_index].get_pixmap(matrix=matrix)
-    png_bytes = pix.tobytes("png")
-    doc.close()
+        matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
+        pix = doc[page_index].get_pixmap(matrix=matrix)
+        png_bytes = pix.tobytes("png")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Échec du rendu de la page %s (job %s) : %s", page_index, job_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Cette page contient une structure invalide qui empêche son aperçu.",
+        ) from exc
+    finally:
+        doc.close()
 
     return Response(content=png_bytes, media_type="image/png")
 
@@ -786,17 +836,42 @@ async def finalize_pdf(
     except (json.JSONDecodeError, TypeError):
         manual_zones_data = []
 
-    doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
-    summary = _apply_selected_redactions(doc, job["detections"], excluded_set)
-    manual_count = _apply_manual_redactions(doc, manual_zones_data)
-    if manual_count:
-        summary["MANUEL"] = summary.get("MANUEL", 0) + manual_count
+    # Ces champs de formulaire ne passent pas par le contrôle MAX_UPLOAD_MB
+    # (qui ne s'applique qu'au fichier PDF) — on plafonne explicitement leur
+    # taille pour éviter qu'un client buggé ou malveillant fasse consommer
+    # du CPU/mémoire disproportionné au parsing/à l'application des zones.
+    if len(manual_zones_data) > MAX_MANUAL_ZONES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trop de zones manuelles ({len(manual_zones_data)}, max {MAX_MANUAL_ZONES})",
+        )
+    if len(excluded_cluster_ids) > MAX_EXCLUDED_IDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trop de zones exclues ({len(excluded_cluster_ids)}, max {MAX_EXCLUDED_IDS})",
+        )
 
-    theme = job["theme"]
-    theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
-    output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.pdf"
-    doc.save(output_path)
-    doc.close()
+    doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
+    try:
+        summary = _apply_selected_redactions(doc, job["detections"], excluded_set)
+        manual_count = _apply_manual_redactions(doc, manual_zones_data)
+        if manual_count:
+            summary["MANUEL"] = summary.get("MANUEL", 0) + manual_count
+
+        theme = job["theme"]
+        theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
+        output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.pdf"
+        doc.save(output_path)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Échec de la finalisation PDF (job %s) : %s", job_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Ce PDF est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+        ) from exc
+    finally:
+        doc.close()
 
     total = sum(summary.values())
     excluded_count = len(excluded_cluster_ids)
@@ -915,12 +990,18 @@ def read_audit_log(n: int = 50):
     Ne contient jamais de contenu de document ni de nom de fichier en clair —
     uniquement qui, quand, quel thème, combien d'éléments caviardés.
     """
+    n = max(1, min(n, 500))  # évite les valeurs négatives (slice incohérent) et les demandes excessives
+
     log_path = AUDIT_DIR / "audit.log"
     if not log_path.exists():
         return JSONResponse({"entries": []})
 
-    with open(log_path, encoding="utf-8") as f:
-        lines = f.readlines()[-n:]
+    try:
+        with open(log_path, encoding="utf-8") as f:
+            lines = f.readlines()[-n:]
+    except OSError as exc:
+        log.error("Lecture du journal d'audit impossible : %s", exc)
+        raise HTTPException(status_code=500, detail="Journal d'audit temporairement indisponible") from exc
 
     entries = []
     for line in lines:

@@ -13,9 +13,6 @@ networks:
   backend:
     driver: bridge
     internal: true   # aucun accès internet direct pour les services internes
-  docker-proxy:
-    driver: bridge
-    internal: true   # isole Traefik <-> docker-socket-proxy, rien d'autre dessus
 
 volumes:
   traefik-certs:
@@ -32,55 +29,13 @@ secrets:
 services:
 
   # -------------------------------------------------------------------------
-  # Proxy Docker en lecture seule pour Traefik - seul ce conteneur touche
-  # directement /var/run/docker.sock. N'expose que 3 catégories d'API
-  # (CONTAINERS, NETWORKS, EVENTS) ; tout le reste (EXEC, POST, IMAGES,
-  # VOLUMES, SECRETS, SWARM...) reste bloqué par défaut (403).
-  # -------------------------------------------------------------------------
-  docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.4.2
-    restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-    environment:
-      - CONTAINERS=1
-      - NETWORKS=1
-      - EVENTS=1
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - docker-proxy
-
-  # -------------------------------------------------------------------------
   # Reverse proxy + TLS interne
   # -------------------------------------------------------------------------
   traefik:
     image: traefik:v3.6
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    cap_add:
-      - NET_BIND_SERVICE
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /var/tmp
-      - /run
     command:
       - "--providers.docker=true"
-      - "--providers.docker.endpoint=tcp://docker-socket-proxy:2375"
       - "--providers.docker.exposedbydefault=false"
       - "--providers.file.directory=/etc/traefik/dynamic"
       - "--providers.file.watch=true"
@@ -94,26 +49,19 @@ services:
       - "443:443"
       - "80:80"
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/traefik/certs:ro
     networks:
       - frontend
-      - docker-proxy
-    depends_on:
-      - docker-socket-proxy
 
   # -------------------------------------------------------------------------
   # Keycloak - simule Entra ID en lab via le protocole OIDC standard
-  # Admin console: http://<ip-vm>:8080 (LAB UNIQUEMENT)
+  # Admin console: http://<ip-vm>:8081 (admin/admin, LAB UNIQUEMENT)
   # -------------------------------------------------------------------------
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     # Keycloak n'a pas de variante "_FILE" native fiable pour le mot de passe
     # admin (contrairement à oauth2-proxy) : on lit le secret depuis le
     # fichier monté par Docker au démarrage, dans une variable d'env locale
@@ -141,13 +89,8 @@ services:
   # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
   # -------------------------------------------------------------------------
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 était très en retard (CVE + pas de cookie_secret_file)
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 était très en retard (CVE + pas de cookie_secret_file) — vérifie la dernière version au déploiement
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     env_file:
       - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
     environment:
@@ -183,11 +126,6 @@ services:
   app:
     build: ./app
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -204,11 +142,9 @@ services:
       - PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000
       - PRESIDIO_ANONYMIZER_URL=http://presidio-anonymizer:3000
       - MAX_UPLOAD_MB=25
-      - FILE_TTL_SECONDS=180
-      - JOB_REVIEW_TTL_SECONDS=600
-      - MAX_PDF_PAGES=70
+      - FILE_TTL_SECONDS=600
     volumes:
-      - /var/lib/anonymiseur/workdir:/data/tmp
+      - /tmp/anonymiseur-workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
     networks:
       - frontend
@@ -241,23 +177,6 @@ services:
   presidio-analyzer:
     build: ./presidio/analyzer-build
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /home/presidio/.gunicorn
-      - /run/lock
-      - /var/tmp
-    environment:
-      - PYTHONDONTWRITEBYTECODE=1
     networks:
       - backend
     deploy:
@@ -272,23 +191,6 @@ services:
   presidio-anonymizer:
     image: ghcr.io/data-privacy-stack/presidio-anonymizer:2.2.364
     restart: unless-stopped
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /home/presidio/.gunicorn
-      - /run/lock
-      - /var/tmp
-    environment:
-      - PYTHONDONTWRITEBYTECODE=1
     networks:
       - backend
     deploy:

@@ -1,7 +1,7 @@
 # Image Presidio Analyzer avec support du français ajouté
 # (l'image publique n'embarque que le modèle anglais par défaut)
 
-FROM ghcr.io/data-privacy-stack/presidio-analyzer:latest
+FROM ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364
 
 # Télécharge le modèle spaCy français en plus de l'anglais déjà présent
 RUN pip install --no-cache-dir spacy && \
