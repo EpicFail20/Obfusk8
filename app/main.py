@@ -305,10 +305,22 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
     try:
         resp = requests.post(f"{ANALYZER_URL}/analyze", json=payload, timeout=30)
         resp.raise_for_status()
-        return resp.json()
+        entities = resp.json()
     except requests.RequestException as exc:
         log.error("Appel presidio-analyzer échoué: %s", exc)
         raise HTTPException(status_code=502, detail="Moteur d'analyse indisponible") from exc
+
+    # Filtrage après coup plutôt qu'une liste positive de types envoyée à
+    # Presidio : on retire uniquement ce qu'on sait être du bruit (ex.
+    # ORGANIZATION sur des empans multi-lignes fusionnant des fragments sans
+    # rapport dans les formulaires médicaux denses), sans risquer d'exclure
+    # silencieusement un type légitime qu'on n'aurait pas pensé à lister
+    # (email, téléphone...).
+    excluded_types = set(theme.get("excluded_entity_types", [])) if theme else set()
+    if excluded_types:
+        entities = [e for e in entities if e.get("entity_type") not in excluded_types]
+
+    return entities
 
 
 def _anonymize_text(text: str, entities: list[dict]) -> str:
@@ -400,8 +412,14 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
             # Un nom de famille isolé est trop ambigu pour être propagé sans
             # risque, mais un nom de ville isolé (ex: "Ajaccio") est un bon
             # candidat même seul — d'où la règle différente selon le type.
+            # Seuil de 4 caractères minimum pour un mot LOCATION isolé : une
+            # abréviation courte (ex: "Enr", 3 lettres) s'est révélée capable
+            # de se propager en préfixe sur d'autres mots via la recherche
+            # insensible à la casse de PyMuPDF (search_for) — 4+ caractères
+            # laisse passer les vrais noms de ville courts (Metz, Caen, Nice,
+            # Lyon...) tout en bloquant ce type de faux positif.
             is_propagatable = entity_type in PROPAGATED_ENTITY_TYPES and (
-                entity_type == "LOCATION" or " " in stripped
+                " " in stripped or (entity_type == "LOCATION" and len(stripped) >= 4)
             )
             for rect in page.search_for(entity_text):
                 display_rect = rect * matrix

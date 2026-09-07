@@ -10,15 +10,6 @@ version: "3.9"
 networks:
   frontend:
     driver: bridge
-    # NON-internal : seul Traefik y est rattaché, pour conserver la
-    # publication des ports 80/443 vers l'hôte (Docker ne publie pas les
-    # ports d'un réseau internal:true — testé et confirmé cette session).
-  app-internal:
-    driver: bridge
-    internal: true   # app, oauth2-proxy, keycloak — aucun accès internet direct.
-                      # ATTENTION AU PASSAGE À ENTRA ID : oauth2-proxy devra alors
-                      # atteindre les serveurs Microsoft. Revoir ce réseau à ce
-                      # moment-là (le sortir vers un réseau non-internal dédié).
   backend:
     driver: bridge
     internal: true   # aucun accès internet direct pour les services internes
@@ -99,8 +90,6 @@ services:
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--log.level=INFO"
       - "--accesslog=true"
-      - "--global.checknewversion=false"
-      - "--global.sendanonymoususage=false"
     ports:
       - "443:443"
       - "80:80"
@@ -109,7 +98,6 @@ services:
       - ./traefik/certs:/etc/traefik/certs:ro
     networks:
       - frontend
-      - app-internal
       - docker-proxy
     depends_on:
       - docker-socket-proxy
@@ -145,10 +133,9 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
     networks:
-      frontend: {}   # nécessaire pour la publication du port 8080 (navigateur -> connexion)
-      app-internal:
+      frontend:
         aliases:
-          - keycloak.lab.local   # pour qu'oauth2-proxy le joigne en interne
+          - keycloak.lab.local
 
   # -------------------------------------------------------------------------
   # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
@@ -175,7 +162,7 @@ services:
     depends_on:
       - keycloak
     networks:
-      - app-internal
+      - frontend
     labels:
       - "traefik.http.middlewares.oauth2-errors.errors.status=401-403"
       - "traefik.http.middlewares.oauth2-errors.errors.service=auth@docker"
@@ -186,7 +173,6 @@ services:
       - "traefik.http.routers.auth.entrypoints=websecure"
       - "traefik.http.routers.auth.tls=true"
       - "traefik.http.services.auth.loadbalancer.server.port=4180"
-      - "traefik.docker.network=anonymiseur_app-internal"
       - "traefik.http.middlewares.oidc-auth.forwardauth.address=http://oauth2-proxy:4180/oauth2/auth"
       - "traefik.http.middlewares.oidc-auth.forwardauth.trustForwardHeader=true"
       - "traefik.http.middlewares.oidc-auth.forwardauth.authResponseHeaders=X-Auth-Request-User,X-Auth-Request-Email"
@@ -225,7 +211,7 @@ services:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
     networks:
-      - app-internal
+      - frontend
       - backend
     labels:
       - "traefik.http.routers.app-upload.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api/detect`) || PathPrefix(`/api/finalize`))"
@@ -239,7 +225,7 @@ services:
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.burst=10"
       - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth"
-      - "traefik.docker.network=anonymiseur_app-internal"
+      - "traefik.docker.network=anonymiseur_frontend"
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
       - "traefik.http.routers.app.entrypoints=websecure"

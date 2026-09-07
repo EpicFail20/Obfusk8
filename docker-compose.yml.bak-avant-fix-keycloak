@@ -145,10 +145,9 @@ services:
     volumes:
       - keycloak-data:/opt/keycloak/data
     networks:
-      frontend: {}   # nécessaire pour la publication du port 8080 (navigateur -> connexion)
       app-internal:
         aliases:
-          - keycloak.lab.local   # pour qu'oauth2-proxy le joigne en interne
+          - keycloak.lab.local
 
   # -------------------------------------------------------------------------
   # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
