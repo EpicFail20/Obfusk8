@@ -100,7 +100,16 @@ MAX_DOCX_ZIP_ENTRIES = int(os.environ.get("MAX_DOCX_ZIP_ENTRIES", "5000"))
 
 # --- Seuils CSV ---
 MAX_CSV_ROWS = int(os.environ.get("MAX_CSV_ROWS", "20000"))
-MAX_CSV_CELLS = int(os.environ.get("MAX_CSV_CELLS", "300000"))
+# Plafond fixé par l'usage réel, pas seulement par ce que le pipeline peut
+# techniquement encaisser : la finalisation reste une revue humaine
+# (l'utilisateur doit pouvoir relire/corriger les détections avant de
+# valider), un CSV de plusieurs dizaines ou centaines de milliers de
+# cellules n'est de toute façon jamais réellement révisable en pratique.
+# Réduit aussi la marge de manœuvre des angles "coût de ressources" 9.6.4
+# (budget de temps de détection) et 9.6.5 (taille de la page de révision) :
+# à 5000 cellules, les deux restent des filets de sécurité qui ne se
+# déclenchent normalement jamais, plutôt que la seule protection réelle.
+MAX_CSV_CELLS = int(os.environ.get("MAX_CSV_CELLS", "5000"))
 # Une seule cellule anormalement longue peut consommer du CPU/mémoire de
 # façon disproportionnée à l'analyse ; on fixe explicitement cette limite
 # plutôt que de dépendre de la valeur par défaut du module csv (qui varie

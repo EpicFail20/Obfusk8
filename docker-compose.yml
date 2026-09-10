@@ -225,7 +225,7 @@ services:
       - MAX_DOCX_UNCOMPRESSED_MB=200
       - MAX_DOCX_ZIP_RATIO=100
       - MAX_CSV_ROWS=20000
-      - MAX_CSV_CELLS=300000
+      - MAX_CSV_CELLS=5000
       - MAX_CSV_FIELD_CHARS=100000
       # IMPORTANT : le score ne peut PAS distinguer un vrai nom d'un mot
       # administratif ordinaire — les deux partagent le même score fixe
