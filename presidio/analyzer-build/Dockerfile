@@ -20,3 +20,17 @@ COPY conf/default_analyzer.yaml /app/presidio_analyzer/conf/default_analyzer.yam
 COPY patch_recognizers.py /tmp/patch_recognizers.py
 RUN pip install --no-cache-dir pyyaml && \
     python3 /tmp/patch_recognizers.py
+
+# Patch spacy_recognizer.py : ajoute un filtre par étiquette grammaticale
+# (POS) pour PERSON/ORGANIZATION/LOCATION avant d'accepter une détection.
+# Contexte : Presidio attribue un score FIXE (0.85) à toutes les détections
+# de ce recognizer, quelle que soit leur justesse — un mot administratif
+# isolé sans contexte de phrase ("Compétences", "Exploiter"...) reçoit
+# exactement le même score qu'un vrai nom propre, impossible à distinguer
+# par seuil. Le patch exige qu'au moins un token de l'empan soit un nom
+# propre (PROPN) selon le tagger spaCy déjà actif dans le pipeline chargé —
+# zéro coût d'inférence supplémentaire. Voir la docstring du fichier patché
+# pour le détail complet. Fichier vérifié fonctionnellement (voir tests
+# unitaires du dépôt) mais PAS encore validé sur le vrai modèle fr_core_news_md
+# en conditions réelles — à confirmer après déploiement.
+COPY patches/spacy_recognizer.py /app/presidio_analyzer/predefined_recognizers/nlp_engine_recognizers/spacy_recognizer.py

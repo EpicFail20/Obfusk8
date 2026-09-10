@@ -3,4 +3,6 @@ uvicorn[standard]==0.35.0
 python-multipart==0.0.32
 requests==2.33.1
 PyMuPDF==1.28.2
+python-docx==1.2.0
+lxml==6.1.1
 pytest>=8.0,<9

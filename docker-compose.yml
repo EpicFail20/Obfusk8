@@ -221,9 +221,39 @@ services:
       - FILE_TTL_SECONDS=180
       - JOB_REVIEW_TTL_SECONDS=600
       - MAX_PDF_PAGES=70
+      - MAX_DOCX_PARAGRAPHS=20000
+      - MAX_DOCX_UNCOMPRESSED_MB=200
+      - MAX_DOCX_ZIP_RATIO=100
+      - MAX_CSV_ROWS=20000
+      - MAX_CSV_CELLS=300000
+      - MAX_CSV_FIELD_CHARS=100000
+      # IMPORTANT : le score ne peut PAS distinguer un vrai nom d'un mot
+      # administratif ordinaire — les deux partagent le même score fixe
+      # (0.85) attribué par le reconnaisseur spaCy de Presidio, qui ne
+      # fournit pas de confiance réellement calibrée par détection. Un seuil
+      # au-dessus de 0.85 élimine donc la détection PERSON/LOCATION
+      # générique EN BLOC dès qu'aucun thème n'est sélectionné — vrais noms
+      # (PDF médical inclus) compris. Testé et confirmé dangereux : des
+      # informations confidentielles sont passées inaperçues sur un PDF réel
+      # avec ce réglage. Un faux positif se corrige en un clic en révision ;
+      # un faux négatif, lui, passe inaperçu et fuite silencieusement — ne
+      # jamais arbitrer en faveur de moins de faux positifs si ça coûte des
+      # faux négatifs. Revenu à 0.4, cohérent avec le seuil déjà utilisé par
+      # tous les thèmes existants (medical/it/compta). N'affecte QUE le flux
+      # "Aucun thème" ; les thèmes définissent chacun leur propre valeur.
+      - DEFAULT_SCORE_THRESHOLD=0.4
+      # LAB UNIQUEMENT — journal de débogage avec texte détecté en clair,
+      # téléchargeable via /api/debug/log. À repasser à false (ou retirer)
+      # avant toute mise en production.
+      - ENABLE_DEBUG_LOG=true
+      # Purge les entrées du journal de debug plus vieilles que ce délai
+      # (secondes) — complète la rotation par taille, qui ne garantit
+      # aucune limite temporelle. 3600 = 1h, ajustable.
+      - DEBUG_LOG_TTL_SECONDS=3600
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
+      - /var/log/anonymiseur-debug:/data/debug
     networks:
       - app-internal
       - backend

@@ -13,6 +13,19 @@
       ],
       "context": ["adresse", "domicile", "demeurant", "résidant"],
       "supported_entity": "STREET_ADDRESS"
+    },
+    {
+      "name": "FrenchInitialSurnameRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "initiale(s) + nom de famille (ex: J-M. Costa, S. Haim-Boukobza, A. Amara Petitjean)",
+          "regex": "\\b[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\\.\\s?[A-ZÀ-Ý][a-zà-ÿ]+(?:[- ][A-ZÀ-Ý][a-zà-ÿ]+)*\\b",
+          "score": 0.55
+        }
+      ],
+      "context": ["biologiste", "docteur", "responsable", "signature", "signé", "dr"],
+      "supported_entity": "PERSON"
     }
   ]
 }
