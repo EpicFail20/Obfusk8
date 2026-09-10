@@ -109,6 +109,41 @@ MAX_CSV_CELLS = int(os.environ.get("MAX_CSV_CELLS", "300000"))
 MAX_CSV_FIELD_CHARS = int(os.environ.get("MAX_CSV_FIELD_CHARS", "100000"))
 csv.field_size_limit(MAX_CSV_FIELD_CHARS)
 
+# Limite le nombre de lignes RENDUES dans la page de révision (pas le
+# caviardage lui-même, qui couvre toujours job["detections"] en entier au
+# moment de finaliser, même les lignes au-delà de cette limite). Un CSV de
+# cellules presque vides contourne le budget de temps de détection (rien à
+# analyser -> rapide) tout en produisant, sans cette limite, une page HTML
+# de plusieurs dizaines de Mo avec des centaines de milliers de <td> —
+# confirmé par test réel : 300 000 cellules quasi vides (419 Ko de fichier)
+# -> page de 16,6 Mo. Coûteux pour le serveur (génération) et pour le
+# navigateur du client (rendu), indépendamment de MAX_DETECTION_SECONDS.
+MAX_REVIEW_ROWS = int(os.environ.get("MAX_REVIEW_ROWS", "2000"))
+
+# Budget de temps global pour la phase de détection (PDF/DOCX/CSV) : chaque
+# appel individuel à Presidio a son propre timeout (30s, voir _analyze_text),
+# mais rien ne bornait jusqu'ici le nombre de lots séquentiels pour un
+# document proche des limites de taille — confirmé par test réel : un CSV
+# à la limite exacte de MAX_CSV_CELLS (300 000) nécessite ~1500 appels
+# séquentiels à ~0,3s chacun, ~490s au total, sur un service à worker
+# unique (aucun `--workers` dans le Dockerfile) qui bloquerait donc
+# l'application pour tout le monde pendant plus de 8 minutes. 90s laisse
+# une marge large pour un document légitime multi-lots tout en bornant le
+# pire cas à environ 3x le timeout d'un seul appel Presidio.
+MAX_DETECTION_SECONDS = int(os.environ.get("MAX_DETECTION_SECONDS", "90"))
+
+
+def _check_detection_deadline(start_time: float) -> None:
+    """Lève une HTTPException si la détection en cours dépasse
+    MAX_DETECTION_SECONDS — à appeler avant chaque lot/page pour ne jamais
+    laisser un document proche des limites de taille bloquer le worker
+    unique pendant plusieurs minutes (voir MAX_DETECTION_SECONDS)."""
+    if time.time() - start_time > MAX_DETECTION_SECONDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ce document est trop volumineux pour être analysé dans le temps imparti (max {MAX_DETECTION_SECONDS}s) — réduisez sa taille ou contactez l'administrateur.",
+        )
+
 # Marqueur de remplacement pour le caviardage texte (DOCX/CSV) : une valeur
 # fixe plutôt que des blocs proportionnels à la longueur d'origine, pour ne
 # pas laisser fuir la longueur approximative de la donnée masquée.
@@ -819,9 +854,11 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     page_texts: list[str] = []
     propagate_candidates: dict[str, str] = {}
     already_covered: set[tuple[int, tuple[float, float, float, float]]] = set()
+    detection_start = time.time()
 
     # --- Passe 1 : détection standard, page par page ---
     for page_index, page in enumerate(doc):
+        _check_detection_deadline(detection_start)
         page_text = page.get_text()
         page_texts.append(page_text)
         normalized_text = _normalize_dashes(_normalize_allcaps(page_text))
@@ -1598,12 +1635,14 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
                     propagate_candidates[stripped] = entity_type
                 break  # un intervalle appartient à un seul bloc, inutile de continuer
 
+    detection_start = time.time()
     chunk: list[tuple] = []
     chunk_chars = 0
     for block_id, text in block_texts:
         if not text.strip():
             continue
         if chunk and (chunk_chars + len(text) > TEXT_CHUNK_MAX_CHARS or len(chunk) >= TEXT_CHUNK_MAX_BLOCKS):
+            _check_detection_deadline(detection_start)
             _process_chunk(chunk)
             chunk, chunk_chars = [], 0
         chunk.append((block_id, text))
@@ -2198,13 +2237,19 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
         clusters_by_block.setdefault(c["block_id"], []).append(c)
 
     blocks_html_parts = []
+    rendered_count = 0
+    truncated = False
     for block_id, (label, _, _table_ref) in enumerate(blocks):
         text = block_texts[block_id]
         if not text.strip():
             continue
+        if rendered_count >= MAX_REVIEW_ROWS:
+            truncated = True
+            break
         rendered = _render_highlighted_text(text, clusters_by_block.get(block_id, []))
         label_html = f'<span class="doc-block-label">{html.escape(label)}</span>' if label != "corps" else ""
         blocks_html_parts.append(f'<div class="doc-block">{label_html}{rendered}</div>')
+        rendered_count += 1
 
     limitation_note = (
         '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
@@ -2212,6 +2257,13 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
         "document ne sont pas analysés par ce moteur (limite technique connue de python-docx) — "
         "à vérifier manuellement si le document en contient.</p>"
     )
+    if truncated:
+        limitation_note += (
+            f'<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
+            f'border-radius:4px;">⚠️ Aperçu limité aux {MAX_REVIEW_ROWS} premiers paragraphes non '
+            f"vides — les suivants seront quand même entièrement analysés et caviardés à la "
+            f"finalisation, ils ne sont simplement pas affichés ici.</p>"
+        )
 
     return _build_text_review_page(
         job_id=job_id,
@@ -2272,8 +2324,9 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
     for c in clusters:
         clusters_by_block.setdefault(c["block_id"], []).append(c)
 
+    truncated = len(rows) > MAX_REVIEW_ROWS
     table_rows_html = []
-    for row_idx, row in enumerate(rows):
+    for row_idx, row in enumerate(rows[:MAX_REVIEW_ROWS]):
         cells_html = []
         for col_idx, cell in enumerate(row):
             rendered = _render_highlighted_text(cell, clusters_by_block.get(f"{row_idx}:{col_idx}", []))
@@ -2282,10 +2335,20 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
 
     table_html = f'<table style="border-collapse:collapse; width:100%; font-size:0.9em;">{"".join(table_rows_html)}</table>'
 
+    truncation_note = (
+        f'<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
+        f'border-radius:4px;">⚠️ Aperçu limité aux {MAX_REVIEW_ROWS} premières lignes sur '
+        f'{len(rows)} — les lignes au-delà de cet aperçu seront quand même entièrement '
+        f'analysées et caviardées à la finalisation, elles ne sont simplement pas affichées '
+        f"ici pour ne pas surcharger la page.</p>"
+        if truncated else ""
+    )
+
     return _build_text_review_page(
         job_id=job_id,
         total_detections=len(clusters),
         blocks_html=table_html,
+        extra_note=truncation_note,
     )
 
 
