@@ -1,7 +1,7 @@
 {
   "label": "Médical",
   "score_threshold": 0.4,
-  "allow_list": ["Positive", "Conclusion", "Dossier", "Veuillez", "Sexe", "Enregistré", "Enr"],
+  "allow_list": ["Positive", "Conclusion", "Dossier", "Veuillez", "Sexe", "Enregistré", "Enr", "Laboratoire"],
   "excluded_entity_types": ["ORGANIZATION"],
   "ad_hoc_recognizers": [
     {

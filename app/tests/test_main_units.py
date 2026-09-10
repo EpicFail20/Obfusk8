@@ -22,7 +22,7 @@ import main  # noqa: E402
 @pytest.mark.parametrize(
     "text,expected",
     [
-        ("CARROLAGGI Xavier", "Carrolaggi Xavier"),
+        ("DURAND Xavier", "Durand Xavier"),
         ("Jean DUPONT habite à Paris", "Jean Dupont habite à Paris"),
         ("déjà en minuscule", "déjà en minuscule"),
         ("N°123", "N°123"),  # une seule lettre majuscule : jamais touchée

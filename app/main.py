@@ -574,8 +574,8 @@ def _schedule_cleanup(path: Path, delay: int = FILE_TTL_SECONDS):
 
 def _normalize_allcaps(text: str) -> str:
     """
-    Convertit les mots tout en majuscules (ex: "CARROLAGGI") en casse titre
-    ("Carrolaggi") pour aider le modèle NER à les reconnaître comme noms
+    Convertit les mots tout en majuscules (ex: "DURAND") en casse titre
+    ("Durand") pour aider le modèle NER à les reconnaître comme noms
     propres — spaCy s'appuie beaucoup sur la casse pour cette détection.
 
     Important: .capitalize() ne change jamais la longueur d'un mot, donc les
@@ -707,7 +707,7 @@ def _name_variants(name: str) -> set[str]:
     Génère les variantes plausibles d'un nom déjà confirmé, pour le
     retrouver ailleurs dans le document même si sa casse ou l'ordre
     prénom/nom diffère d'un endroit à l'autre (observé en pratique : une
-    page a \"Xavier CARROLAGGI\", une autre \"CARROLAGGI XAVIER\").
+    page a \"Jean DURAND\", une autre \"DURAND JEAN\").
     Se limite à l'inversion de deux mots — au-delà, l'ordre réel est trop
     ambigu pour être deviné sans risque.
     """
@@ -1188,7 +1188,7 @@ TEXT_CHUNK_MAX_BLOCKS = 200
 # Mots-clés d'en-tête de colonne (première ligne d'un tableau DOCX ou d'un
 # CSV) associés directement à un type d'entité : une correspondance ici
 # déclenche le caviardage de TOUTE la colonne par règle structurelle, sans
-# dépendre du NER. Nécessaire car une cellule isolée ("Xavier Carrolaggi"
+# dépendre du NER. Nécessaire car une cellule isolée ("Jean Durand"
 # seul, sans phrase autour) n'offre aucun contexte grammatical au modèle
 # NER pour la reconnaître comme un nom — la structure du tableau (l'en-tête
 # de colonne) est ici un signal bien plus fiable que le NER générique.
@@ -2302,8 +2302,23 @@ def _apply_manual_redactions(doc: fitz.Document, manual_zones: list[dict]) -> in
     return count
 
 
+def _wipe_pdf_metadata(doc: fitz.Document) -> None:
+    """
+    Vide les métadonnées susceptibles de porter une identité (auteur,
+    créateur/producteur, dates de création/modification, titre, sujet,
+    mots-clés) et le paquet XMP associé. `apply_redactions()` ne touche
+    qu'au contenu visible des pages ; sans ce nettoyage, le document
+    "anonymisé" reste daté et attribué comme l'original — même constat de
+    fond que pour DOCX (_wipe_core_properties), un champ structuré dont la
+    nature est connue par convention, inutile de le faire passer par le NER.
+    """
+    doc.set_metadata({})
+    if doc.xref_xml_metadata():
+        doc.del_xml_metadata()
+
+
 def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_data: list) -> tuple[dict, Path, int]:
-    """Logique de finalisation PDF — inchangée par rapport à la version PDF-only."""
+    """Logique de finalisation PDF."""
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
     try:
         summary = _apply_selected_redactions(doc, job["detections"], excluded_set)
@@ -2311,10 +2326,19 @@ def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_da
         if manual_count:
             summary["MANUEL"] = summary.get("MANUEL", 0) + manual_count
 
+        _wipe_pdf_metadata(doc)
+
         theme = job["theme"]
         theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
         output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.pdf"
-        doc.save(output_path)
+        # garbage=4 + clean=True : purge les objets devenus orphelins après
+        # apply_redactions() (l'ancien contenu de page pré-caviardage n'est
+        # jamais supprimé du fichier par défaut, seulement déréférencé —
+        # voir constat de session vérifié sur caviar_test.pdf, texte original
+        # en clair récupérable dans le fichier "anonymisé" avec n'importe
+        # quel outil qui parcourt tous les objets du PDF au lieu de suivre
+        # uniquement l'arbre de pages courant).
+        doc.save(output_path, garbage=4, clean=True, deflate=True)
     except HTTPException:
         raise
     except Exception as exc:
