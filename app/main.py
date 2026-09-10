@@ -77,7 +77,14 @@ LANGUAGE = os.environ.get("ANALYZER_LANGUAGE", "fr")
 DEFAULT_SCORE_THRESHOLD = float(os.environ.get("DEFAULT_SCORE_THRESHOLD", "0.5"))
 
 # --- Seuils DOCX ---
-MAX_DOCX_PARAGRAPHS = int(os.environ.get("MAX_DOCX_PARAGRAPHS", "20000"))
+# Même raisonnement produit que MAX_CSV_CELLS : la finalisation reste une
+# revue humaine. À 20000 (valeur d'origine), la limite était 10x
+# MAX_REVIEW_ROWS (2000) — jusqu'à 90% d'un document légitime aurait été
+# caviardé "à l'aveugle", jamais montré à l'utilisateur pour relecture,
+# même si le caviardage réel restait correct (job["detections"] couvre
+# toujours tout, voir 14.3). Ramené à un ordre de grandeur cohérent avec
+# ce qui est réellement révisable, aligné sur MAX_CSV_CELLS.
+MAX_DOCX_PARAGRAPHS = int(os.environ.get("MAX_DOCX_PARAGRAPHS", "5000"))
 # Protection anti "zip-bomb" : un .docx est une archive ZIP, une archive de
 # quelques Ko peut en théorie se décompresser en plusieurs Go. On borne la
 # taille décompressée totale et le ratio de compression par entrée avant de
