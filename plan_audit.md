@@ -1,6 +1,6 @@
 # Plan d'audit de sécurité — Projet Anonymiseur de documents
 
-**Dernière mise à jour :** session 9 — campagne de non-régression demandée explicitement par l'utilisateur : re-vérifier, pour les **trois formats (PDF, DOCX, CSV)**, qu'un document caviardé ne contient plus aucune trace récupérable des données originales, "par aucun moyen". Fixtures fictifs dédiés construits pour chaque format (conservés dans `app/tests/fixtures/`, scripts dans `verification_scripts/`, voir leur README), passés par les vrais points d'entrée, sortie balayée exhaustivement (tous les objets PDF, toutes les entrées du zip DOCX, tous les octets bruts CSV). **Résultat : les corrections des sessions 7 et 8 tiennent, zéro fuite résiduelle sur les données identifiantes testées.** Deux nouveaux angles non couverts jusqu'ici repérés en marge (images DOCX : miniature de document et images incrustées dans le corps) — non exploitables avec les fixtures actuels, signalés comme angle mort à garder à l'œil, pas comme fuite confirmée. Voir section 11.
+**Dernière mise à jour :** session 9 — deux volets. (1) Campagne de non-régression demandée explicitement par l'utilisateur : re-vérifier, pour les **trois formats (PDF, DOCX, CSV)**, qu'un document caviardé ne contient plus aucune trace récupérable des données originales, "par aucun moyen". Fixtures fictifs dédiés construits pour chaque format (conservés dans `app/tests/fixtures/`, scripts dans `verification_scripts/`, voir leur README), passés par les vrais points d'entrée, sortie balayée exhaustivement (tous les objets PDF, toutes les entrées du zip DOCX, tous les octets bruts CSV). **Résultat : les corrections des sessions 7 et 8 tiennent, zéro fuite résiduelle sur les données identifiantes testées.** Deux nouveaux angles non couverts jusqu'ici repérés en marge (images DOCX : miniature de document et images incrustées dans le corps) — non exploitables avec les fixtures actuels, signalés comme angle mort à garder à l'œil, pas comme fuite confirmée. Voir section 11. (2) Reprise du point ouvert 9.6.2 (risque XXE non vérifié) : testé empiriquement, non exploitable — voir section 12.
 
 **Session 8** — constat critique **[VÉRIFIÉ]** sur le PDF, symétrique à la section 9.1 DOCX de la session 7 : le fichier de sortie "anonymisé" contenait toujours, en clair et récupérable par n'importe quel outil qui parcourt tous les objets du PDF, le nom, la date de naissance et le numéro de dossier du patient d'origine — alors que la page rendue affichait bien le caviardage. Corrigé (purge des objets orphelins + métadonnées) et revérifié par un test de bout en bout via les vrais points d'entrée (`_handle_detect_pdf` / `_finalize_pdf_job`), conformément à la leçon de la session 7. Voir section 10.
 
@@ -119,7 +119,7 @@ Fonctionnalité ajoutée en cours de session pour accélérer le diagnostic des 
 | # | Statut | Risque | Constat |
 |---|---|--------|---------|
 | 9.6.1 | ⏳ | **Zip-bomb DOCX : pas de limite sur le nombre d'entrées** | La validation borne la taille décompressée totale et le ratio de compression par fichier, mais jamais le nombre d'entrées dans l'archive — un zip avec un nombre extrême de fichiers minuscules pourrait rester sous les deux seuils tout en coûtant cher rien qu'à parcourir la table des fichiers. |
-| 9.6.2 | ⏳ | **Risque XXE non vérifié** | Pas de confirmation que la configuration lxml utilisée par python-docx désactive bien la résolution d'entités externes par défaut pour la version épinglée (1.2.0/6.1.1). Généralement le cas par défaut sur les versions récentes, mais non confirmé spécifiquement. |
+| 9.6.2 | ✅ | **Risque XXE — vérifié non exploitable, voir 12.1** | Testé empiriquement (pas seulement lu dans la doc/le changelog) sur les trois classes d'attaque XXE classiques, à la fois au niveau du parseur lxml brut et via le vrai pipeline de bout en bout (`_handle_detect_docx`/`_finalize_docx_job`) sur un `.docx` malveillant : lecture de fichier local, bombe d'entités (déni de service), SSRF via DTD externe. Aucune des trois n'aboutit — voir détail en 12.1. |
 | 9.6.3 | ⏳ | **Validation CSV intrinsèquement faible** | Pas de signature binaire possible pour un CSV (contrairement à `%PDF-` ou la structure ZIP d'un docx) — connu et accepté dès la conception, re-signalé pour mémoire. |
 | 9.6.4 | ⏳ | **Pas de budget de temps global pour la détection sur un gros document** | Chaque appel à Presidio a un timeout de 30s, mais rien ne borne le temps total d'un document proche des limites de taille (`MAX_DOCX_PARAGRAPHS`/`MAX_CSV_CELLS`), qui peut nécessiter des dizaines d'appels séquentiels. |
 | 9.6.5 | ⏳ | **Page de révision CSV sans pagination** | Un CSV proche de la limite de cellules autorisée génère une page HTML avec potentiellement des centaines de milliers de `<td>` — coûteux en mémoire serveur, bande passante, et rendu navigateur. Angle "amplification de ressources" non anticipé au moment de fixer le seuil de taille. |
@@ -199,6 +199,33 @@ Pas d'équivalent PDF/CSV à signaler : les images PDF ont déjà été vérifi�
 
 ---
 
+## 12. Risque XXE (9.6.2) — vérifié non exploitable (nouveau, session 9)
+
+### 12.0 Périmètre et méthode
+
+Reprise du point 9.6.2, resté "non confirmé spécifiquement" depuis la session 7 (extension DOCX). Plutôt que se fier au changelog des versions épinglées (`python-docx==1.2.0`, `lxml==6.1.1`), test empirique en deux temps : (1) sur le parseur lxml exact utilisé par python-docx, isolé ; (2) sur le vrai pipeline de bout en bout, avec un `.docx` malveillant complet, comme pour tous les constats [VÉRIFIÉ] des sessions précédentes.
+
+### 12.1 Constat — ✅ non exploitable, sur les trois classes d'attaque testées
+
+**Configuration du parseur** : `grep` sur l'intégralité du paquet `python-docx` installé montre que **toute** la désérialisation XML (aussi bien le chargement du paquet OPC — `[Content_Types].xml`, relations — que le contenu WordprocessingML lui-même) passe par un seul et même parseur, défini deux fois à l'identique (`docx/opc/oxml.py` et `docx/oxml/parser.py`) :
+```python
+oxml_parser = etree.XMLParser(remove_blank_text=True, resolve_entities=False)
+```
+`resolve_entities=False` est le réglage qui neutralise XXE : une entité déclarée dans un DOCTYPE n'est jamais substituée dans l'arbre — elle reste comme référence littérale non résolue. Le code applicatif (`_get_note_part`, pour les notes de bas de page/de fin) réutilise `docx.oxml.parse_xml`, donc le même parseur — vérifié qu'aucun autre point du code n'appelle `lxml.etree.fromstring`/`etree.parse` directement (seul usage direct de `etree` dans `main.py` : `etree.tostring()` en écriture, jamais en lecture).
+
+**Test 1 — parseur isolé**, avec la config exacte ci-dessus, sur trois payloads :
+- Lecture de fichier local (entité `SYSTEM "file://..."`, testé à la fois sur un fichier canari créé pour l'occasion et sur `/etc/passwd`) : entité jamais résolue, contenu jamais présent dans l'arbre parsé, temps de traitement quasi instantané (0.000s — pas de tentative d'accès fichier observable).
+- Bombe d'entités ("billion laughs", 4 niveaux d'imbrication ×10) : jamais expansée, aucun ralentissement, pas de déni de service.
+- SSRF via DTD externe (`SYSTEM "http://169.254.169.254/..."`, adresse de métadonnées cloud classique) : aucune tentative réseau (temps quasi instantané), le DTD externe n'est même pas chargé.
+
+**Test 2 — pipeline réel de bout en bout**, `.docx` malveillant construit à partir du fixture de la section 11 (`word/document.xml` et `word/footnotes.xml` remplacés par des payloads avec `DOCTYPE`+entités pointant vers un fichier canari et `/etc/passwd`), passé par `_handle_detect_docx` puis `_finalize_docx_job` sans aucune modification du code : aucun crash, détection des fausses données PII du reste du document toujours fonctionnelle (preuve que le fichier est bien traité normalement, pas juste rejeté en amont), fichier de sortie généré — **le contenu canari et `/etc/passwd` sont absents à 100 % du document final**, les entités `&xxe1;`/`&xxe2;`/`&xxe3;` survivent telles quelles comme texte littéral non résolu.
+
+### 12.2 Limite du test, assumée
+
+Seul le chemin DOCX a été testé (c'était le périmètre exact de 9.6.2 — introduit avec l'extension DOCX/CSV de la session 7). Non applicable ailleurs : CSV est un format texte pur sans XML ; côté PDF, le seul contenu XML manipulé est le paquet XMP (métadonnées), jamais parsé par le code applicatif — seulement lu comme octets bruts (`xref_stream`) ou supprimé (`del_xml_metadata`), jamais désérialisé avec un parseur XML par `main.py` ou PyMuPDF à notre initiative.
+
+---
+
 ## 8. Synthèse et priorisation mise à jour
 
 **✅ Fait cette session (7) :**
@@ -223,16 +250,16 @@ Pas d'équivalent PDF/CSV à signaler : les images PDF ont déjà été vérifi�
 - Campagne de non-régression demandée par l'utilisateur sur les trois formats : fixtures dédiés construits et conservés (`app/tests/fixtures/`), passés par les vrais points d'entrée, sortie balayée exhaustivement — **les correctifs des sessions 7 et 8 tiennent** ; zéro fuite résiduelle confirmée sur PDF, DOCX et CSV (11.1, 11.2, 11.3)
 - Un vecteur PDF jusqu'ici non testé explicitement — révisions incrémentales cachées (plusieurs `%%EOF`) — vérifié absent (11.1)
 - Deux angles morts DOCX repérés et documentés sans être exploitables avec les fixtures actuels : miniature de document (`docProps/thumbnail.jpeg`, pertinent surtout pour un `.docx` réellement produit par Word, pas par `python-docx`) et images incrustées simples dans le corps, distinctes de la limite déjà connue zones de texte/formes/SmartArt (11.4)
+- Risque XXE (9.6.2, ouvert depuis la session 7) levé : testé empiriquement (parseur isolé + pipeline réel de bout en bout sur `.docx` malveillant) sur lecture de fichier local, bombe d'entités et SSRF via DTD externe — aucune des trois exploitable, `resolve_entities=False` appliqué de façon homogène sur tout le parsing XML de python-docx (12.1)
 
 **🟡 Décisions de risque documentées cette session :**
 - Angles morts 11.4 : non corrigés, non confirmés comme exploitables — signalés pour suivi plutôt que traités dans l'urgence, cohérent avec la nature "vérification demandée", pas "chasse à la nouvelle fuite", de cette session
 
 **Reste le plus impactant, toutes sessions confondues :**
 1. Un vrai travail de mesure de la qualité de détection PII sur corpus varié (section 6 de la session 5) — toujours en attente ; la session 7 (DOCX) puis le constat 10.4 (PDF) en illustrent encore l'importance
-2. Risque XXE non vérifié sur le nouveau chemin DOCX (9.6.2) — le seul des nouveaux points ouverts qui touche potentiellement à une vraie exécution/fuite plutôt qu'à un coût de ressources
-3. Certificat TLS de confiance avant toute préproduction (1.19)
-4. Le pentest final (section 7)
-5. Processus récurrent de veille CVE (1.13)
+2. Certificat TLS de confiance avant toute préproduction (1.19)
+3. Le pentest final (section 7)
+4. Processus récurrent de veille CVE (1.13)
 
 **Leçon opérationnelle de la session 7, toujours valable** : une vérification qui appelle des fonctions internes plutôt que les vrais points d'entrée peut donner une fausse confiance — un bug d'intégration réel (9.1) est passé inaperçu à travers plusieurs tests unitaires qui passaient tous, découvert seulement en testant le point d'entrée réel de bout en bout. Rejoint la leçon de la session 6 sur la vérification de l'état réel plutôt que supposé, appliquée cette fois au code plutôt qu'à l'infrastructure. **Appliquée directement en session 8** : le correctif PDF a été revérifié via `_handle_detect_pdf`/`_finalize_pdf_job` réels plutôt que par une manipulation isolée de `fitz.Document`.
 

@@ -58,3 +58,25 @@ pipeline sûr.
 
 **Ne pas supprimer les fixtures ni les fichiers de sortie générés dans
 `/var/lib/anonymiseur/workdir` — conservés pour pouvoir rejouer les tests.**
+
+## Test XXE (section 12 du plan d'audit)
+
+`xxe_lxml_probe.py` teste le parseur lxml exact de python-docx isolément
+(lecture fichier local, bombe d'entités, SSRF via DTD externe), sans
+dépendre d'un fixture DOCX. `build_xxe_docx.py` construit `xxe_fixture.docx`
+(conservé, `word/document.xml` et `word/footnotes.xml` contiennent des
+payloads XXE) à partir de `docx_fixture.docx` ; `verify_xxe.py` le fait
+passer par le vrai pipeline et vérifie qu'aucun contenu de fichier local
+(canari créé à la volée + `/etc/passwd`) n'apparaît dans la sortie.
+
+```bash
+cp app/tests/fixtures/verification_scripts/xxe_lxml_probe.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/xxe_lxml_probe.py
+
+cp app/tests/fixtures/docx_fixture.docx /var/lib/anonymiseur/workdir/
+cp app/tests/fixtures/verification_scripts/build_xxe_docx.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/build_xxe_docx.py /data/tmp/xxe_fixture.docx
+
+cp app/tests/fixtures/verification_scripts/verify_xxe.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/verify_xxe.py
+```
