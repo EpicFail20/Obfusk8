@@ -1,6 +1,6 @@
 # Plan d'audit de sécurité — Projet Anonymiseur de documents
 
-**Dernière mise à jour :** session 9 — deux volets. (1) Campagne de non-régression demandée explicitement par l'utilisateur : re-vérifier, pour les **trois formats (PDF, DOCX, CSV)**, qu'un document caviardé ne contient plus aucune trace récupérable des données originales, "par aucun moyen". Fixtures fictifs dédiés construits pour chaque format (conservés dans `app/tests/fixtures/`, scripts dans `verification_scripts/`, voir leur README), passés par les vrais points d'entrée, sortie balayée exhaustivement (tous les objets PDF, toutes les entrées du zip DOCX, tous les octets bruts CSV). **Résultat : les corrections des sessions 7 et 8 tiennent, zéro fuite résiduelle sur les données identifiantes testées.** Deux nouveaux angles non couverts jusqu'ici repérés en marge (images DOCX : miniature de document et images incrustées dans le corps) — non exploitables avec les fixtures actuels, signalés comme angle mort à garder à l'œil, pas comme fuite confirmée. Voir section 11. (2) Reprise du point ouvert 9.6.2 (risque XXE non vérifié) : testé empiriquement, non exploitable — voir section 12.
+**Dernière mise à jour :** session 9 — deux volets. (1) Campagne de non-régression demandée explicitement par l'utilisateur : re-vérifier, pour les **trois formats (PDF, DOCX, CSV)**, qu'un document caviardé ne contient plus aucune trace récupérable des données originales, "par aucun moyen". Fixtures fictifs dédiés construits pour chaque format (conservés dans `app/tests/fixtures/`, scripts dans `verification_scripts/`, voir leur README), passés par les vrais points d'entrée, sortie balayée exhaustivement (tous les objets PDF, toutes les entrées du zip DOCX, tous les octets bruts CSV). **Résultat : les corrections des sessions 7 et 8 tiennent, zéro fuite résiduelle sur les données identifiantes testées.** Deux nouveaux angles non couverts jusqu'ici repérés en marge (images DOCX : miniature de document et images incrustées dans le corps) — non exploitables avec les fixtures actuels, signalés comme angle mort à garder à l'œil, pas comme fuite confirmée. Voir section 11. (2) Reprise du point ouvert 9.6.2 (risque XXE non vérifié) : testé empiriquement, non exploitable — voir section 12. (3) Reprise du point ouvert 9.6.1 (zip-bomb DOCX par nombre d'entrées) : **testé empiriquement, celui-ci EST exploitable** (~1,1s CPU + ~150 Mo mémoire par requête malveillante de moins de 24 Mo, sur un service à worker unique — bloque tout le monde) — corrigé par lecture directe de l'EOCD avant tout appel à `zipfile.ZipFile()`, revérifié à ~0s. Voir section 13.
 
 **Session 8** — constat critique **[VÉRIFIÉ]** sur le PDF, symétrique à la section 9.1 DOCX de la session 7 : le fichier de sortie "anonymisé" contenait toujours, en clair et récupérable par n'importe quel outil qui parcourt tous les objets du PDF, le nom, la date de naissance et le numéro de dossier du patient d'origine — alors que la page rendue affichait bien le caviardage. Corrigé (purge des objets orphelins + métadonnées) et revérifié par un test de bout en bout via les vrais points d'entrée (`_handle_detect_pdf` / `_finalize_pdf_job`), conformément à la leçon de la session 7. Voir section 10.
 
@@ -118,7 +118,7 @@ Fonctionnalité ajoutée en cours de session pour accélérer le diagnostic des 
 
 | # | Statut | Risque | Constat |
 |---|---|--------|---------|
-| 9.6.1 | ⏳ | **Zip-bomb DOCX : pas de limite sur le nombre d'entrées** | La validation borne la taille décompressée totale et le ratio de compression par fichier, mais jamais le nombre d'entrées dans l'archive — un zip avec un nombre extrême de fichiers minuscules pourrait rester sous les deux seuils tout en coûtant cher rien qu'à parcourir la table des fichiers. |
+| 9.6.1 | ✅ | **Zip-bomb DOCX par nombre d'entrées — confirmé exploitable et corrigé, voir 13** | Testé empiriquement (pas supposé) : ~260 000 entrées minimales dans ~24 Mo passaient les deux seuils existants tout en coûtant ~1,1s CPU + ~150 Mo mémoire par requête — réel sur un service à worker unique (bloque tout le monde) avec une limite mémoire conteneur de 1 Go. Corrigé par une lecture directe de l'EOCD (`_peek_zip_entry_count`) avant tout appel à `zipfile.ZipFile()` : rejet en ~0s au lieu de ~1,1s. |
 | 9.6.2 | ✅ | **Risque XXE — vérifié non exploitable, voir 12.1** | Testé empiriquement (pas seulement lu dans la doc/le changelog) sur les trois classes d'attaque XXE classiques, à la fois au niveau du parseur lxml brut et via le vrai pipeline de bout en bout (`_handle_detect_docx`/`_finalize_docx_job`) sur un `.docx` malveillant : lecture de fichier local, bombe d'entités (déni de service), SSRF via DTD externe. Aucune des trois n'aboutit — voir détail en 12.1. |
 | 9.6.3 | ⏳ | **Validation CSV intrinsèquement faible** | Pas de signature binaire possible pour un CSV (contrairement à `%PDF-` ou la structure ZIP d'un docx) — connu et accepté dès la conception, re-signalé pour mémoire. |
 | 9.6.4 | ⏳ | **Pas de budget de temps global pour la détection sur un gros document** | Chaque appel à Presidio a un timeout de 30s, mais rien ne borne le temps total d'un document proche des limites de taille (`MAX_DOCX_PARAGRAPHS`/`MAX_CSV_CELLS`), qui peut nécessiter des dizaines d'appels séquentiels. |
@@ -226,6 +226,36 @@ Seul le chemin DOCX a été testé (c'était le périmètre exact de 9.6.2 — i
 
 ---
 
+## 13. Zip-bomb DOCX par nombre d'entrées (9.6.1) — confirmé exploitable, corrigé (nouveau, session 9)
+
+### 13.0 Contexte et méthode
+
+Reprise du point 9.6.1 (ouvert depuis la session 7), même traitement que 9.6.2 : test empirique plutôt que lecture de code, avec un payload réel construit pour l'occasion, mesuré via les vrais points d'entrée.
+
+### 13.1 Constat — 🔴 confirmé exploitable par test réel
+
+**Le gap précis** : `_validate_docx_zip` borne la taille décompressée totale (`MAX_DOCX_UNCOMPRESSED_MB`, 200 Mo) et le ratio de compression par entrée (`MAX_DOCX_ZIP_RATIO`, 100×), mais rien ne bornait le **nombre** d'entrées. Un zip de fichiers vides ou quasi vides a un ratio de compression non pertinent (0 octet ÷ 0 octet, jamais testé par construction du code) et une taille décompressée totale négligeable, quel que soit le nombre d'entrées.
+
+**[VÉRIFIÉ] par construction d'un payload réel** : archive de ~23,94 Mo (sous `MAX_UPLOAD_MB`, 25 Mo — la limite amont sur la taille brute de l'upload) contenant **258 454 entrées** de 0 octet chacune, déguisée en `.docx` valide (`word/document.xml` présent). Passe les deux contrôles existants sans problème. Mesuré sur le code d'avant correctif, via les vrais points d'entrée (`_validate_docx_zip` et `_detect_file_kind`, appelés par `detect_document` sur **chaque** upload) : **~1,1 à 1,2 s de CPU et ~150 Mo de mémoire consommée par cette seule requête**, avant même que python-docx n'ouvre quoi que ce soit — le coût vient uniquement de `zipfile.ZipFile()`, qui doit désérialiser l'intégralité du répertoire central (un objet `ZipInfo` par entrée) pour pouvoir répondre à `zf.namelist()`.
+
+**Facteurs aggravants, vérifiés plutôt que supposés** :
+- Le service `app` tourne avec un seul worker Uvicorn (`Dockerfile` : `CMD ["uvicorn", "main:app", ...]`, pas de `--workers`) et la route `detect_document` est `async def` mais son corps est entièrement synchrone (aucun `await` autour du traitement du fichier) — une requête de ce type **bloque la boucle d'événements pour tous les utilisateurs** pendant ~1,1 s, pas seulement celui qui l'envoie.
+- Le service `app` est plafonné à 1 Go de mémoire (`docker-compose.yml`, `deploy.resources.limits.memory`) — quelques requêtes de ce type suffiraient à s'en approcher, avec un risque d'arrêt du conteneur par le mécanisme OOM de Docker (donc une coupure de service complète, pas seulement une lenteur) plutôt qu'un simple ralentissement.
+
+Conclusion : contrairement au risque XXE (12), celui-ci **est** réellement exploitable avec un effort d'attaque trivial (un seul fichier de moins de 24 Mo, aucune authentification supplémentaire requise au-delà de celle déjà nécessaire pour uploader un document).
+
+### 13.2 Correctif, testé
+
+Premier réflexe — ajouter `if len(names) > MAX_DOCX_ZIP_ENTRIES` juste après `zf.namelist()` — **testé et insuffisant** : `zipfile.ZipFile()` a déjà fait tout le travail coûteux au moment où `zf.namelist()` retourne, donc ce garde-fou rejette bien la requête mais ne réduit ni le temps (~1,1s inchangé) ni la mémoire (~150 Mo inchangée). Remplacé par **`_peek_zip_entry_count()`** : lit le nombre d'entrées directement depuis l'enregistrement de fin de répertoire central (EOCD, les 22 derniers octets significatifs du fichier, hors commentaire) **avant** tout appel à `zipfile.ZipFile()` — gère le cas Zip64 (champ 16 bits saturé à `0xFFFF` au-delà de 65 535 entrées, vrai compte dans le "Zip64 EOCD record" retrouvé via son "locator"), nécessaire puisque le payload de test en a justement besoin (258 454 > 65 535). `MAX_DOCX_ZIP_ENTRIES` fixé à 5000 (généreux : un `.docx` réel dépasse rarement quelques dizaines d'entrées).
+
+**Test de validation** : rejoué sur le même payload de 258 454 entrées via les vrais points d'entrée — rejet en **0,000 s** (au lieu de 1,1 s), avant tout appel à `zipfile.ZipFile()`. Fixture légitime (`docx_fixture.docx`, section 11, 22 entrées) revérifié de bout en bout après le correctif : détection et caviardage inchangés, zéro fuite — pas de régression. Suite de tests unitaires (13 tests) toujours au vert après reconstruction de l'image.
+
+### 13.3 Note sur les fixtures
+
+Le payload de test (~24 Mo, généré en quelques secondes) n'est pas conservé dans `app/tests/fixtures/` — seul le script qui le construit (`build_zipbomb_entries.py`) l'est, avec `verify_zipbomb.py` pour rejouer la mesure. Voir le `README.md` de `verification_scripts/`.
+
+---
+
 ## 8. Synthèse et priorisation mise à jour
 
 **✅ Fait cette session (7) :**
@@ -251,6 +281,7 @@ Seul le chemin DOCX a été testé (c'était le périmètre exact de 9.6.2 — i
 - Un vecteur PDF jusqu'ici non testé explicitement — révisions incrémentales cachées (plusieurs `%%EOF`) — vérifié absent (11.1)
 - Deux angles morts DOCX repérés et documentés sans être exploitables avec les fixtures actuels : miniature de document (`docProps/thumbnail.jpeg`, pertinent surtout pour un `.docx` réellement produit par Word, pas par `python-docx`) et images incrustées simples dans le corps, distinctes de la limite déjà connue zones de texte/formes/SmartArt (11.4)
 - Risque XXE (9.6.2, ouvert depuis la session 7) levé : testé empiriquement (parseur isolé + pipeline réel de bout en bout sur `.docx` malveillant) sur lecture de fichier local, bombe d'entités et SSRF via DTD externe — aucune des trois exploitable, `resolve_entities=False` appliqué de façon homogène sur tout le parsing XML de python-docx (12.1)
+- Zip-bomb DOCX par nombre d'entrées (9.6.1, ouvert depuis la session 7) : **testé empiriquement, confirmé exploitable** (contrairement au XXE) — ~1,1s CPU + ~150 Mo mémoire par requête de moins de 24 Mo, sur un service à worker unique (bloque tout le monde) et une limite mémoire conteneur de 1 Go. Corrigé (`_peek_zip_entry_count`, lecture EOCD avant tout appel à `zipfile.ZipFile()`) et revérifié à ~0s sans régression sur un document légitime (13.1, 13.2)
 
 **🟡 Décisions de risque documentées cette session :**
 - Angles morts 11.4 : non corrigés, non confirmés comme exploitables — signalés pour suivi plutôt que traités dans l'urgence, cohérent avec la nature "vérification demandée", pas "chasse à la nouvelle fuite", de cette session
@@ -260,6 +291,7 @@ Seul le chemin DOCX a été testé (c'était le périmètre exact de 9.6.2 — i
 2. Certificat TLS de confiance avant toute préproduction (1.19)
 3. Le pentest final (section 7)
 4. Processus récurrent de veille CVE (1.13)
+5. Autres vecteurs de coût de ressources non stress-testés listés en 9.6 (seuils numériques DOCX/CSV, ReDoS sur les nouveaux regex, pagination CSV) — même famille de risque que 9.6.1, jamais mesurée empiriquement à ce jour
 
 **Leçon opérationnelle de la session 7, toujours valable** : une vérification qui appelle des fonctions internes plutôt que les vrais points d'entrée peut donner une fausse confiance — un bug d'intégration réel (9.1) est passé inaperçu à travers plusieurs tests unitaires qui passaient tous, découvert seulement en testant le point d'entrée réel de bout en bout. Rejoint la leçon de la session 6 sur la vérification de l'état réel plutôt que supposé, appliquée cette fois au code plutôt qu'à l'infrastructure. **Appliquée directement en session 8** : le correctif PDF a été revérifié via `_handle_detect_pdf`/`_finalize_pdf_job` réels plutôt que par une manipulation isolée de `fitz.Document`.
 

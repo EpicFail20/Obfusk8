@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import re
+import struct
 import threading
 import time
 import uuid
@@ -83,6 +84,19 @@ MAX_DOCX_PARAGRAPHS = int(os.environ.get("MAX_DOCX_PARAGRAPHS", "20000"))
 # laisser python-docx/lxml ouvrir quoi que ce soit.
 MAX_DOCX_UNCOMPRESSED_MB = int(os.environ.get("MAX_DOCX_UNCOMPRESSED_MB", "200"))
 MAX_DOCX_ZIP_RATIO = int(os.environ.get("MAX_DOCX_ZIP_RATIO", "100"))
+# Ni la taille décompressée totale ni le ratio de compression ne bornent le
+# NOMBRE d'entrées — un zip de nombreux fichiers minuscules (voire vides)
+# reste sous les deux seuils ci-dessus tout en coûtant cher rien qu'à
+# parcourir la table des fichiers. Confirmé par test réel : ~24 Mo (juste
+# sous MAX_UPLOAD_MB) avec ~260 000 entrées minimales passe les deux
+# contrôles existants en ~1,2s CPU et fait grossir la mémoire du processus
+# de ~150 Mo pour cette seule requête — sur un service à un seul worker
+# (aucun `--workers` dans le Dockerfile), donc une requête bloque la boucle
+# d'événements pour tous les utilisateurs, et la limite mémoire du conteneur
+# (1 Go, docker-compose.yml) est atteignable avec seulement quelques
+# requêtes de ce type. Un vrai .docx dépasse rarement quelques dizaines
+# d'entrées (contenu + styles/rels/médias) ; 5000 laisse une marge large.
+MAX_DOCX_ZIP_ENTRIES = int(os.environ.get("MAX_DOCX_ZIP_ENTRIES", "5000"))
 
 # --- Seuils CSV ---
 MAX_CSV_ROWS = int(os.environ.get("MAX_CSV_ROWS", "20000"))
@@ -277,15 +291,67 @@ for _theme_key, _theme_data in THEMES.items():
 log.info("Reconnaisseurs communs chargés: %d", len(COMMON_RECOGNIZERS))
 
 
+def _peek_zip_entry_count(raw: bytes) -> int | None:
+    """
+    Lit le nombre d'entrées déclaré dans l'enregistrement de fin de
+    répertoire central (EOCD) d'un ZIP, sans jamais appeler
+    `zipfile.ZipFile()` — c'est justement l'ouverture par `zipfile`, qui
+    parse tout le répertoire central d'un coup, qui coûte cher sur une
+    archive à très grand nombre d'entrées (confirmé par test réel : ~1,1s
+    CPU et ~150 Mo de mémoire pour ~260 000 entrées minimales tenant dans
+    ~24 Mo, sur un service à worker unique où ce temps bloque la boucle
+    d'événements pour tout le monde). Renvoie None si l'EOCD est introuvable
+    (laisse `zipfile.ZipFile` lever l'erreur "corrompu" habituelle).
+
+    Gère le cas Zip64 (champ 16 bits saturé à 0xFFFF, vrai compte dans le
+    "Zip64 EOCD record" localisé via le "Zip64 EOCD locator" qui précède
+    l'EOCD standard) — un zip à nombre d'entrées extrême en a nécessairement
+    besoin, donc l'ignorer laisserait passer exactement le cas à bloquer.
+    """
+    window = raw[-(22 + 65535):]
+    idx = window.rfind(b"PK\x05\x06")
+    if idx == -1 or len(window) - idx < 22:
+        return None
+    eocd = window[idx : idx + 22]
+    total_entries = struct.unpack("<H", eocd[10:12])[0]
+    if total_entries != 0xFFFF:
+        return total_entries
+
+    eocd_abs_offset = len(raw) - len(window) + idx
+    locator_offset = eocd_abs_offset - 20
+    if locator_offset < 0:
+        return None
+    locator = raw[locator_offset : locator_offset + 20]
+    if locator[:4] != b"PK\x06\x07":
+        return None
+    zip64_eocd_offset = struct.unpack("<Q", locator[8:16])[0]
+    if zip64_eocd_offset + 56 > len(raw):
+        return None
+    zip64_eocd = raw[zip64_eocd_offset : zip64_eocd_offset + 56]
+    if zip64_eocd[:4] != b"PK\x06\x06":
+        return None
+    return struct.unpack("<Q", zip64_eocd[32:40])[0]
+
+
 def _validate_docx_zip(raw: bytes) -> str:
     """
     Vérifie qu'une archive ZIP est bien un .docx exploitable en sécurité :
       - contient réellement word/document.xml (pas un .xlsx/.pptx renommé)
       - ne contient pas de macro VBA (word/vbaProject.bin -> .docm déguisé)
       - n'est pas une "zip bomb" (taille décompressée disproportionnée par
-        rapport à la taille de l'archive, par entrée et au global)
+        rapport à la taille de l'archive, par entrée et au global, OU nombre
+        d'entrées disproportionné — un ratio/volume individuellement sages
+        n'empêchent pas des dizaines de milliers de fichiers minuscules,
+        coûteux à eux seuls rien qu'à parcourir la table des fichiers)
     Toute condition non respectée lève une HTTPException 400 explicite.
     """
+    entry_count = _peek_zip_entry_count(raw)
+    if entry_count is not None and entry_count > MAX_DOCX_ZIP_ENTRIES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Structure d'archive suspecte détectée (protection anti zip-bomb, {entry_count} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+        )
+
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
         names = zf.namelist()
@@ -296,6 +362,16 @@ def _validate_docx_zip(raw: bytes) -> str:
         raise HTTPException(status_code=400, detail="Ce fichier n'est pas un document Word (.docx) valide.")
     if "word/vbaProject.bin" in names:
         raise HTTPException(status_code=400, detail="Les documents avec macros (.docm) ne sont pas acceptés.")
+    if len(names) > MAX_DOCX_ZIP_ENTRIES:
+        # Filet de sécurité si l'EOCD n'a pas pu être lu en amont (ex.
+        # commentaire ZIP mal formé) : coûte la lecture complète qu'on
+        # essaie d'éviter ci-dessus, mais protège quand même contre la
+        # dégradation qui suit (python-docx, lxml, etc.) sur le reste du
+        # pipeline.
+        raise HTTPException(
+            status_code=400,
+            detail=f"Structure d'archive suspecte détectée (protection anti zip-bomb, {len(names)} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+        )
 
     total_uncompressed = sum(info.file_size for info in zf.infolist())
     if total_uncompressed > MAX_DOCX_UNCOMPRESSED_MB * 1024 * 1024:

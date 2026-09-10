@@ -80,3 +80,29 @@ docker exec anonymiseur-app-1 python3 /data/tmp/build_xxe_docx.py /data/tmp/xxe_
 cp app/tests/fixtures/verification_scripts/verify_xxe.py /var/lib/anonymiseur/workdir/
 docker exec anonymiseur-app-1 python3 /data/tmp/verify_xxe.py
 ```
+
+## Test zip-bomb par nombre d'entrées (section 13 du plan d'audit, 9.6.1)
+
+`build_zipbomb_entries.py` construit à la volée une archive proche de
+`MAX_UPLOAD_MB` (25 Mo) contenant ~260 000 entrées minimales (0 octet
+chacune) déguisée en `.docx` — **pas conservée en fixture** (≈24 Mo,
+régénérée en quelques secondes, pas d'intérêt à la garder en git).
+`verify_zipbomb.py` mesure le temps CPU et la mémoire consommés par
+`_validate_docx_zip`/`_detect_file_kind` (doivent rejeter en ~0s grâce à la
+lecture directe de l'EOCD, `_peek_zip_entry_count`, avant tout appel à
+`zipfile.ZipFile()`) :
+
+```bash
+cp app/tests/fixtures/verification_scripts/build_zipbomb_entries.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/build_zipbomb_entries.py 10 /data/tmp/zipbomb_entries.docx
+
+cp app/tests/fixtures/verification_scripts/verify_zipbomb.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/verify_zipbomb.py
+```
+
+Résultat attendu : `_validate_docx_zip` et `_detect_file_kind` rejettent en
+~0.000s (pas ~1,1s) — c'est le seul indicateur qui compte, le "Pipeline
+complet `_handle_detect_docx`" du script reste volontairement lent (~1s)
+car il appelle ce handler directement, en sautant `_detect_file_kind` —
+un raccourci de test qui n'existe pas sur le vrai chemin HTTP
+(`detect_document` appelle toujours `_detect_file_kind` en premier).
