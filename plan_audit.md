@@ -1,6 +1,8 @@
 # Plan d'audit de sécurité — Projet Anonymiseur de documents
 
-**Dernière mise à jour :** session 8 — constat critique **[VÉRIFIÉ]** sur le PDF, symétrique à la section 9.1 DOCX de la session 7 : le fichier de sortie "anonymisé" contenait toujours, en clair et récupérable par n'importe quel outil qui parcourt tous les objets du PDF, le nom, la date de naissance et le numéro de dossier du patient d'origine — alors que la page rendue affichait bien le caviardage. Corrigé (purge des objets orphelins + métadonnées) et revérifié par un test de bout en bout via les vrais points d'entrée (`_handle_detect_pdf` / `_finalize_pdf_job`), conformément à la leçon de la session 7. Voir section 10.
+**Dernière mise à jour :** session 9 — campagne de non-régression demandée explicitement par l'utilisateur : re-vérifier, pour les **trois formats (PDF, DOCX, CSV)**, qu'un document caviardé ne contient plus aucune trace récupérable des données originales, "par aucun moyen". Fixtures fictifs dédiés construits pour chaque format (conservés dans `app/tests/fixtures/`, scripts dans `verification_scripts/`, voir leur README), passés par les vrais points d'entrée, sortie balayée exhaustivement (tous les objets PDF, toutes les entrées du zip DOCX, tous les octets bruts CSV). **Résultat : les corrections des sessions 7 et 8 tiennent, zéro fuite résiduelle sur les données identifiantes testées.** Deux nouveaux angles non couverts jusqu'ici repérés en marge (images DOCX : miniature de document et images incrustées dans le corps) — non exploitables avec les fixtures actuels, signalés comme angle mort à garder à l'œil, pas comme fuite confirmée. Voir section 11.
+
+**Session 8** — constat critique **[VÉRIFIÉ]** sur le PDF, symétrique à la section 9.1 DOCX de la session 7 : le fichier de sortie "anonymisé" contenait toujours, en clair et récupérable par n'importe quel outil qui parcourt tous les objets du PDF, le nom, la date de naissance et le numéro de dossier du patient d'origine — alors que la page rendue affichait bien le caviardage. Corrigé (purge des objets orphelins + métadonnées) et revérifié par un test de bout en bout via les vrais points d'entrée (`_handle_detect_pdf` / `_finalize_pdf_job`), conformément à la leçon de la session 7. Voir section 10.
 
 **Session 7** — extension du traitement aux formats DOCX et CSV (jusque-là PDF uniquement), avec un lot de constats sévères : 6 fuites de données structurelles confirmées par test dans le format DOCX (indépendantes de tout réglage de détection), plus un patch du moteur Presidio lui-même pour traiter un biais de détection resté hors de portée du seul réglage applicatif.
 
@@ -166,6 +168,37 @@ Décision prise avec l'utilisateur (question posée explicitement, compromis non
 
 ---
 
+## 11. Campagne de non-régression multi-format — PDF/DOCX/CSV (nouveau, session 9)
+
+### 11.0 Contexte et méthode
+
+Demande explicite : revérifier, pour les trois formats supportés, qu'une donnée personnelle caviardée n'est récupérable "par aucun moyen" une fois le document "anonymisé" produit. Plutôt que relire le code, méthode identique à celle qui a payé aux sessions 7/8 : construire un document de test fictif par format couvrant toutes les zones déjà corrigées, le faire passer par les **vrais points d'entrée** (`_handle_detect_*` / `_finalize_*_job`), puis balayer **exhaustivement** le fichier de sortie — pas seulement le texte rendu/visible, mais toutes les entrées du zip (DOCX), tous les objets du PDF y compris ceux non référencés par l'arbre de pages courant, et les octets bruts (CSV) — à la recherche de chaque chaîne PII injectée dans le fixture.
+
+Fixtures et scripts conservés (pas supprimés, conformément à la consigne de l'utilisateur) dans `app/tests/fixtures/` — voir le `README.md` de `verification_scripts/` pour les rejouer.
+
+### 11.1 PDF — ✅ tient, [VÉRIFIÉ]
+
+Rejoué sur `test_med.pdf` (133 détections, 84 chaînes PII réelles extraites du document d'origine) via `_handle_detect_pdf`/`_finalize_pdf_job` avec le correctif de la session 8 : métadonnées vides, `xref_length` ramené à 82 objets (contre 414 avant correctif), un seul `%%EOF` (pas de révision incrémentale cachée — vecteur classique de fuite PDF non testé explicitement jusqu'ici, vérifié ici pour la première fois). Balayage de tous les objets : une seule occurrence résiduelle, le mot "Laboratoire" déjà identifié et sciemment non corrigé en 10.4 — aucune fuite sur les identifiants (nom, date de naissance, numéro de dossier, coordonnées).
+
+### 11.2 DOCX — ✅ tient, [VÉRIFIÉ], une fixture invalide a d'abord donné un faux positif
+
+Fixture construit avec les 6 zones de la session 7 (9.1) simultanément : suivi des modifications (texte supprimé), hyperlien (texte affiché + cible mailto), commentaire, note de bas de page, note de fin, en-tête + pied de page, plus métadonnées identifiantes (auteur, dernier modificateur, sujet, commentaire du document). Un premier passage a signalé deux fuites dans `docProps/core.xml` — **fausses**, dues à une erreur de construction du fixture (XML dupliqué : deux éléments `<cp:lastModifiedBy>`/`<dc:subject>` au lieu d'un, python-docx ne traitant que le premier) plutôt qu'à un bug applicatif ; corrigé en construisant les métadonnées via l'API `python-docx` (`document.core_properties`) plutôt qu'une injection XML manuelle, et une fuite `word/footnotes.xml` — également fausse, un numéro de dossier fictif au format inventé avec tiret ne correspondant à aucun des deux regex `PatientDossierNumberRecognizer` existants (aucun des deux n'accepte de tiret), alors que le nom de la même note **avait bien été détecté et caviardé** — preuve que la note était bien lue, pas une fuite structurelle. Fixture corrigé (métadonnées via l'API, numéro de dossier au format `[A-Z]\d{8,12}` déjà supporté) : **balayage complet des 20 parties du zip de sortie (document, en-tête, pied de page, notes, relations, métadonnées, etc.) sans aucune fuite.** Les zones retirées entièrement plutôt que caviardées (commentaire, suivi des modifications) sont bien absentes du fichier final, pas seulement masquées.
+
+### 11.3 CSV — ✅ tient, [VÉRIFIÉ]
+
+Architecture intrinsèquement plus sûre que PDF/DOCX sur ce point précis : la sortie est entièrement reconstruite cellule par cellule depuis la structure `rows` réanalysée (`csv.writer`), jamais une copie du fichier original avec patch chirurgical — aucun octet de l'original ne peut donc survivre ailleurs "par accident" comme pour un objet PDF orphelin ou une partie XML DOCX non lue. Fixture avec doublons de mention dans une même cellule (test du bon fonctionnement des intervalles multiples), cellule avec virgule et guillemets internes, cellule avec saut de ligne interne : balayage des octets bruts du fichier de sortie sans aucune fuite, ré-analyse round-trip (`csv.reader` sur la sortie) cohérente en nombre de lignes/colonnes.
+
+### 11.4 Angles morts repérés en marge, non exploités par les fixtures actuels — 🟡 à garder à l'œil
+
+Aucun des deux n'a pu être testé positivement (les fixtures python-docx ne les déclenchent pas), donc statut "non confirmé comme fuite", pas "fuite" :
+
+- **`docProps/thumbnail.jpeg`** : présent dans le zip de sortie DOCX, jamais touché par le pipeline (qui n'agit que sur le texte). Un document `.docx` réellement créé/enregistré par Microsoft Word (contrairement à nos fixtures générés par `python-docx`, qui n'embarque qu'une image statique du template) peut contenir, si l'option "Enregistrer la vignette" a été active à un moment, un **rendu réel de la première page** — donc potentiellement du texte visible en pixels, jamais analysé ni retiré.
+- **Images incrustées dans le corps** (`<w:drawing>` simple, ex. une capture d'écran collée dans le texte) : distinctes des "zones de texte, formes, objets incrustés et SmartArt" déjà documentées comme limite connue (voir note dans `_iter_docx_paragraphs`) — une image insérée simplement (Insertion > Image) n'est pas nommément couverte par cette limite telle que formulée, et n'est de toute façon jamais lue par un pipeline texte-seul.
+
+Pas d'équivalent PDF/CSV à signaler : les images PDF ont déjà été vérifiées en session 8 (logos de petite taille, pas de scan pleine page dans `test_med.pdf`) et CSV est un format texte pur sans conteneur d'image.
+
+---
+
 ## 8. Synthèse et priorisation mise à jour
 
 **✅ Fait cette session (7) :**
@@ -185,6 +218,14 @@ Décision prise avec l'utilisateur (question posée explicitement, compromis non
 **🟡 Décisions de risque documentées cette session :**
 - `Laboratoire`/`LOCATION` : trou de caviardage diagnostiqué précisément (empan NER fusionné à travers un saut de ligne PDF, avec effet de bord de sur-caviardage parasite) — correction délibérément reportée après arbitrage explicite avec l'utilisateur, le compromis de correction n'étant pas sans risque de régression (10.4)
 - `BIOLOGIE`/`ORGANIZATION` : suspecté à tort en premier passage (bug du script de vérification, pas du produit) — confirmé sans action nécessaire, déjà couvert par `excluded_entity_types` (10.4)
+
+**✅ Fait cette session (9) :**
+- Campagne de non-régression demandée par l'utilisateur sur les trois formats : fixtures dédiés construits et conservés (`app/tests/fixtures/`), passés par les vrais points d'entrée, sortie balayée exhaustivement — **les correctifs des sessions 7 et 8 tiennent** ; zéro fuite résiduelle confirmée sur PDF, DOCX et CSV (11.1, 11.2, 11.3)
+- Un vecteur PDF jusqu'ici non testé explicitement — révisions incrémentales cachées (plusieurs `%%EOF`) — vérifié absent (11.1)
+- Deux angles morts DOCX repérés et documentés sans être exploitables avec les fixtures actuels : miniature de document (`docProps/thumbnail.jpeg`, pertinent surtout pour un `.docx` réellement produit par Word, pas par `python-docx`) et images incrustées simples dans le corps, distinctes de la limite déjà connue zones de texte/formes/SmartArt (11.4)
+
+**🟡 Décisions de risque documentées cette session :**
+- Angles morts 11.4 : non corrigés, non confirmés comme exploitables — signalés pour suivi plutôt que traités dans l'urgence, cohérent avec la nature "vérification demandée", pas "chasse à la nouvelle fuite", de cette session
 
 **Reste le plus impactant, toutes sessions confondues :**
 1. Un vrai travail de mesure de la qualité de détection PII sur corpus varié (section 6 de la session 5) — toujours en attente ; la session 7 (DOCX) puis le constat 10.4 (PDF) en illustrent encore l'importance

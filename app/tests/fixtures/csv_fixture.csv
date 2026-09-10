@@ -1,0 +1,7 @@
+﻿Nom,Prenom,Email,Telephone,DateNaissance,NumeroDossier,Notes
+DUPUIS,Marc,marc.dupuis@example-fictif.test,06 22 33 44 55,14/03/1972,M772233114,RAS
+LEFEBVRE,Anne,anne.lefebvre@example-fictif.test,07 88 99 00 11,29/07/1965,A650729987,Suivi standard
+NOEL,Chantal,chantal.noel@example-fictif.test,06 00 11 22 33,01/01/1990,N900101555,"Adresse: 5, rue de la Paix, 75002 Paris"
+ROY,Bernard,bernard.roy@example-fictif.test,06 44 55 66 77,12/12/1955,R551212333,"Ligne 1 du commentaire
+Ligne 2 mentionnant Bernard ROY à nouveau"
+Denomination,installation,,,,,
