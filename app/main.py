@@ -678,6 +678,32 @@ def _anonymize_text(text: str, entities: list[dict]) -> str:
 
 PREVIEW_ZOOM = 2.0  # facteur d'agrandissement pour le rendu des pages en image
 
+# Défense en profondeur contre CVE-2026-3308 (MuPDF, pdf_load_image_imp) :
+# le stride d'une image est calculé en entier 32 bits côté MuPDF, ce qui
+# peut déborder sur des dimensions déclarées volontairement absurdes et
+# provoquer une écriture hors bornes lors du décodage. La version de
+# PyMuPDF utilisée ici est déjà corrigée, mais on vérifie quand même les
+# dimensions déclarées (lues depuis les métadonnées de l'objet image, sans
+# décodage) avant tout appel à get_pixmap(), en défense en profondeur.
+MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", "40_000_000"))
+
+
+def _check_page_images_sane(page: "fitz.Page") -> None:
+    """
+    Rejette la page si une image qui y est incrustée déclare des dimensions
+    nulles/négatives ou dépassant MAX_IMAGE_PIXELS. À appeler avant tout
+    page.get_pixmap() : get_images(full=True) ne fait que lire les entrées
+    /Width et /Height de l'objet image dans le PDF, sans décoder les pixels.
+    """
+    for img in page.get_images(full=True):
+        width, height = img[2], img[3]
+        if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+            raise HTTPException(
+                status_code=400,
+                detail="Cette page contient une image aux dimensions invalides.",
+            )
+
+
 # Types d'entités propagés sur tout le document une fois confirmés au moins
 # une fois — un nom de patient qui échappe au NER dans un contexte dense
 # (ex: page listant de nombreux biologistes) reste néanmoins une donnée
@@ -881,6 +907,8 @@ COMMENT_RELTYPES = {
     "http://schemas.microsoft.com/office/2018/08/relationships/commentsExtensible",
 }
 
+THUMBNAIL_RELTYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail"
+
 
 def _flatten_revisions_in(root) -> int:
     """
@@ -994,6 +1022,31 @@ def _wipe_comments(document: WordDocument) -> int:
     return count
 
 
+def _wipe_docx_thumbnail(document: WordDocument) -> int:
+    """
+    Retire la miniature de document (docProps/thumbnail.jpeg), jamais
+    analysée par le pipeline (texte uniquement) : un .docx réellement
+    enregistré par Word (contrairement à un fixture généré par
+    python-docx) peut y embarquer un rendu réel de la première page en
+    pixels, si l'option "Enregistrer la vignette" a été active à un
+    moment — potentiellement du texte identifiant visible en image, jamais
+    lu ni caviardé par ailleurs. La relation vers cette partie est stockée
+    au niveau racine du paquet (_rels/.rels, reltype "metadata/thumbnail"),
+    pas dans word/_rels/document.xml.rels comme les relations habituelles
+    du corps — d'où l'accès via document.part.package.rels plutôt que
+    document.part.rels. Retrait entier (même logique que _wipe_comments) :
+    ce n'est pas du texte analysable, la seule protection sûre est de ne
+    pas transporter cette partie dans le fichier de sortie. Vérifié que la
+    partie disparaît bien du zip de sortie et que le document reste
+    ouvrable.
+    """
+    package = document.part.package
+    to_drop = [rid for rid, rel in list(package.rels.items()) if rel.reltype == THUMBNAIL_RELTYPE]
+    for rid in to_drop:
+        del package.rels[rid]
+    return len(to_drop)
+
+
 def _wipe_core_properties(document: WordDocument) -> int:
     """
     Vide les champs de métadonnées susceptibles de porter une identité
@@ -1058,10 +1111,12 @@ def _iter_docx_paragraphs(document: WordDocument):
         _save_note_parts après édition des runs, avant document.save().
 
     LIMITATION CONNUE : n'inclut pas le texte des zones de texte, formes,
-    SmartArt ou objets OLE incrustés — python-docx ne l'expose pas. Les
-    commentaires et métadonnées ne sont pas caviardés mais entièrement
-    retirés en amont côté finalisation (_wipe_comments /
-    _wipe_core_properties), donc jamais présentés en révision non plus.
+    SmartArt ou objets OLE incrustés, ni les images incrustées dans le
+    corps (`<w:drawing>`) — python-docx ne l'expose pas / ce n'est pas du
+    texte analysable par le NER. Les commentaires, métadonnées et la
+    miniature de document ne sont pas caviardés mais entièrement retirés
+    en amont côté finalisation (_wipe_comments / _wipe_core_properties /
+    _wipe_docx_thumbnail), donc jamais présentés en révision non plus.
     """
     blocks = []
 
@@ -2236,8 +2291,11 @@ def preview_image(job_id: str, page_index: int):
         if page_index < 0 or page_index >= len(doc):
             raise HTTPException(status_code=404, detail="Page introuvable")
 
+        page = doc[page_index]
+        _check_page_images_sane(page)
+
         matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
-        pix = doc[page_index].get_pixmap(matrix=matrix)
+        pix = page.get_pixmap(matrix=matrix)
         png_bytes = pix.tobytes("png")
     except HTTPException:
         raise
@@ -2378,6 +2436,7 @@ def _finalize_docx_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict,
         # l'écran de révision.
         _wipe_comments(document)
         _wipe_core_properties(document)
+        _wipe_docx_thumbnail(document)
         _save_note_parts(note_parts)
 
         theme = job["theme"]

@@ -106,3 +106,49 @@ complet `_handle_detect_docx`" du script reste volontairement lent (~1s)
 car il appelle ce handler directement, en sautant `_detect_file_kind` —
 un raccourci de test qui n'existe pas sur le vrai chemin HTTP
 (`detect_document` appelle toujours `_detect_file_kind` en premier).
+
+## Miniature de document DOCX (`docProps/thumbnail.jpeg`)
+
+`verify_docx_thumbnail.py` vérifie que `_wipe_docx_thumbnail()` retire bien
+la miniature du zip de sortie (relation package-level `_rels/.rels`,
+reltype `.../metadata/thumbnail`, jamais dans `word/_rels/document.xml.rels`
+comme les relations habituelles du corps) et que le fichier reste ouvrable
+et correctement caviardé par ailleurs. `docx_fixture.docx` contient déjà
+une miniature (ajoutée par python-docx par défaut à la sauvegarde), pas
+besoin d'un fixture séparé.
+
+```bash
+cp app/tests/fixtures/verification_scripts/verify_docx_thumbnail.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/verify_docx_thumbnail.py
+```
+
+## Efficacité du caviardage manuel d'image (PDF)
+
+`probe_image_redaction.py` ne dépend d'aucun fixture ni du pipeline HTTP —
+il construit une image de test (moitié rouge = "PII", moitié bleue =
+contenu à conserver), applique le même mécanisme que
+`_apply_manual_redactions()` (zone tracée par l'utilisateur, uniquement sur
+la moitié rouge) suivi du même `doc.save(garbage=4, clean=True,
+deflate=True)` que `_finalize_pdf_job`, puis balaie TOUS les objets image
+du fichier de sortie (pas seulement l'arbre de pages) à la recherche du
+rouge d'origine. Répond à la question posée explicitement par
+l'utilisateur : le caviardage manuel d'une zone image est-il réellement
+irrécupérable (pixels réécrits) ou seulement un cache visuel par-dessus
+(pixels d'origine toujours présents ailleurs dans le fichier) ?
+
+**Résultat [VÉRIFIÉ]** : `page.apply_redactions()` (défauts du code,
+`images=2` = "blank out overlapping image parts") réécrit réellement les
+pixels de la zone caviardée dans un nouvel objet image, purgé de tout
+rouge résiduel ; combiné à `garbage=4`, aucune copie non caviardée de
+l'image d'origine ne survit ailleurs dans le fichier. Autrement dit : le
+mécanisme de zones manuelles déjà en place pour le PDF satisfait
+l'exigence "aucune possibilité de récupération post-caviardage" pour les
+images — **sur PDF uniquement** ; le DOCX n'a aujourd'hui aucun mécanisme
+de zone manuelle équivalent (pas d'UI de sélection de zone sur une image
+incrustée), donc la stratégie "l'utilisateur caviarde lui-même les images"
+n'est déployable que côté PDF pour l'instant.
+
+```bash
+cp app/tests/fixtures/verification_scripts/probe_image_redaction.py /var/lib/anonymiseur/workdir/
+docker exec anonymiseur-app-1 python3 /data/tmp/probe_image_redaction.py
+```

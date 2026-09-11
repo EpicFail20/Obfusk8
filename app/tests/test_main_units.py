@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main  # noqa: E402
@@ -118,3 +119,50 @@ def test_rect_iou_no_overlap_is_zero():
 
 def test_rect_iou_identical_rects_is_one():
     assert main._rect_iou([0, 0, 10, 10], [0, 0, 10, 10]) == 1.0
+
+
+# ---------------------------------------------------------------------------
+# _check_page_images_sane — défense en profondeur CVE-2026-3308 (dimensions
+# d'image PDF absurdes avant tout appel à page.get_pixmap()). Un simple objet
+# factice avec get_images(full=True) suffit : la fonction ne lit que les
+# indices 2 (largeur) et 3 (hauteur) du tuple, comme le fait PyMuPDF pour
+# chaque image incrustée référencée par une page.
+# ---------------------------------------------------------------------------
+
+class _FakePage:
+    def __init__(self, images):
+        self._images = images
+
+    def get_images(self, full=False):
+        return self._images
+
+
+def _fake_image_entry(width, height):
+    # (xref, smask, width, height, bpc, colorspace, alt_cs, name, filter, referencer_xref)
+    return (1, 0, width, height, 8, "DeviceRGB", "", "Im0", "DCTDecode", 0)
+
+
+def test_check_page_images_sane_allows_normal_dimensions():
+    page = _FakePage([_fake_image_entry(800, 600)])
+    main._check_page_images_sane(page)  # ne doit pas lever
+
+
+def test_check_page_images_sane_allows_page_without_images():
+    page = _FakePage([])
+    main._check_page_images_sane(page)  # ne doit pas lever
+
+
+def test_check_page_images_sane_rejects_oversized_dimensions():
+    huge_side = main.MAX_IMAGE_PIXELS + 1
+    page = _FakePage([_fake_image_entry(huge_side, 1)])
+    with pytest.raises(HTTPException) as exc_info:
+        main._check_page_images_sane(page)
+    assert exc_info.value.status_code == 400
+
+
+@pytest.mark.parametrize("width,height", [(0, 100), (100, 0), (-1, 100), (100, -1)])
+def test_check_page_images_sane_rejects_zero_or_negative_dimensions(width, height):
+    page = _FakePage([_fake_image_entry(width, height)])
+    with pytest.raises(HTTPException) as exc_info:
+        main._check_page_images_sane(page)
+    assert exc_info.value.status_code == 400
