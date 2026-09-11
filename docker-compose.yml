@@ -242,18 +242,9 @@ services:
       # tous les thèmes existants (medical/it/compta). N'affecte QUE le flux
       # "Aucun thème" ; les thèmes définissent chacun leur propre valeur.
       - DEFAULT_SCORE_THRESHOLD=0.4
-      # LAB UNIQUEMENT — journal de débogage avec texte détecté en clair,
-      # téléchargeable via /api/debug/log. À repasser à false (ou retirer)
-      # avant toute mise en production.
-      - ENABLE_DEBUG_LOG=true
-      # Purge les entrées du journal de debug plus vieilles que ce délai
-      # (secondes) — complète la rotation par taille, qui ne garantit
-      # aucune limite temporelle. 3600 = 1h, ajustable.
-      - DEBUG_LOG_TTL_SECONDS=3600
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
-      - /var/log/anonymiseur-debug:/data/debug
     networks:
       - app-internal
       - backend

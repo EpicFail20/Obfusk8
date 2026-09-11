@@ -199,99 +199,6 @@ def _record_audit_event(**fields):
     audit_log.info(json.dumps(event, ensure_ascii=False))
 
 
-# -----------------------------------------------------------------------
-# Journal de DEBUG — LAB UNIQUEMENT, désactivé par défaut.
-#
-# ⚠️ Contrairement au journal d'audit ci-dessus, celui-ci loggue le TEXTE
-# RÉELLEMENT détecté (nécessaire pour comprendre pourquoi un mot précis a
-# été signalé/manqué) — donc potentiellement des données sensibles. À
-# n'activer (ENABLE_DEBUG_LOG=true) que pendant une session de test
-# volontaire en lab, jamais en production. Prévu pour être retiré du code
-# avant tout déploiement en production (endpoint + fichier).
-# -----------------------------------------------------------------------
-ENABLE_DEBUG_LOG = os.environ.get("ENABLE_DEBUG_LOG", "false").strip().lower() == "true"
-DEBUG_DIR = Path("/data/debug")
-# Contrairement à la rotation par taille (voir RotatingFileHandler
-# ci-dessous), qui ne garantit aucune limite temporelle, ce seuil borne
-# combien de temps du texte en clair peut rester sur disque — ce journal
-# contient des données bien plus sensibles que le journal d'audit (qui ne
-# stocke que des hashs), sa fenêtre de rétention doit rester courte.
-DEBUG_LOG_TTL_SECONDS = int(os.environ.get("DEBUG_LOG_TTL_SECONDS", "3600"))
-
-debug_log = logging.getLogger("anonymiseur.debug")
-debug_log.setLevel(logging.INFO)
-debug_log.propagate = False
-if ENABLE_DEBUG_LOG:
-    # Une fonctionnalité de debug ne doit JAMAIS pouvoir empêcher le
-    # démarrage de l'application (ex: permissions du volume monté non
-    # accordées à l'utilisateur non-root du conteneur) — on retombe
-    # silencieusement sur ENABLE_DEBUG_LOG=false plutôt que de crasher.
-    try:
-        DEBUG_DIR.mkdir(parents=True, exist_ok=True)
-        _debug_handler = RotatingFileHandler(
-            DEBUG_DIR / "detection-debug.jsonl", maxBytes=5 * 1024 * 1024, backupCount=3, encoding="utf-8"
-        )
-        _debug_handler.setFormatter(logging.Formatter("%(message)s"))
-        debug_log.addHandler(_debug_handler)
-        log.warning(
-            "ENABLE_DEBUG_LOG=true : le journal de débogage /data/debug contient le texte "
-            "détecté en clair. À désactiver avant toute mise en production."
-        )
-    except OSError as exc:
-        ENABLE_DEBUG_LOG = False
-        log.error(
-            "ENABLE_DEBUG_LOG=true mais impossible d'initialiser /data/debug (%s) — "
-            "journal de débogage désactivé, l'application démarre normalement. "
-            "Vérifier les permissions du volume monté sur /data/debug.",
-            exc,
-        )
-
-
-def _write_debug_log(
-    job_id: str, kind: str, theme: str, user_email: str, get_text, detections: list[dict]
-) -> None:
-    """
-    Ajoute une ligne JSON normalisée par détection (type, score si connu,
-    source [ner/propagation/structural], texte concerné) — un format
-    homogène pensé pour être comparé test après test, sans copier-coller
-    manuel de logs. No-op silencieux si ENABLE_DEBUG_LOG est désactivé.
-
-    Chaque entrée est taguée avec l'utilisateur qui a soumis le document
-    (déjà collecté ailleurs dans le pipeline, jamais en clair nulle part
-    d'autre que ce journal et le journal d'audit) et un timestamp
-    numérique — nécessaires respectivement pour que /api/debug/log ne
-    renvoie jamais à un utilisateur les détections d'un autre, et pour la
-    purge par âge (voir _sweep_debug_log).
-    """
-    if not ENABLE_DEBUG_LOG or not detections:
-        return
-    now = time.time()
-    for d in detections:
-        try:
-            text = get_text(d["block_id"])
-            snippet = text[d["start"] : d["end"]]
-        except Exception:  # pragma: no cover - le debug ne doit jamais casser la requête
-            snippet = "<indisponible>"
-        debug_log.info(
-            json.dumps(
-                {
-                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z", time.localtime(now)),
-                    "ts": now,
-                    "user": user_email or "inconnu",
-                    "job_id": job_id,
-                    "format": kind,
-                    "theme": theme or "aucun",
-                    "source": d.get("source", "inconnu"),
-                    "score": d.get("score"),
-                    "entity_type": d.get("entity_type"),
-                    "block_id": str(d.get("block_id")),
-                    "text": snippet,
-                },
-                ensure_ascii=False,
-            )
-        )
-
-
 THEMES_DIR = Path(__file__).parent / "themes"
 COMMON_RECOGNIZERS_FILENAME = "common.json"
 
@@ -566,61 +473,11 @@ def _sweep_stale_jobs():
         log.info("Jobs en révision expirés purgés: %d", len(stale))
 
 
-def _sweep_debug_log():
-    """
-    Retire du journal de debug les entrées plus vieilles que
-    DEBUG_LOG_TTL_SECONDS. Contrairement aux fichiers de sortie
-    (_sweep_orphaned_files), ce journal n'est pas un ensemble de fichiers
-    individuels mais un seul fichier alimenté en continu — la rotation par
-    taille (RotatingFileHandler) ne garantit aucune limite temporelle, ce
-    balayage la complète.
-
-    Coordonné avec le handler de logging via son propre verrou
-    (acquire/release) pour éviter d'écrire dans le fichier pendant qu'une
-    requête concurrente y ajoute une ligne — c'est le mécanisme prévu par
-    le module logging pour ce genre de manipulation externe.
-    """
-    if not ENABLE_DEBUG_LOG or not debug_log.handlers:
-        return
-    log_path = DEBUG_DIR / "detection-debug.jsonl"
-    if not log_path.exists():
-        return
-
-    handler = debug_log.handlers[0]
-    cutoff = time.time() - DEBUG_LOG_TTL_SECONDS
-    handler.acquire()
-    try:
-        kept = []
-        removed = 0
-        with open(log_path, encoding="utf-8") as f:
-            for line in f:
-                stripped = line.strip()
-                if not stripped:
-                    continue
-                try:
-                    entry = json.loads(stripped)
-                except json.JSONDecodeError:
-                    continue  # ligne corrompue (écriture interrompue) : abandonnée
-                if entry.get("ts", 0) >= cutoff:
-                    kept.append(stripped)
-                else:
-                    removed += 1
-        if removed:
-            with open(log_path, "w", encoding="utf-8") as f:
-                f.write("\n".join(kept) + ("\n" if kept else ""))
-            log.info("Journal de debug: %d entrée(s) expirée(s) purgée(s) (TTL %ds)", removed, DEBUG_LOG_TTL_SECONDS)
-    except OSError as exc:  # pragma: no cover - purge best-effort
-        log.warning("Purge du journal de debug échouée: %s", exc)
-    finally:
-        handler.release()
-
-
 def _cleanup_sweep_loop(interval_seconds: int = 60):
     while True:
         time.sleep(interval_seconds)
         _sweep_orphaned_files()
         _sweep_stale_jobs()
-        _sweep_debug_log()
 
 
 @asynccontextmanager
@@ -629,7 +486,6 @@ async def lifespan(app: FastAPI):
     # Rattrape immédiatement les fichiers laissés par un précédent process
     # (crash, redéploiement) avant même le premier tour de boucle périodique.
     _sweep_orphaned_files()
-    _sweep_debug_log()
     threading.Thread(target=_cleanup_sweep_loop, daemon=True).start()
     log.info("Balayage des fichiers orphelins démarré (contrôle toutes les 60s)")
 
@@ -2219,7 +2075,6 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
         indexed_texts = list(enumerate(block_texts))
         structural = _docx_table_structural_entities(blocks, block_texts, _resolve_column_keywords(selected_theme))
         detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
-        _write_debug_log(job_id, "docx", theme, user_email, lambda bid: block_texts[bid], detections)
         clusters = _cluster_text_detections(detections)
     except HTTPException:
         raise
@@ -2305,8 +2160,6 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
         indexed_texts = [(f"{r}:{c}", cell) for r, row in enumerate(rows) for c, cell in enumerate(row)]
         structural = _csv_structural_entities(rows, _resolve_column_keywords(selected_theme))
         detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
-        cell_lookup = {f"{r}:{c}": cell for r, row in enumerate(rows) for c, cell in enumerate(row)}
-        _write_debug_log(job_id, "csv", theme, user_email, lambda bid: cell_lookup.get(bid, ""), detections)
         clusters = _cluster_text_detections(detections)
     except HTTPException:
         raise
@@ -2770,62 +2623,6 @@ def download(job_id: str):
         media_type=media_type,
         filename=public_filename,
         content_disposition_type="inline" if extension == ".pdf" else "attachment",
-    )
-
-
-@app.get("/api/debug/log")
-def download_debug_log(request: Request):
-    """
-    ⚠️ LAB UNIQUEMENT. Renvoie le journal de débogage (une ligne JSON par
-    détection : type, score si connu, source, texte concerné) — utile pour
-    comparer des tests de détection sans copier-coller manuel de logs.
-    Actif uniquement si ENABLE_DEBUG_LOG=true ; à retirer avant toute mise
-    en production (endpoint + fichier + variable d'environnement).
-
-    Cloisonné par utilisateur : ne renvoie jamais les entrées générées par
-    un AUTRE utilisateur authentifié, même si celui-ci a le droit d'accéder
-    à l'application. Nécessaire car ce journal contient du texte détecté en
-    clair (contrairement au journal d'audit, qui ne stocke que des hashs) —
-    sans ce filtre, n'importe quel utilisateur pourrait voir les données
-    d'un document soumis par quelqu'un d'autre pendant la même fenêtre de
-    test.
-    """
-    if not ENABLE_DEBUG_LOG:
-        raise HTTPException(status_code=404, detail="Journal de débogage désactivé (ENABLE_DEBUG_LOG=false)")
-
-    log_path = DEBUG_DIR / "detection-debug.jsonl"
-    if not log_path.exists():
-        raise HTTPException(status_code=404, detail="Aucun journal de débogage pour l'instant (aucune détection enregistrée)")
-
-    user_email = request.headers.get("x-auth-request-email", "inconnu")
-
-    handler = debug_log.handlers[0] if debug_log.handlers else None
-    if handler is not None:
-        handler.acquire()  # coordination avec l'écriture concurrente, voir _sweep_debug_log
-    try:
-        with open(log_path, encoding="utf-8") as f:
-            lines = f.readlines()
-    finally:
-        if handler is not None:
-            handler.release()
-
-    own_lines = []
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            entry = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if entry.get("user") == user_email:
-            own_lines.append(line)
-
-    content = "\n".join(own_lines) + ("\n" if own_lines else "")
-    return Response(
-        content=content,
-        media_type="application/x-ndjson",
-        headers={"Content-Disposition": 'attachment; filename="detection-debug.jsonl"'},
     )
 
 
