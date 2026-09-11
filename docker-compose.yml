@@ -47,7 +47,7 @@ services:
   # VOLUMES, SECRETS, SWARM...) reste bloqué par défaut (403).
   # -------------------------------------------------------------------------
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.4.2
+    image: tecnativa/docker-socket-proxy:v0.5.0
     restart: unless-stopped
     logging:
       driver: json-file
@@ -69,7 +69,7 @@ services:
   # Reverse proxy + TLS interne
   # -------------------------------------------------------------------------
   traefik:
-    image: traefik:v3.6
+    image: traefik:v3.7.13   # v3.6 EOL depuis v3.6.25 (2026-07-31, plus aucun patch) ; 3.7 est la ligne stable maintenue
     restart: unless-stopped
     logging:
       driver: json-file
@@ -149,6 +149,20 @@ services:
       app-internal:
         aliases:
           - keycloak.lab.local   # pour qu'oauth2-proxy le joigne en interne
+    # Sans ça, `depends_on` (côté oauth2-proxy) n'attend que le démarrage du
+    # CONTENEUR, pas que le port HTTP réponde — Keycloak (JVM) met largement
+    # plus de temps à s'initialiser que oauth2-proxy à tenter sa découverte
+    # OIDC une seule fois au démarrage, d'où un crash-loop systématique de
+    # oauth2-proxy à chaque redémarrage complet de la stack (constaté :
+    # RestartCount=7, toujours la même erreur de connexion refusée).
+    # Pas de curl/wget/python dans cette image (RHEL minimal) : test TCP nu
+    # via /dev/tcp, natif à bash (l'entrypoint du service est déjà bash).
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && exec 3<&-"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
 
   # -------------------------------------------------------------------------
   # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
@@ -173,7 +187,8 @@ services:
       - ./oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
     command: ["--config=/etc/oauth2-proxy.cfg"]
     depends_on:
-      - keycloak
+      keycloak:
+        condition: service_healthy
     networks:
       - app-internal
     labels:
