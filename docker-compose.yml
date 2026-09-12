@@ -219,6 +219,20 @@ services:
         max-file: "3"
     security_opt:
       - no-new-privileges:true
+      # Profil seccomp personnalisé (remplace le profil par défaut de
+      # Docker), construit à partir des syscalls réellement observés par
+      # strace sur ce service (démarrage, detect/finalize PDF/DOCX/CSV, cas
+      # d'erreur, purge différée, arrêt propre) + les syscalls de bootstrap
+      # runc requis pour tout conteneur non-root avec cap_drop:ALL — voir
+      # seccomp/README.md pour la méthode complète et le statut de passage
+      # en blocage réel.
+      #
+      # EN MODE JOURNALISATION SEULE (SCMP_ACT_LOG) : ne bloque rien
+      # aujourd'hui, journalise seulement les syscalls hors-liste. Ne pas
+      # passer à seccomp/app-enforce.json (SCMP_ACT_ERRNO, blocage réel)
+      # sans avoir revérifié seccomp/README.md — étape volontairement
+      # laissée manuelle.
+      - seccomp=./seccomp/app-audit.json
     cap_drop:
       - ALL
     read_only: true
