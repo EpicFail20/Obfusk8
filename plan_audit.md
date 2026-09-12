@@ -477,6 +477,14 @@ Défense en profondeur déjà en place, qui réduit l'impact pratique de ces 59 
 - Premier test unitaire "pur calcul" pour ce genre de garde-fou plutôt qu'un script de vérification manuelle jetable — 7 cas ajoutés, suite passée de 13 à 20 tests au vert (15.3)
 - **Construit et redéployé sur autorisation explicite de l'utilisateur** : image `anonymiseur-app` reconstruite, 20 tests revérifiés au vert dans l'image fraîche puis dans le conteneur vivant après recréation, aucune nouvelle erreur Traefik après redémarrage (15.3)
 
+**✅ Fait cette session (14) :**
+- Profil seccomp personnalisé construit pour le service `app` (2.5, resté 🟡 "partiel" depuis la première version de ce document) : liste de syscalls dérivée d'un `strace -f` réel (démarrage, detect/finalize PDF/DOCX/CSV, cas d'erreur, purge différée, arrêt propre) plus les syscalls de bootstrap `runc` requis pour tout conteneur non-root `cap_drop: ALL` (invisibles à une trace app-level seule, découverts en rejouant le bundle OCI exact du service directement sous `runc run`) — méthode complète dans `seccomp/README.md` (17.1)
+- Déployé d'abord en journalisation seule (`app-audit.json`, `SCMP_ACT_LOG`) et rejoué contre l'intégralité des scénarios de test du projet : trois syscalls journalisés (`io_uring_setup`/`io_uring_enter`, `openat2`), tous avec repli sans conséquence et déjà absents du profil par défaut de Docker aujourd'hui — zéro imprévu (17.2)
+- **Basculé en blocage réel** (`app-enforce.json`, `SCMP_ACT_ERRNO`) dans `docker-compose.yml`, sur confirmation explicite de l'utilisateur : conteneur recréé, cycle démarrage → "Application startup complete" → requête HTTP fonctionnelle → arrêt propre revérifié sans aucune erreur (17.3)
+
+**🟡 Limite assumée cette session :**
+- Un seul syscall ajouté par marge plutôt que par observation directe : `rename`/`renameat`/`renameat2` (rotation du journal d'audit à 10 Mo, `RotatingFileHandler`), jamais atteint pendant la session de test — à revérifier au premier cycle de rotation réel en usage
+
 **Reste le plus impactant, toutes sessions confondues :**
 1. Un vrai travail de mesure de la qualité de détection PII sur corpus varié (section 6 de la session 5) — toujours en attente ; la session 7 (DOCX) puis le constat 10.4 (PDF) en illustrent encore l'importance
 2. Certificat TLS de confiance avant toute préproduction (1.19)

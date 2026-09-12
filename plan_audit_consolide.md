@@ -70,8 +70,14 @@
 | 2.2 | Durcissement des autres conteneurs (non-root, `cap_drop`, `read_only`) | ✅ Appliqué à `app`, `presidio-analyzer`, `presidio-anonymizer`, `traefik`. `keycloak` reste ⏳ (lab uniquement, non prioritaire) |
 | 2.3 | Surface d'attaque du parsing PDF | ✅ Couverture partielle — corpus de 7 PDF malformés construit, a mené à la découverte et correction de CVE-2026-3308 (integer overflow via `page.get_pixmap()`) |
 | 2.4 | Version Docker/runc/containerd sur l'hôte | ✅ Vérifiée — Docker 29.7.2, runc 1.4.3, aucune CVE non corrigée au moment de l'audit |
-| 2.5 | Profil seccomp/AppArmor | 🟡 Partiel — `no-new-privileges` partout, pas de profil personnalisé |
+| 2.5 | Profil seccomp/AppArmor | ✅ Profil seccomp personnalisé construit et activé **en blocage réel** sur le service `app` (voir détail ci-dessous) |
 | 2.6 | Isolation réseau `backend: internal` | En place depuis l'origine — documenté comme défense en profondeur, pas comme solution suffisante seule |
+
+**Détail 2.5 — profil seccomp personnalisé `app`** : remplace le profil par défaut de Docker (~370 syscalls autorisés) par une liste construite à partir des syscalls réellement observés (`strace -f`, service réel, sessions PDF/DOCX/CSV nominales + cas d'erreur + purge différée + arrêt propre + bootstrap `runc` pour conteneur non-root `cap_drop: ALL`), plus une marge documentée pour un chemin de code non exercé pendant la trace (rotation du journal d'audit à 10 Mo). Méthode et raisonnement complets dans `seccomp/README.md`.
+
+Déployé en deux temps, conformément au principe "tester réellement, ne jamais supposer" de ce document : d'abord `app-audit.json` (`SCMP_ACT_LOG`, ne bloque rien, journalise seulement les syscalls hors-liste) rejoué contre **tous** les scénarios de test du projet — trois syscalls journalisés, tous avec repli sans conséquence observable (`io_uring_setup`/`io_uring_enter` : tentative optionnelle d'uvloop, bascule sur epoll ; `openat2` : retombe sur `openat`, déjà autorisé) et déjà absents du profil par défaut de Docker aujourd'hui, donc aucune régression introduite. Confirmé une deuxième fois par un test direct en blocage réel sur le bundle OCI exact du service, hors `docker-compose.yml`. Sur cette base, bascule effective de `docker-compose.yml` sur `app-enforce.json` (`SCMP_ACT_ERRNO`) : cycle démarrage → requête HTTP fonctionnelle → arrêt propre revérifié sans aucune erreur sur le conteneur vivant.
+
+**Limite assumée** : la rotation du journal d'audit à 10 Mo (`rename`/`renameat`/`renameat2`, ajoutés par lecture de `main.py`, pas par observation directe) n'a jamais été atteinte pendant la session de test — seul chemin couvert par marge plutôt que par vérification empirique complète. En cas de besoin légitime après coup (nouveau format de document, mise à jour PyMuPDF/python-docx...), revenir à `app-audit.json` le temps de rejouer les scénarios et d'identifier le syscall manquant via `dmesg | grep 'audit: type=1326'`.
 
 ---
 
