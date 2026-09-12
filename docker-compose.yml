@@ -224,15 +224,15 @@ services:
       # strace sur ce service (démarrage, detect/finalize PDF/DOCX/CSV, cas
       # d'erreur, purge différée, arrêt propre) + les syscalls de bootstrap
       # runc requis pour tout conteneur non-root avec cap_drop:ALL — voir
-      # seccomp/README.md pour la méthode complète et le statut de passage
-      # en blocage réel.
+      # seccomp/README.md pour la méthode complète.
       #
-      # EN MODE JOURNALISATION SEULE (SCMP_ACT_LOG) : ne bloque rien
-      # aujourd'hui, journalise seulement les syscalls hors-liste. Ne pas
-      # passer à seccomp/app-enforce.json (SCMP_ACT_ERRNO, blocage réel)
-      # sans avoir revérifié seccomp/README.md — étape volontairement
-      # laissée manuelle.
-      - seccomp=./seccomp/app-audit.json
+      # BLOCAGE RÉEL (SCMP_ACT_ERRNO) : la phase de journalisation seule
+      # (app-audit.json) n'a révélé aucun syscall légitime manquant. En cas
+      # de besoin légitime après coup (nouveau format de document, mise à
+      # jour de PyMuPDF/python-docx...), revenir à app-audit.json le temps
+      # de rejouer les scénarios et identifier le syscall manquant via
+      # `dmesg | grep 'audit: type=1326'`.
+      - seccomp=./seccomp/app-enforce.json
     cap_drop:
       - ALL
     read_only: true
