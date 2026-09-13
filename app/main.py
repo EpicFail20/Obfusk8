@@ -27,6 +27,7 @@ gestion d'erreurs minimale. Suffisant pour valider le fonctionnel avant un
 
 import csv
 import hashlib
+import base64
 import html
 import io
 import json
@@ -69,6 +70,13 @@ MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "20"))
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "200"))
 MAX_MANUAL_ZONES = int(os.environ.get("MAX_MANUAL_ZONES", "500"))
 MAX_EXCLUDED_IDS = int(os.environ.get("MAX_EXCLUDED_IDS", "2000"))
+# Nombre max d'images DOCX distinctes proposées au caviardage manuel — même
+# esprit de garde-fou anti-abus que MAX_MANUAL_ZONES pour le PDF.
+MAX_DOCX_IMAGES = int(os.environ.get("MAX_DOCX_IMAGES", "100"))
+# Au-delà, pas d'aperçu intégré en base64 dans la page de révision (juste
+# taille/format affichés) — reste sélectionnable pour caviardage, seul
+# l'aperçu visuel est sauté, pour ne pas alourdir démesurément la page.
+MAX_DOCX_IMAGE_PREVIEW_BYTES = int(os.environ.get("MAX_DOCX_IMAGE_PREVIEW_BYTES", str(500 * 1024)))
 LANGUAGE = os.environ.get("ANALYZER_LANGUAGE", "fr")
 # Seuil de confiance minimal appliqué par défaut quand le thème n'en définit
 # pas un explicitement. Jusqu'ici, en l'absence de thème (ou avec un thème
@@ -1137,6 +1145,8 @@ COMMENT_RELTYPES = {
 
 THUMBNAIL_RELTYPE = "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail"
 
+IMAGE_RELTYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image"
+
 
 def _flatten_revisions_in(root) -> int:
     """
@@ -1307,6 +1317,145 @@ def _get_note_part(document: WordDocument, note_kind: str):
             part = rel.target_part
             return part, parse_xml(part.blob)
     return None, None
+
+
+def _collect_docx_image_parts(document: WordDocument) -> list:
+    """
+    Renvoie la liste des parties image distinctes référencées depuis le
+    corps, les en-têtes/pieds de page et les notes de bas de page/de fin —
+    mêmes parties déjà traversées pour le texte, voir _iter_docx_paragraphs.
+    Couvre aussi bien les images "inline" (wp:inline) que flottantes
+    (wp:anchor) : la recherche se fait au niveau des relations OPC
+    (reltype image), pas via document.inline_shapes qui n'expose que le
+    premier cas.
+
+    Dédoublonné par partname (`/word/media/imageN.ext`) : une même image
+    référencée deux fois (même relation réutilisée à deux endroits, ou deux
+    relations distinctes pointant vers un objet identique après
+    déduplication déjà faite par Word) n'apparaît qu'une fois côté révision.
+    Conséquence assumée : cocher une telle image en caviarde bien toutes les
+    occurrences en une fois (comportement sûr — sur-caviarder n'est jamais
+    le problème, contrairement à l'inverse).
+    """
+    parts_to_scan = [document.part]
+    seen_part_ids = {id(document.part)}
+    for section in document.sections:
+        for header_or_footer in (section.header, section.footer):
+            if header_or_footer is not None and id(header_or_footer.part) not in seen_part_ids:
+                seen_part_ids.add(id(header_or_footer.part))
+                parts_to_scan.append(header_or_footer.part)
+    for note_kind in NOTE_RELTYPES:
+        note_part, _root = _get_note_part(document, note_kind)
+        if note_part is not None:
+            parts_to_scan.append(note_part)
+
+    images_by_partname = {}
+    for part in parts_to_scan:
+        for rel in part.rels.values():
+            if rel.reltype == IMAGE_RELTYPE and not rel.is_external:
+                images_by_partname[rel.target_part.partname] = rel.target_part
+    return list(images_by_partname.values())
+
+
+_DOCX_IMAGE_PLACEHOLDER_FORMATS = {"image/png": "png", "image/jpeg": "jpg", "image/jpg": "jpg"}
+
+
+def _black_placeholder_image_bytes(content_type: str) -> bytes:
+    """
+    Image 64x64 unie noire, générée à la volée avec PyMuPDF (déjà une
+    dépendance du projet — pas besoin de Pillow). Word redimensionne
+    l'affichage selon les dimensions déclarées dans le XML du document
+    (<a:ext cx=".." cy="..">), la taille en pixels du fichier de
+    remplacement n'a donc pas besoin de correspondre à l'original.
+
+    Réencodée dans le même format que l'original pour png/jpeg (l'immense
+    majorité des captures d'écran/photos collées). Pour tout autre format
+    (gif/bmp/tiff/wmf/emf...), un PNG est utilisé malgré tout, SANS changer
+    la déclaration de type de la partie — mismatch assumé, documenté : rare
+    en pratique pour ce cas d'usage, et la garantie de sécurité (octets
+    d'origine non récupérables) tient dans tous les cas ; seule la fidélité
+    de rendu dans Word peut en pâtir pour ces formats exotiques.
+    """
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
+    pix.set_rect(pix.irect, (0, 0, 0))
+    fmt = _DOCX_IMAGE_PLACEHOLDER_FORMATS.get((content_type or "").lower(), "png")
+    return pix.tobytes(fmt)
+
+
+def _apply_docx_image_redactions(document: WordDocument, redacted_partnames: set) -> int:
+    """
+    Remplace le contenu binaire de chaque image sélectionnée par un carré
+    noir uni — même garantie que le caviardage manuel PDF
+    (_apply_manual_redactions) : l'octet d'origine ne doit survivre nulle
+    part dans le fichier de sortie. Contrairement au PDF (sauvegarde
+    incrémentale par défaut, nécessitant garbage=4/clean=True pour purger
+    les objets pré-caviardage), l'écriture DOCX/OPC réécrit chaque partie
+    une seule fois à partir de son blob courant (OpcPackage.save via
+    iter_parts, dérivé du graphe de relations vivant) — aucune purge
+    additionnelle nécessaire ici.
+
+    Granularité IMAGE ENTIÈRE, pas une zone pixel précise comme pour le PDF
+    : DOCX n'expose pas de mise en page fixe en coordonnées sans un moteur
+    de rendu complet, tracer un rectangle précis n'est pas possible ici.
+    """
+    if not redacted_partnames:
+        return 0
+    count = 0
+    for part in _collect_docx_image_parts(document):
+        if str(part.partname) in redacted_partnames:
+            part._blob = _black_placeholder_image_bytes(part.content_type)
+            count += 1
+    return count
+
+
+def _build_docx_images_review_section(document: WordDocument) -> str:
+    """
+    Construit la section "images du document" de l'écran de révision DOCX :
+    une case à cocher par image distincte, DÉCOCHÉE par défaut — mécanisme
+    manuel et opt-in, même logique que les zones manuelles PDF (rien n'est
+    caviardé sans action explicite de l'utilisateur, puisque ces images ne
+    sont pas analysées par le NER, voir avertissement affiché juste avant).
+    """
+    parts = _collect_docx_image_parts(document)[:MAX_DOCX_IMAGES]
+    if not parts:
+        return ""
+
+    cards = []
+    for part in parts:
+        image_id = html.escape(str(part.partname))
+        blob = part.blob
+        size_kb = len(blob) / 1024
+        content_type = part.content_type or "application/octet-stream"
+        if len(blob) <= MAX_DOCX_IMAGE_PREVIEW_BYTES:
+            b64 = base64.b64encode(blob).decode("ascii")
+            preview = (
+                f'<img src="data:{html.escape(content_type)};base64,{b64}" '
+                f'style="max-width:180px; max-height:180px; display:block; border:1px solid #ccc;">'
+            )
+        else:
+            preview = (
+                '<div style="width:180px; height:100px; display:flex; align-items:center; '
+                'justify-content:center; border:1px dashed #999; color:#666; font-size:0.8em; '
+                f'text-align:center;">Aperçu indisponible<br>({size_kb:.0f} Ko)</div>'
+            )
+        cards.append(f"""
+        <label style="display:inline-block; margin:8px 12px 8px 0; text-align:center; cursor:pointer; vertical-align:top;">
+          {preview}
+          <div style="margin-top:4px; font-size:0.85em;">
+            <input type="checkbox" class="docx-image-checkbox" data-image-id="{image_id}">
+            Caviarder <span style="color:#888;">({html.escape(content_type)}, {size_kb:.0f} Ko)</span>
+          </div>
+        </label>
+        """)
+
+    return f"""
+    <div style="margin: 0 0 16px 0; padding:12px; background:#f8f8f8; border-radius:4px;">
+      <p style="margin-top:0;"><strong>{len(parts)}</strong> image(s) incrustée(s) trouvée(s) dans ce document
+      (corps, en-têtes/pieds de page, notes) — non analysées automatiquement (voir avertissement ci-dessus).
+      Cochez celles à remplacer par un carré noir avant de valider.</p>
+      {"".join(cards)}
+    </div>
+    """
 
 
 def _save_note_parts(note_parts: dict) -> None:
@@ -1927,9 +2076,14 @@ def _render_highlighted_text(text: str, block_clusters: list[dict]) -> str:
     return "".join(pieces)
 
 
-def _build_text_review_page(job_id: str, total_detections: int, blocks_html: str, extra_note: str = "") -> HTMLResponse:
+def _build_text_review_page(
+    job_id: str, total_detections: int, blocks_html: str, extra_note: str = "", images_html: str = ""
+) -> HTMLResponse:
     """Gabarit de révision commun DOCX/CSV : surlignage inline plutôt que
-    rendu image, pas de tracé manuel de zone (voir limitation documentée)."""
+    rendu image, pas de tracé manuel de zone pixel-précise comme pour le PDF
+    (voir limitation documentée) — `images_html` (DOCX uniquement) permet en
+    revanche de caviarder une image incrustée entière, voir
+    _build_docx_images_review_section."""
     return HTMLResponse(f"""
     <!doctype html>
     <html lang="fr">
@@ -1970,6 +2124,7 @@ def _build_text_review_page(job_id: str, total_detections: int, blocks_html: str
           <input type="hidden" name="job_id" value="{job_id}">
           <input type="hidden" name="format" value="html">
           <input type="hidden" id="excluded_ids" name="excluded_ids" value="">
+          <input type="hidden" id="redacted_image_ids" name="redacted_image_ids" value="">
           <button type="button" onclick="submitTextFinalize()" style="
               padding:10px 20px; background:#0d6efd; color:white; border:none;
               border-radius:4px; cursor:pointer; font-size:1em;">
@@ -1977,6 +2132,8 @@ def _build_text_review_page(job_id: str, total_detections: int, blocks_html: str
           </button>
         </form>
       </div>
+
+      {images_html}
 
       {blocks_html}
 
@@ -1994,6 +2151,9 @@ def _build_text_review_page(job_id: str, total_detections: int, blocks_html: str
           const excluded = Array.from(document.querySelectorAll('.text-detection.excluded'))
                                  .map(el => el.dataset.id);
           document.getElementById('excluded_ids').value = excluded.join(',');
+          const redactedImages = Array.from(document.querySelectorAll('.docx-image-checkbox:checked'))
+                                       .map(el => el.dataset.imageId);
+          document.getElementById('redacted_image_ids').value = redactedImages.join(',');
           document.getElementById('finalize-form').submit();
         }}
       </script>
@@ -2429,10 +2589,12 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
 
     limitation_note = (
         '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
-        'border-radius:4px;">⚠️ Les images, zones de texte, formes, objets incrustés et SmartArt '
-        "de ce document ne sont pas analysés par ce moteur (limite technique connue de python-docx), "
-        "et il n'existe pour l'instant aucun outil de zone manuelle pour les caviarder ici "
-        "(contrairement au PDF) — à vérifier et traiter manuellement si le document en contient.</p>"
+        'border-radius:4px;">⚠️ Les zones de texte, formes, objets incrustés et SmartArt de ce '
+        "document ne sont pas analysés par ce moteur (limite technique connue de python-docx) — "
+        "à vérifier manuellement si le document en contient. Les images incrustées ne sont pas "
+        "analysées non plus (aucune détection automatique de texte dans l'image), mais peuvent "
+        "être remplacées entièrement par un carré noir ci-dessous si nécessaire — contrairement "
+        "au PDF, il n'existe pas d'outil pour ne caviarder qu'une partie d'une image.</p>"
     )
     if truncated:
         limitation_note += (
@@ -2442,11 +2604,14 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
             f"finalisation, ils ne sont simplement pas affichés ici.</p>"
         )
 
+    images_html = _build_docx_images_review_section(document)
+
     return _build_text_review_page(
         job_id=job_id,
         total_detections=len(clusters),
         blocks_html="".join(blocks_html_parts),
         extra_note=limitation_note,
+        images_html=images_html,
     )
 
 
@@ -2671,7 +2836,7 @@ def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_da
     return summary, output_path, manual_count
 
 
-def _finalize_docx_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict, Path, int]:
+def _finalize_docx_job(job: dict, job_id: str, excluded_set: set, redacted_image_ids: set) -> tuple[dict, Path, int]:
     non_excluded = [d for d in job["detections"] if d["id"] not in excluded_set]
     merged_by_block, summary = _apply_text_redactions(non_excluded)
 
@@ -2692,6 +2857,10 @@ def _finalize_docx_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict,
         _wipe_docx_thumbnail(document)
         _save_note_parts(note_parts)
 
+        image_count = _apply_docx_image_redactions(document, redacted_image_ids)
+        if image_count:
+            summary["IMAGE"] = summary.get("IMAGE", 0) + image_count
+
         theme = job["theme"]
         theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
         output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.docx"
@@ -2704,7 +2873,7 @@ def _finalize_docx_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict,
             status_code=400,
             detail="Ce document Word est corrompu ou contient une structure invalide qui empêche sa finalisation.",
         ) from exc
-    return summary, output_path, 0
+    return summary, output_path, image_count
 
 
 def _finalize_csv_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict, Path, int]:
@@ -2747,14 +2916,17 @@ async def finalize_document(
     job_id: str = Form(...),
     excluded_ids: str = Form(default=""),
     manual_zones: str = Form(default="[]"),
+    redacted_image_ids: str = Form(default=""),
     response_format: str = Form(default="json", alias="format"),
 ):
     """
     Phase 2 du flux avec révision, commune aux trois formats : applique le
     caviardage uniquement sur les détections que l'utilisateur n'a pas
-    exclues (plus les zones manuelles pour le PDF, seul format qui les
-    propose — voir limitation documentée pour DOCX/CSV), produit le fichier
-    final dans son format d'origine.
+    exclues (plus les zones manuelles pour le PDF et les images entières
+    sélectionnées pour le DOCX — voir _apply_manual_redactions /
+    _apply_docx_image_redactions, non proposé pour le CSV, format texte pur
+    sans conteneur d'image), produit le fichier final dans son format
+    d'origine.
     """
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.pop(job_id, None)
@@ -2773,6 +2945,8 @@ async def finalize_document(
     excluded_set = set()
     for cluster_id in excluded_cluster_ids:
         excluded_set.update(job["clusters"].get(cluster_id, []))
+
+    redacted_image_id_set = {i for i in redacted_image_ids.split(",") if i}
 
     try:
         manual_zones_data = json.loads(manual_zones)
@@ -2795,13 +2969,18 @@ async def finalize_document(
             status_code=400,
             detail=f"Trop de zones exclues ({len(excluded_cluster_ids)}, max {MAX_EXCLUDED_IDS})",
         )
+    if len(redacted_image_id_set) > MAX_DOCX_IMAGES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Trop d'images sélectionnées ({len(redacted_image_id_set)}, max {MAX_DOCX_IMAGES})",
+        )
 
     kind = job.get("kind", "pdf")
     theme = job["theme"]
     if kind == "pdf":
         summary, output_path, manual_count = _finalize_pdf_job(job, job_id, excluded_set, manual_zones_data)
     elif kind == "docx":
-        summary, output_path, manual_count = _finalize_docx_job(job, job_id, excluded_set)
+        summary, output_path, manual_count = _finalize_docx_job(job, job_id, excluded_set, redacted_image_id_set)
     elif kind == "csv":
         summary, output_path, manual_count = _finalize_csv_job(job, job_id, excluded_set)
     else:  # pragma: no cover - défensif, ne devrait jamais arriver

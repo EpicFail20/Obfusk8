@@ -5,11 +5,14 @@ main.py ou d'un fichier de thème.
 
 Exécution : depuis /app dans le conteneur, `pytest` ou `pytest tests/ -v`.
 """
+import io
 import re
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
+from docx import Document as WordDocument
 from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -312,3 +315,151 @@ def test_zone_manuelle_sur_image_pdf_est_irrecuperable():
     assert manual_count == 1
     assert not _color_present_in_any_image_object(out_bytes, RED), "le rouge caviardé est encore récupérable"
     assert _color_present_in_any_image_object(out_bytes, BLUE), "le bleu non caviardé a disparu à tort"
+
+
+# ---------------------------------------------------------------------------
+# Caviardage manuel d'une image DOCX entière (_apply_docx_image_redactions) —
+# comble le trou identifié lors de la revue précédente (aucun mécanisme
+# n'existait pour les images DOCX). Granularité "image entière" et non "zone
+# pixel précise" comme pour le PDF : DOCX n'a pas de mise en page fixe en
+# coordonnées sans moteur de rendu complet.
+# ---------------------------------------------------------------------------
+
+def _make_solid_png(size: int, rgb: tuple) -> bytes:
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, size, size))
+    pix.set_rect(pix.irect, rgb)
+    return pix.tobytes("png")
+
+
+def _docx_media_pixel_colors(raw_docx: bytes) -> list:
+    """Couleur du pixel (0,0) de chaque image trouvée dans word/media/ du zip
+    de sortie — balayage direct du zip plutôt que du graphe de relations
+    python-docx, pour vérifier qu'aucune entrée orpheline ne subsiste non
+    plus (contrairement au PDF, une sauvegarde DOCX/OPC réécrit toujours
+    l'intégralité du paquet depuis le graphe vivant, mais autant vérifier
+    plutôt que supposer)."""
+    colors = []
+    with zipfile.ZipFile(io.BytesIO(raw_docx)) as zf:
+        for name in zf.namelist():
+            if name.startswith("word/media/"):
+                pix = fitz.Pixmap(zf.read(name))
+                colors.append(pix.pixel(0, 0)[:3])
+    return colors
+
+
+def test_collect_docx_image_parts_trouve_les_images_du_corps():
+    doc = WordDocument()
+    doc.add_paragraph("texte")
+    doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
+    buf = io.BytesIO()
+    doc.save(buf)
+
+    reopened = WordDocument(io.BytesIO(buf.getvalue()))
+    parts = main._collect_docx_image_parts(reopened)
+    assert len(parts) == 1
+    assert parts[0].content_type == "image/png"
+
+
+def test_image_docx_caviardee_est_irrecuperable():
+    doc = WordDocument()
+    doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
+    doc.add_picture(io.BytesIO(_make_solid_png(20, BLUE)))
+    buf = io.BytesIO()
+    doc.save(buf)
+    raw = buf.getvalue()
+
+    assert sorted(_docx_media_pixel_colors(raw)) == sorted([RED, BLUE])
+
+    reopened = WordDocument(io.BytesIO(raw))
+    parts = main._collect_docx_image_parts(reopened)
+    assert len(parts) == 2
+    red_part = next(p for p in parts if fitz.Pixmap(p.blob).pixel(0, 0)[:3] == RED)
+
+    count = main._apply_docx_image_redactions(reopened, {str(red_part.partname)})
+    assert count == 1
+
+    out_buf = io.BytesIO()
+    reopened.save(out_buf)
+    out_colors = _docx_media_pixel_colors(out_buf.getvalue())
+
+    assert (255, 0, 0) not in out_colors, "le rouge caviardé est encore récupérable dans le zip de sortie"
+    assert (0, 0, 255) in out_colors, "le bleu non caviardé a disparu à tort"
+    assert (0, 0, 0) in out_colors, "le carré noir de remplacement est absent"
+
+
+def test_apply_docx_image_redactions_sans_selection_ne_modifie_rien():
+    doc = WordDocument()
+    doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
+    buf = io.BytesIO()
+    doc.save(buf)
+    reopened = WordDocument(io.BytesIO(buf.getvalue()))
+
+    assert main._apply_docx_image_redactions(reopened, set()) == 0
+    assert main._apply_docx_image_redactions(reopened, {"/word/media/inexistant.png"}) == 0
+
+
+@pytest.mark.parametrize("content_type,expected_fmt_ok", [("image/png", True), ("image/jpeg", True), ("image/gif", True)])
+def test_black_placeholder_image_bytes_est_toujours_decodable(content_type, expected_fmt_ok):
+    """Même pour un format non réencodable à l'identique (gif...), le
+    placeholder produit (PNG malgré tout) doit rester une image valide."""
+    data = main._black_placeholder_image_bytes(content_type)
+    pix = fitz.Pixmap(data)
+    assert pix.pixel(0, 0)[:3] == (0, 0, 0)
+
+
+def test_build_docx_images_review_section_contient_case_a_cocher():
+    doc = WordDocument()
+    doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
+    buf = io.BytesIO()
+    doc.save(buf)
+    reopened = WordDocument(io.BytesIO(buf.getvalue()))
+
+    html_out = main._build_docx_images_review_section(reopened)
+    assert 'class="docx-image-checkbox"' in html_out
+    assert "data-image-id=" in html_out
+    assert "base64," in html_out  # petite image : aperçu intégré
+
+
+def test_build_docx_images_review_section_grosse_image_sans_apercu(monkeypatch):
+    monkeypatch.setattr(main, "MAX_DOCX_IMAGE_PREVIEW_BYTES", 10)  # force le seuil à être dépassé
+    doc = WordDocument()
+    doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
+    buf = io.BytesIO()
+    doc.save(buf)
+    reopened = WordDocument(io.BytesIO(buf.getvalue()))
+
+    html_out = main._build_docx_images_review_section(reopened)
+    assert "Aperçu indisponible" in html_out
+    assert 'class="docx-image-checkbox"' in html_out  # reste sélectionnable malgré tout
+
+
+def test_build_docx_images_review_section_vide_si_aucune_image():
+    doc = WordDocument()
+    doc.add_paragraph("aucune image ici")
+    buf = io.BytesIO()
+    doc.save(buf)
+    reopened = WordDocument(io.BytesIO(buf.getvalue()))
+
+    assert main._build_docx_images_review_section(reopened) == ""
+
+
+class _FakeImagePart:
+    """content_type et partname viennent du fichier .docx uploadé (déclarés
+    dans [Content_Types].xml / les cibles de relation) — donc contrôlables
+    par un attaquant. Vérifie qu'un payload XSS dans l'un ou l'autre ne
+    survit pas tel quel dans la page de révision rendue au navigateur."""
+    def __init__(self, partname, content_type, blob):
+        self.partname = partname
+        self.content_type = content_type
+        self.blob = blob
+
+
+def test_build_docx_images_review_section_echappe_le_contenu_hostile(monkeypatch):
+    payload = '"><script>alert(1)</script>'
+    fake_part = _FakeImagePart(payload, payload, _make_solid_png(10, RED))
+    monkeypatch.setattr(main, "_collect_docx_image_parts", lambda document: [fake_part])
+
+    html_out = main._build_docx_images_review_section(object())
+
+    assert "<script>alert(1)</script>" not in html_out
+    assert "&lt;script&gt;" in html_out
