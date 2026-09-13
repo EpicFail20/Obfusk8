@@ -1,18 +1,22 @@
 """
-Anonymiseur de documents (PDF, DOCX, CSV) - application de test (lab Proxmox)
+Anonymiseur de documents (PDF, DOCX, CSV, image) - application de test (lab Proxmox)
 ------------------------------------------------------------------------------
-Flux commun aux trois formats : détection des données sensibles via
+Flux commun à tous les formats : détection des données sensibles via
 presidio-analyzer, révision humaine (exclusion de zones), puis caviardage
 réel (le contenu original est supprimé de la structure du fichier, pas
 juste masqué visuellement) :
 
-  - PDF  : rendu image de chaque page + zones cliquables en pixels
-           (redact_annot PyMuPDF : le texte sous-jacent est retiré).
-  - DOCX : surlignage inline du texte par paragraphe/cellule de tableau/
-           en-tête-pied de page (python-docx) : le texte du run est remplacé
-           dans le XML, pas juste habillé visuellement.
-  - CSV  : tableau HTML avec cellules surlignées ; le texte de la cellule
-           est remplacé au même titre que pour le DOCX.
+  - PDF   : rendu image de chaque page + zones cliquables en pixels
+            (redact_annot PyMuPDF : le texte sous-jacent est retiré).
+  - DOCX  : surlignage inline du texte par paragraphe/cellule de tableau/
+            en-tête-pied de page (python-docx) : le texte du run est remplacé
+            dans le XML, pas juste habillé visuellement.
+  - CSV   : tableau HTML avec cellules surlignées ; le texte de la cellule
+            est remplacé au même titre que pour le DOCX.
+  - Image : texte extrait par OCR (pytesseract) avec position par mot, même
+            écran de révision pixel que le PDF (zones cliquables + tracé
+            manuel), caviardage par rectangles opaques dessinés directement
+            dans les pixels (Pillow), métadonnées entièrement dépouillées.
 
 LIMITATION CONNUE (DOCX) : python-docx ne donne pas accès au texte contenu
 dans des zones de texte, formes, SmartArt ou objets OLE incrustés — une
@@ -40,12 +44,14 @@ import threading
 import time
 import unicodedata
 import uuid
+import warnings
 import zipfile
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 import pymupdf as fitz  # PyMuPDF — alias 'fitz' conservé, 'import fitz' est déprécié
+import pytesseract
 import requests
 import metrics
 from antivirus import AntivirusUnavailableError, get_scanner, is_av_enforced
@@ -54,6 +60,7 @@ from docx.oxml import parse_xml
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from lxml import etree
+from PIL import Image, ImageDraw, UnidentifiedImageError as PILUnidentifiedImageError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from supervision import Alert, AlertSeverity, get_alert_sink
@@ -504,18 +511,26 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
     metrics.AV_SCAN_RESULT.labels(verdict="propre").inc()
 
 
+PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+JPEG_SIGNATURE = b"\xff\xd8\xff"
+
+
 def _detect_file_kind(raw: bytes) -> str:
     """
     Détermine le type réel du fichier à partir de son contenu binaire, jamais
     du Content-Type ou du nom de fichier déclarés par le client (falsifiables).
+    JPG et JPEG sont le même format (signature \\xFF\\xD8\\xFF) — traités de
+    façon identique, sans distinction.
     """
     if raw.startswith(b"%PDF-"):
         return "pdf"
     if raw.startswith(b"PK\x03\x04"):
         return _validate_docx_zip(raw)
+    if raw.startswith(PNG_SIGNATURE) or raw.startswith(JPEG_SIGNATURE):
+        return "image"
     if _looks_like_text(raw):
         return "csv"
-    _reject("format_invalide", 400, "Format de fichier non reconnu (seuls PDF, DOCX et CSV sont acceptés).")
+    _reject("format_invalide", 400, "Format de fichier non reconnu (seuls PDF, DOCX, CSV, PNG et JPEG sont acceptés).")
 
 
 def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
@@ -921,7 +936,23 @@ PREVIEW_ZOOM = 2.0  # facteur d'agrandissement pour le rendu des pages en image
 # PyMuPDF utilisée ici est déjà corrigée, mais on vérifie quand même les
 # dimensions déclarées (lues depuis les métadonnées de l'objet image, sans
 # décodage) avant tout appel à get_pixmap(), en défense en profondeur.
+#
+# Même seuil réutilisé pour les images PNG/JPEG uploadées directement (voir
+# _open_and_validate_image) : même principe de bombe de décompression,
+# même défense (dimensions déclarées lues avant tout décodage complet).
 MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", "40_000_000"))
+
+# Aligne explicitement la protection anti-bombe de décompression intégrée à
+# Pillow sur notre propre seuil, plutôt que de dépendre silencieusement de sa
+# valeur par défaut (89 478 485, différente de MAX_IMAGE_PIXELS ci-dessus).
+# L'assertion vérifie que cette protection reste bien active (jamais
+# désactivée en mettant Image.MAX_IMAGE_PIXELS à None ailleurs dans le code)
+# — point de vigilance demandé explicitement : une désactivation silencieuse
+# de cette limite romprait la défense en profondeur ci-dessous sans qu'aucune
+# erreur ne le signale avant qu'une vraie bombe de décompression ne soit
+# traitée.
+Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
+assert Image.MAX_IMAGE_PIXELS is not None, "PIL.Image.MAX_IMAGE_PIXELS ne doit jamais être désactivé (None)"
 
 
 def _check_page_images_sane(page: "fitz.Page") -> None:
@@ -1129,6 +1160,182 @@ def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> l
             )
 
     return clusters
+
+
+# ---------------------------------------------------------------------------
+# Image (PNG/JPEG) - validation d'entrée, OCR + détection PII
+# ---------------------------------------------------------------------------
+
+OCR_LANGUAGE = "fra"
+
+
+def _open_and_validate_image(raw: bytes) -> "Image.Image":
+    """
+    Phase 1 - validation d'entrée pour une image PNG/JPEG uploadée : même
+    exigence de sécurité que pour les images incrustées dans un PDF (voir
+    _check_page_images_sane / CVE-2026-3308) — les dimensions déclarées sont
+    lues AVANT tout décodage complet des pixels. `Image.open()` ne fait que
+    lire l'en-tête du format (bloc IHDR pour PNG, marqueur SOF pour JPEG)
+    pour déterminer `img.size` ; les données pixel compressées ne sont
+    décodées qu'au premier accès réel (`.load()`, `.getdata()`...), jamais
+    par `Image.open()` seul.
+    """
+    try:
+        with warnings.catch_warnings():
+            # Le DecompressionBombWarning intégré à Pillow ne couvre que la
+            # zone 1x-2x le seuil (silencieux par défaut, pas une erreur) —
+            # on impose notre propre rejet strict juste après pour ce cas
+            # intermédiaire, au lieu de le laisser passer avec un simple
+            # avertissement.
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            img = Image.open(io.BytesIO(raw))
+            width, height = img.size
+            image_format = img.format
+    except Image.DecompressionBombError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Cette image dépasse la limite de dimensions autorisée (protection anti-bombe de décompression).",
+        ) from exc
+    except (PILUnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
+        raise HTTPException(status_code=400, detail="Image illisible ou corrompue.") from exc
+
+    if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cette image dépasse la limite de dimensions autorisée (max {MAX_IMAGE_PIXELS} pixels).",
+        )
+    if image_format not in ("PNG", "JPEG"):
+        # Ne devrait jamais arriver : _detect_file_kind a déjà validé la
+        # signature binaire — filet de sécurité si un jour un autre format
+        # partageant une signature proche était mal aiguillé vers "image".
+        raise HTTPException(status_code=400, detail="Format d'image non reconnu (seuls PNG et JPEG sont acceptés).")
+
+    return img
+
+
+def _run_ocr(img: "Image.Image") -> list[dict]:
+    """
+    Lance pytesseract.image_to_data (pas image_to_string) : renvoie le texte
+    ET la position (bounding box en pixels) de chaque mot reconnu, avec
+    lang="fra" — indispensable pour un texte français correctement reconnu
+    (accents), voir Dockerfile pour le paquet de données linguistiques.
+    Échec fermé : toute erreur du moteur OCR est une erreur propre (jamais
+    une trace brute), jamais un verdict "aucune détection" implicite.
+    """
+    try:
+        data = pytesseract.image_to_data(img, lang=OCR_LANGUAGE, output_type=pytesseract.Output.DICT)
+    except pytesseract.TesseractNotFoundError as exc:
+        log.error("Binaire tesseract introuvable : %s", exc)
+        raise HTTPException(status_code=503, detail="Le moteur OCR est indisponible, veuillez réessayer plus tard.") from exc
+    except pytesseract.TesseractError as exc:
+        log.warning("Échec de l'OCR : %s", exc)
+        raise HTTPException(status_code=400, detail="Cette image n'a pas pu être analysée par l'OCR.") from exc
+
+    words: list[dict] = []
+    for i in range(len(data.get("text", []))):
+        text = data["text"][i]
+        if not text or not text.strip():
+            # Tesseract renvoie aussi des lignes de bounding box pour des
+            # niveaux structurels (bloc/paragraphe/ligne) sans texte propre —
+            # on ne garde que les mots effectivement reconnus.
+            continue
+        words.append({
+            "text": text,
+            "left": data["left"][i],
+            "top": data["top"][i],
+            "width": data["width"][i],
+            "height": data["height"][i],
+            "block_num": data["block_num"][i],
+            "par_num": data["par_num"][i],
+            "line_num": data["line_num"][i],
+        })
+    return words
+
+
+def _build_ocr_text(words: list[dict]) -> tuple[str, list[tuple[int, int, dict]]]:
+    """
+    Reconstruit le texte complet à partir des mots OCR (séparateur espace au
+    sein d'une même ligne, saut de ligne entre deux lignes/paragraphes/blocs
+    différents), en gardant pour chaque mot son empan de caractères (start,
+    end) dans ce texte reconstruit — permet de retrouver ensuite la ou les
+    bounding box correspondant à une entité détectée par offset de caractère
+    (voir _map_entities_to_word_boxes), même principe que le mapping
+    page/rectangle déjà fait pour le PDF.
+    """
+    parts: list[str] = []
+    spans: list[tuple[int, int, dict]] = []
+    pos = 0
+    prev_key = None
+    for word in words:
+        key = (word["block_num"], word["par_num"], word["line_num"])
+        if prev_key is not None:
+            sep = "\n" if key != prev_key else " "
+            parts.append(sep)
+            pos += len(sep)
+        start = pos
+        parts.append(word["text"])
+        pos += len(word["text"])
+        spans.append((start, pos, word))
+        prev_key = key
+    return "".join(parts), spans
+
+
+def _map_entities_to_word_boxes(entities: list[dict], spans: list[tuple[int, int, dict]]) -> list[dict]:
+    """
+    Convertit chaque entité détectée (offset de caractères dans le texte OCR
+    reconstruit) en une ou plusieurs détections en coordonnées pixels — une
+    entité peut recouvrir plusieurs mots OCR (ex: "Jean Durand"), chacun
+    produisant sa propre bounding box, regroupées ensuite par
+    _cluster_detections comme pour le PDF.
+    """
+    detections: list[dict] = []
+    for entity in entities:
+        e_start, e_end = entity["start"], entity["end"]
+        entity_type = entity.get("entity_type", "UNKNOWN")
+        for w_start, w_end, word in spans:
+            if w_end <= e_start or w_start >= e_end:
+                continue
+            rect = [
+                float(word["left"]), float(word["top"]),
+                float(word["left"] + word["width"]), float(word["top"] + word["height"]),
+            ]
+            detections.append(
+                {
+                    "id": uuid.uuid4().hex[:12],
+                    "page": 0,
+                    "entity_type": entity_type,
+                    "group_key": None,
+                    "page_rect": rect,
+                    "display_rect": rect,
+                }
+            )
+    return detections
+
+
+def _detect_image(img: "Image.Image", theme: dict | None = None) -> list[dict]:
+    """
+    Détecte les entités sensibles dans une image sans les caviarder : OCR
+    (voir _run_ocr) puis reconstruction du texte (_build_ocr_text) passée
+    par la fonction d'analyse EXISTANTE du projet (_analyze_text — même
+    appel Presidio, même système de thèmes, même moteur patché) avant de
+    remapper chaque entité vers sa/ses bounding box (_map_entities_to_word_boxes).
+    Ne réimplémente aucun appel Presidio séparé. Gère nativement le cas
+    "aucun texte reconnu" : renvoie simplement une liste vide, sans erreur.
+    """
+    detection_start = time.time()
+    words = _run_ocr(img)
+    if not words:
+        return []
+    _check_detection_deadline(detection_start)
+
+    text, spans = _build_ocr_text(words)
+    # Mêmes normalisations que pour le PDF (aide le NER sur les mots tout en
+    # majuscules et les tirets typographiques) — préservent la longueur du
+    # texte caractère pour caractère, donc les offsets restent valides pour
+    # remapper vers les spans calculés sur le texte original.
+    normalized_text = _normalize_dashes(_normalize_allcaps(text))
+    entities = _analyze_text(normalized_text, theme=theme)
+    return _map_entities_to_word_boxes(entities, spans)
 
 
 NOTE_RELTYPES = {
@@ -2190,14 +2397,14 @@ def upload_form():
     <!doctype html>
     <html lang="fr"><head><meta charset="utf-8"><title>Anonymiseur de documents</title></head>
     <body style="font-family: sans-serif; max-width: 600px; margin: 40px auto;">
-      <h1>Anonymiseur de documents (PDF, DOCX, CSV)</h1>
+      <h1>Anonymiseur de documents (PDF, DOCX, CSV, image)</h1>
       <p>Déposez un document. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.</p>
       <form action="/api/detect" method="post" enctype="multipart/form-data">
         <p>
           <label for="theme">Type de document :</label><br>
           <select name="theme" id="theme">{options}</select>
         </p>
-        <input type="file" name="file" accept=".pdf,.docx,.csv" required>
+        <input type="file" name="file" accept=".pdf,.docx,.csv,.png,.jpg,.jpeg" required>
         <button type="submit">Analyser</button>
       </form>
     </body>
@@ -2212,13 +2419,13 @@ async def detect_document(
     theme: str = Form(default=""),
 ):
     """
-    Phase 1 du flux avec révision, commune aux trois formats acceptés
-    (PDF/DOCX/CSV) : détecte les entités sans les caviarder, stocke le job
-    en mémoire, renvoie une page de révision (rendu image + zones cliquables
-    en pixels pour le PDF ; surlignage inline pour DOCX/CSV — voir
-    _build_text_review_page). Le type réel du fichier est déterminé à
-    partir de son contenu binaire (_detect_file_kind), jamais du Content-Type
-    déclaré par le client, qui est falsifiable.
+    Phase 1 du flux avec révision, commune aux quatre formats acceptés
+    (PDF/DOCX/CSV/image) : détecte les entités sans les caviarder, stocke le
+    job en mémoire, renvoie une page de révision (rendu image + zones
+    cliquables en pixels pour le PDF et l'image ; surlignage inline pour
+    DOCX/CSV — voir _build_text_review_page). Le type réel du fichier est
+    déterminé à partir de son contenu binaire (_detect_file_kind), jamais du
+    Content-Type déclaré par le client, qui est falsifiable.
     """
     raw = await file.read()
 
@@ -2259,6 +2466,8 @@ async def detect_document(
         return _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
     if kind == "csv":
         return _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
+    if kind == "image":
+        return _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
     return _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
 
 
@@ -2333,8 +2542,15 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         job_id, filename_hash, len(detections), len(clusters), theme or "aucun",
     )
 
-    # Construit le HTML des pages avec overlays cliquables (un par cluster,
-    # pas par détection brute — voir _cluster_detections pour le pourquoi)
+    pages_html = _build_page_containers_html(job_id, page_sizes, clusters)
+    return _build_pixel_review_page(job_id, len(clusters), pages_html)
+
+
+def _build_page_containers_html(job_id: str, page_sizes: list[tuple[int, int]], clusters: list[dict]) -> str:
+    """Construit le HTML des pages avec overlays cliquables (un par cluster,
+    pas par détection brute — voir _cluster_detections pour le pourquoi).
+    Commun au PDF (plusieurs pages) et à l'image (une seule "page" = l'image
+    entière) — voir _build_pixel_review_page pour le gabarit englobant."""
     pages_html = []
     for page_index, (width, height) in enumerate(page_sizes):
         overlays = "".join(
@@ -2353,9 +2569,14 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
           {overlays}
         </div>
         """)
+    return "".join(pages_html)
 
-    total_detections = len(clusters)
 
+def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str) -> HTMLResponse:
+    """Gabarit de révision commun PDF/image : rendu image + zones cliquables
+    en pixels pour exclure une détection, ET tracé manuel d'une nouvelle zone
+    (manual_zones) — contrairement au gabarit texte DOCX/CSV
+    (_build_text_review_page), qui n'offre pas cette possibilité."""
     return HTMLResponse(f"""
     <!doctype html>
     <html lang="fr">
@@ -2418,7 +2639,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         </form>
       </div>
 
-      {''.join(pages_html)}
+      {pages_html}
 
       <script>
         let manualModeActive = false;
@@ -2519,6 +2740,62 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
     </body>
     </html>
     """)
+
+
+def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
+    """
+    Détection image : validation d'entrée (_open_and_validate_image), OCR +
+    détection PII (_detect_image), puis même écran de révision pixel que le
+    PDF (_build_pixel_review_page/_build_page_containers_html), adapté à une
+    image unique plutôt qu'à des pages multiples (une seule "page", index 0).
+    """
+    img = _open_and_validate_image(raw)
+    try:
+        img.load()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Image corrompue ou tronquée, impossible de la décoder entièrement.",
+        ) from exc
+
+    width, height = img.size
+    image_format = img.format
+
+    try:
+        with metrics.DETECTION_DURATION_SECONDS.labels(format="image").time():
+            detections = _detect_image(img, theme=selected_theme)
+        clusters = _cluster_detections(detections)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Échec du traitement image après ouverture réussie : %s", exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Cette image contient une structure invalide qui empêche son traitement.",
+        ) from exc
+
+    with _PENDING_JOBS_LOCK:
+        PENDING_JOBS[job_id] = {
+            "kind": "image",
+            "raw_image": raw,
+            "image_format": image_format,
+            "detections": detections,
+            "clusters": {c["id"]: c["member_ids"] for c in clusters},
+            "theme": theme,
+            "filename_hash": filename_hash,
+            "user_email": user_email,
+            "size_mb": size_mb,
+            "created_at": time.time(),
+        }
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
+
+    log.info(
+        "Job %s en révision (image): fichier#%s, %d détection(s) (%d zone(s) après regroupement), thème=%s",
+        job_id, filename_hash, len(detections), len(clusters), theme or "aucun",
+    )
+
+    pages_html = _build_page_containers_html(job_id, [(width, height)], clusters)
+    return _build_pixel_review_page(job_id, len(clusters), pages_html)
 
 
 def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
@@ -2696,13 +2973,24 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
 
 @app.get("/api/preview_image/{job_id}/{page_index}")
 def preview_image(job_id: str, page_index: int):
-    """Rend une page du PDF en attente de révision sous forme d'image PNG."""
+    """Rend une page du PDF (ou l'image entière, pour un job image) en
+    attente de révision."""
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
     if job is None:
         raise HTTPException(status_code=404, detail="Job introuvable ou expiré")
+
+    if job.get("kind") == "image":
+        if page_index != 0:
+            raise HTTPException(status_code=404, detail="Page introuvable")
+        # Octets bruts d'origine (déjà validés en Phase 1 à la détection) :
+        # ceci est l'APERÇU pré-caviardage, exactement comme pour le PDF —
+        # le caviardage réel n'a lieu qu'à la finalisation.
+        media_type = "image/png" if job["image_format"] == "PNG" else "image/jpeg"
+        return Response(content=job["raw_image"], media_type=media_type)
+
     if job.get("kind") != "pdf":
-        raise HTTPException(status_code=400, detail="Aperçu image disponible uniquement pour les jobs PDF")
+        raise HTTPException(status_code=400, detail="Aperçu image disponible uniquement pour les jobs PDF/image")
 
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
     try:
@@ -2833,6 +3121,149 @@ def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_da
         ) from exc
     finally:
         doc.close()
+    return summary, output_path, manual_count
+
+
+_IMAGE_MODES_KEPT_AS_IS = ("RGB", "RGBA", "L", "LA")
+
+
+def _normalize_image_mode_for_editing(img: "Image.Image") -> "Image.Image":
+    """
+    Convertit vers un mode directement dessinable/encodable avant caviardage
+    (ex: palette indexée "P", CMYK...) — la couleur de remplissage du
+    rectangle de caviardage dépend du mode (voir _black_fill_for_mode), donc
+    on normalise d'abord vers un petit ensemble de modes connus plutôt que
+    de gérer tous les modes Pillow possibles.
+    """
+    if img.mode == "P":
+        return img.convert("RGBA" if "transparency" in img.info else "RGB")
+    if img.mode not in _IMAGE_MODES_KEPT_AS_IS:
+        return img.convert("RGB")
+    return img
+
+
+def _black_fill_for_mode(mode: str):
+    if mode == "RGBA":
+        return (0, 0, 0, 255)
+    if mode == "LA":
+        return (0, 0)
+    if mode == "L":
+        return 0
+    return (0, 0, 0)  # RGB et tout mode déjà normalisé vers RGB
+
+
+def _apply_selected_image_redactions(
+    draw: "ImageDraw.ImageDraw", mode: str, detections: list[dict], excluded_ids: set
+) -> dict:
+    """Dessine un rectangle plein opaque directement dans les pixels pour
+    chaque détection non exclue — mêmes garanties que le caviardage PDF
+    (redact_annot) : les pixels d'origine sous le rectangle sont écrasés,
+    pas seulement recouverts par un calque."""
+    summary: dict[str, int] = {}
+    fill = _black_fill_for_mode(mode)
+    for d in detections:
+        if d["id"] in excluded_ids:
+            continue
+        x0, y0, x1, y1 = d["page_rect"]
+        draw.rectangle([x0, y0, x1, y1], fill=fill)
+        summary[d["entity_type"]] = summary.get(d["entity_type"], 0) + 1
+    return summary
+
+
+def _apply_manual_image_redactions(
+    draw: "ImageDraw.ImageDraw", mode: str, size: tuple[int, int], manual_zones: list[dict]
+) -> int:
+    """Applique un caviardage sur des zones tracées manuellement par
+    l'utilisateur (faux négatifs corrigés à la main) — mêmes coordonnées
+    pixels que l'aperçu (pas de zoom appliqué pour l'image, contrairement au
+    PDF), même garde-fou anti-abus MAX_MANUAL_ZONES que pour le PDF."""
+    count = 0
+    fill = _black_fill_for_mode(mode)
+    width, height = size
+    for zone in manual_zones[:MAX_MANUAL_ZONES]:
+        page_index = zone.get("page")
+        rect = zone.get("rect")
+        if page_index != 0 or not rect or len(rect) != 4:
+            continue
+        x0, x1 = sorted((rect[0], rect[2]))
+        y0, y1 = sorted((rect[1], rect[3]))
+        x0, y0 = max(0.0, x0), max(0.0, y0)
+        x1, y1 = min(float(width), x1), min(float(height), y1)
+        if x1 - x0 <= 0 or y1 - y0 <= 0:
+            continue
+        draw.rectangle([x0, y0, x1, y1], fill=fill)
+        count += 1
+    return count
+
+
+def _strip_image_metadata_and_encode(img: "Image.Image", output_format: str) -> bytes:
+    """
+    Dépouille ENTIÈREMENT les métadonnées avant sauvegarde : EXIF complet (y
+    compris coordonnées GPS et miniature EXIF intégrée), chunks de texte PNG
+    (tEXt/zTXt/iTXt) et profil ICC.
+
+    Approche volontairement radicale plutôt qu'un retrait champ par champ
+    (EXIF, puis GPS, puis miniature, puis tEXt, puis ICC...) : reconstruire
+    une image neuve à partir des seuls octets de pixels bruts
+    (Image.frombytes) produit un objet dont le dictionnaire `.info` est vide
+    par construction — aucun risque d'oublier un champ de métadonnées
+    existant ou introduit par une future version de Pillow, y compris la
+    miniature EXIF intégrée (embarquée dans les octets `exif` de `.info`,
+    jamais recopiée ici). `.save()` n'ajoute par défaut ni exif, ni
+    icc_profile, ni pnginfo/comment si on ne les passe pas explicitement.
+    """
+    clean = Image.frombytes(img.mode, img.size, img.tobytes())
+    buffer = io.BytesIO()
+    save_kwargs: dict = {}
+    if output_format == "JPEG":
+        if clean.mode not in ("RGB", "L"):
+            clean = clean.convert("RGB")
+        save_kwargs["quality"] = 95
+    clean.save(buffer, format=output_format, **save_kwargs)
+    return buffer.getvalue()
+
+
+def _finalize_image_job(job: dict, job_id: str, excluded_set: set, manual_zones_data: list) -> tuple[dict, Path, int]:
+    """Logique de finalisation image : réouverture depuis les octets bruts
+    stockés dans le job (jamais l'objet Pillow de la phase de détection),
+    caviardage réel par rectangles pleins dans les pixels, puis dépouillement
+    complet des métadonnées avant écriture du fichier de sortie."""
+    try:
+        img = Image.open(io.BytesIO(job["raw_image"]))
+        img.load()
+    except Exception as exc:
+        log.warning("Échec de la finalisation image (job %s) : %s", job_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Cette image est corrompue ou contient une structure invalide qui empêche sa finalisation.",
+        ) from exc
+
+    img = _normalize_image_mode_for_editing(img)
+
+    try:
+        draw = ImageDraw.Draw(img)
+        summary = _apply_selected_image_redactions(draw, img.mode, job["detections"], excluded_set)
+        manual_count = _apply_manual_image_redactions(draw, img.mode, img.size, manual_zones_data)
+        if manual_count:
+            summary["MANUEL"] = summary.get("MANUEL", 0) + manual_count
+
+        output_format = job["image_format"]
+        out_bytes = _strip_image_metadata_and_encode(img, output_format)
+
+        theme = job["theme"]
+        theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
+        extension = ".png" if output_format == "PNG" else ".jpg"
+        output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise{extension}"
+        output_path.write_bytes(out_bytes)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.warning("Échec de la finalisation image (job %s) : %s", job_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="Cette image est corrompue ou contient une structure invalide qui empêche sa finalisation.",
+        ) from exc
+
     return summary, output_path, manual_count
 
 
@@ -2983,6 +3414,8 @@ async def finalize_document(
         summary, output_path, manual_count = _finalize_docx_job(job, job_id, excluded_set, redacted_image_id_set)
     elif kind == "csv":
         summary, output_path, manual_count = _finalize_csv_job(job, job_id, excluded_set)
+    elif kind == "image":
+        summary, output_path, manual_count = _finalize_image_job(job, job_id, excluded_set, manual_zones_data)
     else:  # pragma: no cover - défensif, ne devrait jamais arriver
         raise HTTPException(status_code=400, detail="Type de document inconnu")
 
@@ -3027,14 +3460,22 @@ async def finalize_document(
             if excluded_count else ""
         )
 
-        # L'aperçu iframe ne fonctionne que pour le PDF (rendu natif du
-        # navigateur) — un .docx/.csv ne s'affiche pas correctement inline,
-        # on propose uniquement le téléchargement pour ces deux formats.
-        preview_html = (
-            f'<h2>Aperçu (contrôle visuel)</h2>'
-            f'<iframe src="{download_url}" style="width:100%; height:900px; border:1px solid #ccc;"></iframe>'
-            if kind == "pdf" else ""
-        )
+        # L'aperçu inline ne fonctionne que pour le PDF (rendu natif du
+        # navigateur via iframe) et l'image (balise <img> classique) — un
+        # .docx/.csv ne s'affiche pas correctement inline, on propose
+        # uniquement le téléchargement pour ces deux formats.
+        if kind == "pdf":
+            preview_html = (
+                f'<h2>Aperçu (contrôle visuel)</h2>'
+                f'<iframe src="{download_url}" style="width:100%; height:900px; border:1px solid #ccc;"></iframe>'
+            )
+        elif kind == "image":
+            preview_html = (
+                f'<h2>Aperçu (contrôle visuel)</h2>'
+                f'<img src="{download_url}" style="max-width:100%; border:1px solid #ccc;">'
+            )
+        else:
+            preview_html = ""
 
         return HTMLResponse(f"""
         <!doctype html>
@@ -3090,7 +3531,11 @@ _DOWNLOAD_MEDIA_TYPES = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".csv": "text/csv",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
 }
+
+_INLINE_EXTENSIONS = {".pdf", ".png", ".jpg"}
 
 
 @app.get("/api/download/{job_id}")
@@ -3119,7 +3564,7 @@ def download(job_id: str):
         path,
         media_type=media_type,
         filename=public_filename,
-        content_disposition_type="inline" if extension == ".pdf" else "attachment",
+        content_disposition_type="inline" if extension in _INLINE_EXTENSIONS else "attachment",
     )
 
 

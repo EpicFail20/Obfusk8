@@ -138,3 +138,44 @@ document, nouvelle dépendance, mise à jour de PyMuPDF/python-docx...),
 revenir à `app-audit.json` le temps de rejouer les scénarios et identifier
 le syscall manquant via `dmesg | grep 'audit: type=1326'`, puis l'ajouter à
 la liste dans les deux fichiers.
+
+## Mise à jour : support image (OCR via sous-processus `tesseract`)
+
+Exactement le scénario anticipé ci-dessus : l'ajout du support image
+(`pytesseract`, voir `requirements.txt`/`Dockerfile`) fait apparaître un
+besoin réellement nouveau — c'est le tout premier chemin de code de cette
+application à devoir lancer un **sous-processus** (`tesseract`, invoqué par
+`pytesseract` via `subprocess.Popen`), jamais nécessaire pour
+PyMuPDF/python-docx qui ne shell-out jamais.
+
+Repassage par la méthode documentée ci-dessus (bascule sur
+`app-audit.json`, scénario image rejoué contre `_handle_detect_image` réel,
+`dmesg | grep 'audit: type=1326'`), puis confirmation en blocage réel
+(`app-enforce.json`, conteneur autonome avec les mêmes réseaux que le
+service "app") : **4 syscalls manquants**, tous directement liés à la
+création/gestion d'un sous-processus (aucun n'était nécessaire avant) —
+
+| Syscall        | Rôle |
+|----------------|------|
+| `vfork`        | Création du sous-processus `tesseract` (`_posixsubprocess.fork_exec`). |
+| `dup2`         | Redirection des flux stdin/stdout/stderr du sous-processus vers les pipes. |
+| `close_range`  | Fermeture des descripteurs de fichier hérités dans l'enfant après le fork (optimisation de `subprocess` sur CPython récent). |
+| `wait4`        | Attente/récupération du sous-processus (`os.waitpid`, appelé par `pytesseract` puis par le nettoyage interne de `subprocess.Popen`). |
+
+Point de méthode : `wait4` n'est PAS apparu dans le journal `dmesg` en mode
+journalisation (`app-audit.json`) alors qu'il s'est bien révélé bloquant en
+blocage réel juste après (`OSError: [Errno 38] Function not implemented`
+sur `os.waitpid`) — feuille de route suivie à la lettre malgré cette
+incohérence : ajouté après observation directe de l'échec en blocage réel,
+puis reconfirmé par un cycle complet réussi (détection + OCR + Presidio +
+caviardage + téléchargement, PNG et JPEG, via `/api/detect` et
+`/api/finalize` réels) sous `app-enforce.json`. Cause de l'absence dans le
+journal non élucidée (possible limite de capacité/débit du tampon `dmesg`
+sur la session de test) — à garder à l'esprit : le mode journalisation seul
+n'a pas suffi cette fois, la vérification en blocage réel reste
+indispensable avant de considérer un profil "prêt".
+
+`openat2` reste journalisé (comme lors de l'audit initial) mais toujours
+volontairement **non ajouté** : comportement de repli déjà établi et
+inoffensif (bascule silencieuse vers `openat`, déjà autorisé), confirmé de
+nouveau ici sans régression.

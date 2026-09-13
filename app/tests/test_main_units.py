@@ -7,6 +7,7 @@ Exécution : depuis /app dans le conteneur, `pytest` ou `pytest tests/ -v`.
 """
 import io
 import re
+import struct
 import sys
 import zipfile
 from pathlib import Path
@@ -463,3 +464,257 @@ def test_build_docx_images_review_section_echappe_le_contenu_hostile(monkeypatch
 
     assert "<script>alert(1)</script>" not in html_out
     assert "&lt;script&gt;" in html_out
+
+
+# ---------------------------------------------------------------------------
+# Support image (PNG/JPEG) - validation d'entrée, OCR, caviardage, métadonnées
+# ---------------------------------------------------------------------------
+
+from PIL import Image  # noqa: E402
+from PIL.PngImagePlugin import PngInfo  # noqa: E402
+
+
+def _solid_image_bytes(size, rgb, fmt="PNG", mode="RGB"):
+    img = Image.new(mode, (size, size), rgb)
+    buf = io.BytesIO()
+    img.save(buf, format=fmt)
+    return buf.getvalue()
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (main.PNG_SIGNATURE + b"reste-arbitraire", "image"),
+    (main.JPEG_SIGNATURE + b"reste-arbitraire", "image"),
+])
+def test_detect_file_kind_reconnait_png_et_jpeg(raw, expected):
+    assert main._detect_file_kind(raw) == expected
+
+
+def test_open_and_validate_image_rejette_dimensions_excessives():
+    # Mode "1" (bilevel) : ~8 Mo pour 8000x8000 = 64 000 000 pixels, très
+    # au-dessus de MAX_IMAGE_PIXELS (40 000 000 par défaut) — vérifie que le
+    # rejet se fait bien sur les dimensions déclarées, sans jamais décoder
+    # les pixels d'une vraie image de cette taille.
+    img = Image.new("1", (8000, 8000))
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._open_and_validate_image(buf.getvalue())
+    assert exc_info.value.status_code == 400
+
+
+def test_open_and_validate_image_rejette_bombe_au_dela_du_double_du_seuil():
+    # Au-delà de 2x MAX_IMAGE_PIXELS, Pillow lève lui-même
+    # DecompressionBombError depuis Image.open() — vérifie que cette
+    # exception interne est bien convertie en rejet propre (400), pas une
+    # trace brute qui remonterait telle quelle.
+    img = Image.new("1", (13000, 13000))  # 169 000 000 pixels
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._open_and_validate_image(buf.getvalue())
+    assert exc_info.value.status_code == 400
+
+
+def test_open_and_validate_image_accepte_dimensions_normales():
+    raw = _solid_image_bytes(50, RED)
+    img = main._open_and_validate_image(raw)
+    assert img.size == (50, 50)
+    assert img.format == "PNG"
+
+
+def test_image_corrompue_ou_tronquee_leve_erreur_propre():
+    raw = _solid_image_bytes(50, RED)
+    truncated = raw[:-30]  # en-tête (IHDR) intact, données IDAT tronquées
+
+    # L'en-tête reste lisible : Image.open() (Phase 1) ne détecte pas encore
+    # le problème, seul un décodage complet (.load(), comme fait par
+    # _handle_detect_image après validation) le révèle — reproduit le
+    # chemin réel plutôt qu'un raccourci de test.
+    img = main._open_and_validate_image(truncated)
+    with pytest.raises(OSError):
+        img.load()
+
+
+def test_detect_image_sans_texte_renvoie_liste_vide():
+    # Image blanche unie : aucun mot OCR trouvé -> aucune erreur, liste
+    # vide directement (ne doit jamais appeler Presidio dans ce cas).
+    img = Image.new("RGB", (100, 100), (255, 255, 255))
+    assert main._detect_image(img) == []
+
+
+def test_build_ocr_text_reconstruit_avec_offsets_corrects():
+    words = [
+        {"text": "Jean", "left": 0, "top": 0, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},
+        {"text": "Durand", "left": 35, "top": 0, "width": 40, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},
+        {"text": "Suite", "left": 0, "top": 20, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 2},
+    ]
+    text, spans = main._build_ocr_text(words)
+    assert text == "Jean Durand\nSuite"
+    assert text[spans[0][0]:spans[0][1]] == "Jean"
+    assert text[spans[1][0]:spans[1][1]] == "Durand"
+    assert text[spans[2][0]:spans[2][1]] == "Suite"
+
+
+def test_map_entities_to_word_boxes_associe_les_bonnes_bounding_boxes():
+    words = [
+        {"text": "Jean", "left": 0, "top": 0, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},
+        {"text": "Durand", "left": 35, "top": 0, "width": 40, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},
+        {"text": "habite", "left": 0, "top": 20, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 2},
+    ]
+    text, spans = main._build_ocr_text(words)  # "Jean Durand\nhabite"
+    entities = [{"start": 0, "end": 11, "entity_type": "PERSON"}]  # "Jean Durand"
+
+    detections = main._map_entities_to_word_boxes(entities, spans)
+
+    assert len(detections) == 2  # un rectangle par mot recouvert
+    assert all(d["entity_type"] == "PERSON" for d in detections)
+    assert all(d["page"] == 0 for d in detections)
+    rects = sorted(d["page_rect"] for d in detections)
+    assert rects == [[0.0, 0.0, 30.0, 10.0], [35.0, 0.0, 75.0, 10.0]]
+    # "habite" (hors de l'empan [0,11)) ne doit produire aucune détection
+    assert all(d["page_rect"][0] < 76 for d in detections)
+
+
+def test_zone_manuelle_image_est_irrecuperable():
+    """Même exigence que pour le PDF (voir
+    test_zone_manuelle_sur_image_pdf_est_irrecuperable) : une zone tracée
+    manuellement sur UNE moitié d'une image doit rendre cette moitié
+    irrécupérable au niveau des pixels, sans toucher à l'autre moitié."""
+    W, H = 200, 100
+    img = Image.new("RGB", (W, H), RED)
+    for x in range(W // 2, W):
+        for y in range(H):
+            img.putpixel((x, y), BLUE)
+
+    draw = main.ImageDraw.Draw(img)
+    manual_count = main._apply_manual_image_redactions(draw, img.mode, img.size, [{"page": 0, "rect": [0, 0, W // 2, H]}])
+    assert manual_count == 1
+
+    out_bytes = main._strip_image_metadata_and_encode(img, "PNG")
+    out_img = Image.open(io.BytesIO(out_bytes))
+    assert out_img.getpixel((10, 10)) == (0, 0, 0), "la zone rouge caviardée n'est pas devenue noire"
+    assert out_img.getpixel((W - 10, 10)) == BLUE, "le bleu non caviardé a été altéré à tort"
+    # Balayage exhaustif : aucun pixel rouge résiduel nulle part dans le fichier de sortie.
+    assert RED not in out_img.get_flattened_data(), "le rouge caviardé est encore récupérable quelque part dans l'image"
+
+
+def test_strip_image_metadata_removes_png_text_chunks():
+    img = Image.new("RGB", (20, 20), RED)
+    pnginfo = PngInfo()
+    pnginfo.add_text("Comment", "donnee-sensible")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", pnginfo=pnginfo)
+    reopened = Image.open(io.BytesIO(buf.getvalue()))
+    assert "Comment" in reopened.text  # précondition : le chunk est bien présent
+
+    out_bytes = main._strip_image_metadata_and_encode(reopened, "PNG")
+    out_img = Image.open(io.BytesIO(out_bytes))
+    assert not getattr(out_img, "text", {}), "un chunk de texte PNG a survécu au dépouillement"
+    assert b"donnee-sensible" not in out_bytes
+
+
+def test_strip_image_metadata_removes_icc_profile():
+    img = Image.new("RGB", (20, 20), RED)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG", icc_profile=b"FAKE-ICC-PROFILE-DATA")
+    reopened = Image.open(io.BytesIO(buf.getvalue()))
+    assert "icc_profile" in reopened.info  # précondition
+
+    out_bytes = main._strip_image_metadata_and_encode(reopened, "PNG")
+    out_img = Image.open(io.BytesIO(out_bytes))
+    assert "icc_profile" not in out_img.info
+    assert b"FAKE-ICC-PROFILE-DATA" not in out_bytes
+
+
+def _build_ifd(entries, next_ifd_offset=0):
+    out = struct.pack("<H", len(entries))
+    for tag, type_, count, value_bytes in entries:
+        out += struct.pack("<HHI", tag, type_, count) + value_bytes
+    out += struct.pack("<I", next_ifd_offset)
+    return out
+
+
+def _make_solid_jpeg(size, rgb):
+    img = Image.new("RGB", (size, size), rgb)
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=90)
+    return buf.getvalue()
+
+
+def _embed_exif_gps_and_thumbnail(main_jpeg: bytes, thumb_jpeg: bytes) -> bytes:
+    """
+    Construit à la main un segment APP1/EXIF complet (coordonnées GPS +
+    miniature JPEG intégrée dans l'IFD1, comme le ferait un vrai appareil
+    photo/smartphone) et l'insère juste après le marqueur SOI du JPEG
+    principal — reproduit fidèlement la structure EXIF réelle plutôt qu'une
+    approximation, pour que le test de non-fuite (voir
+    test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage) porte
+    sur un cas réaliste.
+    """
+    header = b"II" + struct.pack("<H", 42) + struct.pack("<I", 8)
+    ifd0_offset = 8
+    ifd0_size = 2 + 1 * 12 + 4
+    gps_offset = ifd0_offset + ifd0_size
+    gps_entries = [
+        (1, 2, 2, b"N\x00\x00\x00"),                       # GPSLatitudeRef
+        (2, 3, 2, struct.pack("<HH", 48, 51)),              # GPSLatitude (approx.)
+        (3, 2, 2, b"E\x00\x00\x00"),                        # GPSLongitudeRef
+        (4, 3, 2, struct.pack("<HH", 2, 21)),               # GPSLongitude (approx.)
+    ]
+    gps_size = 2 + len(gps_entries) * 12 + 4
+    ifd1_offset = gps_offset + gps_size
+    ifd1_size = 2 + 3 * 12 + 4
+    thumb_offset = ifd1_offset + ifd1_size
+
+    ifd0 = _build_ifd([(0x8825, 4, 1, struct.pack("<I", gps_offset))], next_ifd_offset=ifd1_offset)
+    gps_ifd = _build_ifd(gps_entries, next_ifd_offset=0)
+    ifd1 = _build_ifd(
+        [
+            (0x0103, 3, 1, struct.pack("<HH", 6, 0)),               # Compression = JPEG
+            (0x0201, 4, 1, struct.pack("<I", thumb_offset)),        # JPEGInterchangeFormat
+            (0x0202, 4, 1, struct.pack("<I", len(thumb_jpeg))),     # JPEGInterchangeFormatLength
+        ],
+        next_ifd_offset=0,
+    )
+    tiff_blob = header + ifd0 + gps_ifd + ifd1 + thumb_jpeg
+    app1_payload = b"Exif\x00\x00" + tiff_blob
+    app1_segment = b"\xff\xe1" + struct.pack(">H", len(app1_payload) + 2) + app1_payload
+    return main_jpeg[:2] + app1_segment + main_jpeg[2:]
+
+
+def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
+    """
+    Point de vigilance explicitement demandé : si l'image principale est
+    caviardée mais que la miniature EXIF garde les pixels d'origine, c'est
+    une fuite directe. Construit une image avec une VRAIE miniature EXIF de
+    contenu différent (bleu) de l'image principale (rouge) pour détecter
+    sans ambiguïté toute survivance.
+    """
+    main_bytes = _make_solid_jpeg(64, RED)
+    thumb_bytes = _make_solid_jpeg(32, BLUE)
+    raw = _embed_exif_gps_and_thumbnail(main_bytes, thumb_bytes)
+
+    # Préconditions : EXIF, GPS et miniature bien présents en entrée.
+    opened = Image.open(io.BytesIO(raw))
+    assert "exif" in opened.info
+    gps_ifd = opened.getexif().get_ifd(0x8825)
+    assert gps_ifd, "précondition invalide : pas de coordonnées GPS dans le fixture"
+    assert thumb_bytes in raw, "précondition invalide : la miniature n'est pas embarquée telle quelle"
+    assert raw.count(b"\xff\xd8\xff") == 2, "précondition invalide : deux flux JPEG (principal + miniature) attendus"
+
+    job = {"raw_image": raw, "image_format": "JPEG", "detections": [], "theme": ""}
+    summary, output_path, manual_count = main._finalize_image_job(
+        job, "deadbeefcafebabedeadbeefcafebabe", set(), []
+    )
+    try:
+        out_bytes = output_path.read_bytes()
+        reopened = Image.open(io.BytesIO(out_bytes))
+
+        assert "exif" not in reopened.info, "l'EXIF (donc le GPS et la miniature) a survécu au caviardage"
+        assert b"\xff\xe1" not in out_bytes, "un segment APP1/EXIF résiduel est présent dans le fichier de sortie"
+        assert out_bytes.count(b"\xff\xd8\xff") == 1, "un second flux JPEG (la miniature) est encore présent"
+        assert thumb_bytes not in out_bytes, "les octets bruts de la miniature sont encore récupérables"
+    finally:
+        output_path.unlink(missing_ok=True)

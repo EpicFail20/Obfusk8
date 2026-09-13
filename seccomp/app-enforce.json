@@ -23,7 +23,9 @@
         "chdir",
         "clock_nanosleep",
         "close",
+        "close_range",
         "connect",
+        "dup2",
         "epoll_create1",
         "epoll_ctl",
         "epoll_pwait",
@@ -90,6 +92,8 @@
         "tgkill",
         "uname",
         "unlink",
+        "vfork",
+        "wait4",
         "write",
         "writev"
       ],

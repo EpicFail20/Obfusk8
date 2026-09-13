@@ -30,7 +30,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, ge
 DOCUMENTS_PROCESSED = Counter(
     "anonymiseur_documents_processed_total",
     "Nombre de documents traités avec succès, par format",
-    ["format"],  # "pdf", "docx", "csv"
+    ["format"],  # "pdf", "docx", "csv", "image"
 )
 
 DOCUMENTS_REJECTED = Counter(
@@ -53,7 +53,7 @@ PENDING_JOBS = Gauge(
 DETECTION_DURATION_SECONDS = Histogram(
     "anonymiseur_detection_duration_seconds",
     "Durée du traitement de détection, par format",
-    ["format"],
+    ["format"],  # "pdf", "docx", "csv", "image"
 )
 
 PRESIDIO_UP = Gauge(
