@@ -39,7 +39,7 @@
 | 1.7 | 🟡 | Dépendances non tenues à jour | Revue complète Python + non-Python menée (voir section 4) — mais c'était un **audit ponctuel**, pas un processus récurrent (voir 1.13) |
 | 1.8 | ✅ | Pas de rotation des logs Docker | Résolu (config `logging` explicite par service, après découverte d'un bug d'ancre YAML non résolu silencieusement par `docker compose` v5.5.0) |
 | 1.9 | 🟡 | Single point of failure | Volume `app` migré hors tmpfs, survit à un reboot. Sauvegarde des volumes / VM unique toujours ouvert |
-| 1.10 | ⏳ | Pas de supervision/alerting | Toujours absent |
+| 1.10 | 🟡 | Pas de supervision/alerting | Métriques Prometheus + alertes syslog implémentées et testées (voir section 10) — mais `ALERT_SINK` reste à `none` par défaut, en attente d'un collecteur SIEM réel côté infrastructure cliente |
 | 1.11 | ✅ | Fichier orphelin en cas de crash avant TTL | Résolu, TTL réduits |
 | 1.12 | ⏳ | Dimensionnement jamais validé par test de charge réel | Toujours ouvert |
 | 1.13 | 🟡 | Patch management / veille CVE sans processus récurrent | **Point le plus persistant du document** — resté ouvert malgré plusieurs audits ponctuels (Python session 3, non-Python session 4). Politique automatisée écrite en fin de parcours (script `pip-audit`+`trivy`, cron) — **non encore validée en conditions réelles**. Illustré concrètement depuis par la découverte d'un correctif `lxml` XXE (voir section 4) publié entre-temps et resté non appliqué faute de veille — la dépendance était épinglée, pas surveillée |
@@ -282,7 +282,23 @@ Pas d'équivalent PDF/CSV à signaler pour la miniature/les zones de texte incru
 
 ---
 
-## 10. Tests différés au pentest final
+## 10. Supervision et alerting (1.10) — 🟡 implémenté, syslog inactif par défaut
+
+**Constat/besoin** : jusqu'ici, aucune visibilité opérationnelle au-delà des journaux applicatifs locaux — un dépôt Presidio injoignable, un disque plein, un certificat proche de l'expiration ou une menace antivirus détectée (section 9) ne remontaient nulle part en dehors de `docker logs`. Deux briques ajoutées, sur le même principe d'architecture que l'antivirus ICAP : un point de configuration unique, un comportement sûr par défaut, actif seulement sur configuration explicite.
+
+**Métriques (`app/metrics.py`)** : exposition Prometheus standard sur `/metrics` (bibliothèque `prometheus_client`, aucun système d'adaptateurs nécessaire — contrairement à l'antivirus/alerting — le format d'exposition suffit à couvrir la quasi-totalité des outils d'entreprise). Compteurs par catégorie fermée uniquement (`format`, `reason`, `entity_type`, `verdict`, `volume`, `service`) — jamais de nom de fichier, d'email ou d'identifiant de job en étiquette, à la fois pour la confidentialité et pour éviter l'explosion de cardinalité côté serveur de métriques. Couvre : documents traités/rejetés par format et par raison, entités caviardées par type, jobs en attente de révision, durée de détection par format, disponibilité Presidio (analyzer/anonymizer), verdict antivirus, espace disque libre par volume surveillé.
+
+**Alerting (`app/supervision.py`)** : interface `AlertSink` générique (`NullAlertSink` par défaut — journalise localement sans jamais perdre l'information silencieusement — `SyslogAlertSink` en implémentation réelle, RFC 5424 via `logging.handlers.SysLogHandler` de la bibliothèque standard, aucune dépendance externe). Déclenché sur : antivirus indisponible ou menace détectée (CRITICAL), Presidio injoignable (WARNING), espace disque sous deux seuils cumulatifs — pourcentage ET valeur absolue (WARNING sous 10%/500 Mo, CRITICAL sous 5%/100 Mo), le plus restrictif des deux l'emportant pour rester pertinent aussi bien sur un petit volume que sur un très gros. **Même règle que pour les logs d'audit (3.5)** : jamais de donnée personnelle dans une alerte, une alerte partant potentiellement vers un SIEM tiers hors du contrôle direct du projet — seul `filename_hash` apparaît, jamais le nom de fichier brut.
+
+**Testé** : 14 tests (`test_metrics.py`, `test_supervision.py`) — `test_supervision.py` via un vrai récepteur syslog UDP local (pas un simulacre), `test_metrics.py` d'après l'API stable de `prometheus_client`, les deux vérifiés avec succès dans un venv externe où la dépendance était déjà installée (réseau toujours indisponible dans l'environnement principal de développement pour l'installer autrement). **67/67 tests du projet passés** après intégration (aucune régression sur les suites PDF/DOCX/CSV/antivirus existantes).
+
+**Exposition `/metrics` et Traefik** : un scraper Prometheus ne peut pas passer par la dance OAuth d'`oidc-auth` — mais Traefik reste exposé côté Internet (réseau `frontend` non-`internal`), donc pas question de laisser l'endpoint ouvert à quiconque pour autant. Router Traefik dédié `app-metrics`, protégé par `ipallowlist` plutôt que par l'authentification applicative, restreint à `127.0.0.1/32` par défaut (donc inaccessible depuis l'extérieur tant que ce n'est pas explicitement ouvert à l'adresse réelle du collecteur Prometheus une fois celui-ci déployé).
+
+**Reste ouvert** : `ALERT_SINK=none` par défaut (aucune alerte transmise hors journaux locaux, seulement journalisée) — à passer à `syslog` avec un `SYSLOG_HOST` réel dès qu'un collecteur SIEM est disponible côté infrastructure cliente, même logique que `AV_ENGINE=none` (section 9) : le composant est prêt, l'activation attend l'infrastructure réelle. Le seuil d'espace disque et la vérification de santé Presidio tournent dans la même boucle de fond que le nettoyage des jobs expirés (`_cleanup_sweep_loop`, intervalle 60s) — pas encore de test de charge réel validant ce dimensionnement (voir 1.12, toujours ouvert).
+
+---
+
+## 11. Tests différés au pentest final
 
 - Vérification active du correctif `FileResponse`/`Range` (1.22) — jamais exécutée
 - Abus de la surface HTTP côté utilisateur authentifié (Burp, forced browsing, falsification de paramètres)
@@ -290,7 +306,7 @@ Pas d'équivalent PDF/CSV à signaler pour la miniature/les zones de texte incru
 
 ---
 
-## 11. Synthèse finale
+## 12. Synthèse finale
 
 ### Priorités actuelles, par ordre d'impact
 
@@ -298,13 +314,14 @@ Pas d'équivalent PDF/CSV à signaler pour la miniature/les zones de texte incru
 2. **Décider du sort de Keycloak** — 77 CVE fixables dont 3 CRITICAL découvertes en scannant l'image réellement utilisée (section 4) ; patcher vers 26.7.x ou accepter le risque jusqu'au remplacement par Entra, arbitrage devenu plus pressant qu'avant
 3. **Un vrai travail de mesure de la qualité de détection PII** sur corpus varié — jamais mené de façon systématique malgré plusieurs mentions. Le bug "Laboratoire" (section 7) et les angles morts DOCX (section 8) en illustrent encore l'importance
 4. **Certificat TLS de confiance** avant toute préproduction (1.19)
-5. **Le pentest externe final** (section 10)
+5. **Le pentest externe final** (section 11)
 6. **Processus récurrent de veille CVE** (1.13) — toujours une passe manuelle, pas un automatisme ; deux illustrations concrètes de son coût maintenant disponibles (`lxml` en 2026, obsolescence de `traefik:v3.6` découverte lors de l'audit complet des dépendances, section 4)
 7. Traitement des images incrustées DOCX/PDF (section 8) — hors périmètre par décision produit explicite, traitement séparé à concevoir ; inclut la construction d'un mécanisme de zone manuelle équivalent au PDF pour le DOCX, qui n'existe pas aujourd'hui
 8. Presidio : évaluer la variante `-distroless-preview` (0 CVE fixable, base OS différente non testée) ; `spacy`/`pyyaml` non épinglés dans `presidio/analyzer-build/Dockerfile` (gap de reproductibilité, pas de risque actif) — section 4
 9. ~~Reconstruire et redéployer l'image `anonymiseur-app` avec le garde-fou `_check_page_images_sane`/`MAX_IMAGE_PIXELS`~~ — **fait**, sur autorisation explicite de l'utilisateur (20/20 tests unitaires revérifiés dans le conteneur vivant, aucune régression Traefik)
 10. ~~Implémenter un scan antivirus pré-parsing (1.6)~~ — **fait** (adaptateur ICAP, section 9), redéployé après correction de 4 réserves trouvées en revue. **Reste à trancher par l'utilisateur** : activer réellement `AV_ENGINE=icap` suppose (a) un serveur ICAP joignable côté infrastructure cliente et (b) de réconcilier son adressage avec l'isolation réseau actuelle (section 5, réseaux `app-internal`/`backend` sans sortie)
 11. **Décider du sort de la découverte seccomp `dup`/`dup2`/`dup3`** (section 2.5) — `pytest` ne peut plus être exécuté à l'intérieur d'un conteneur utilisant `app-enforce.json` depuis la bascule en blocage réel ; sans impact sur l'application en production (jamais appelés par le code applicatif), mais bloque la vérification en conditions réelles telle que documentée dans `seccomp/README.md`
+12. ~~Implémenter la supervision/alerting (1.10)~~ — **fait** (métriques Prometheus + alertes syslog, section 10), 14 nouveaux tests + 67/67 au total. **Reste à trancher par l'utilisateur** : activer réellement `ALERT_SINK=syslog` suppose un collecteur SIEM réel côté infrastructure cliente, et l'IP autorisée à scraper `/metrics` (`ipallowlist`, actuellement `127.0.0.1/32`) devra être ouverte à l'adresse du serveur Prometheus une fois celui-ci déployé
 
 ### Leçons méthodologiques cumulées
 

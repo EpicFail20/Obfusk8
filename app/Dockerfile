@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 COPY antivirus.py .
+COPY metrics.py .
+COPY supervision.py .
 COPY themes/ ./themes/
 COPY tests/ ./tests/
 

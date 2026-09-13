@@ -299,6 +299,17 @@ services:
       - ICAP_TIMEOUT_SECONDS=30
       # ICAP_TLS : true pour chiffrer la connexion au serveur ICAP (ICAPS).
       - ICAP_TLS=false
+      # --- Supervision/alerting (voir app/supervision.py) ---
+      # ALERT_SINK : destination des alertes opérationnelles (antivirus
+      # indisponible/menace, espace disque bas, Presidio injoignable...).
+      # "none" (défaut) journalise localement sans transmettre — à passer à
+      # "syslog" dès qu'un collecteur SIEM est disponible côté infrastructure
+      # cliente (même logique que AV_ENGINE=none ci-dessus : le composant est
+      # prêt, l'activation attend l'infrastructure réelle).
+      - ALERT_SINK=none
+      - SYSLOG_HOST=
+      - SYSLOG_PORT=514
+      - SYSLOG_TCP=false
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
@@ -316,6 +327,21 @@ services:
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.burst=10"
+      # Router dédié pour /metrics : un scraper Prometheus ne peut pas faire
+      # la dance OAuth d'oidc-auth (voir main.py, endpoint /metrics) — mais
+      # Traefik reste exposé côté Internet (réseau frontend non-internal),
+      # donc pas question de laisser ce endpoint ouvert à quiconque pour
+      # autant : ipallowlist restreint aux adresses du serveur de
+      # supervision réel. "127.0.0.1/32" par défaut = personne depuis
+      # l'extérieur tant que ce n'est pas explicitement ouvert à l'adresse
+      # du collecteur Prometheus une fois celui-ci déployé.
+      - "traefik.http.routers.app-metrics.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/metrics`)"
+      - "traefik.http.routers.app-metrics.entrypoints=websecure"
+      - "traefik.http.routers.app-metrics.tls=true"
+      - "traefik.http.routers.app-metrics.priority=100"
+      - "traefik.http.routers.app-metrics.middlewares=metrics-allowlist"
+      - "traefik.http.routers.app-metrics.service=app"
+      - "traefik.http.middlewares.metrics-allowlist.ipallowlist.sourcerange=127.0.0.1/32"
       - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth"
       - "traefik.docker.network=anonymiseur_app-internal"
       - "traefik.enable=true"

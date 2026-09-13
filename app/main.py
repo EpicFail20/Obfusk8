@@ -33,6 +33,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import struct
 import threading
 import time
@@ -45,6 +46,7 @@ from pathlib import Path
 
 import pymupdf as fitz  # PyMuPDF — alias 'fitz' conservé, 'import fitz' est déprécié
 import requests
+import metrics
 from antivirus import AntivirusUnavailableError, get_scanner, is_av_enforced
 from docx import Document as WordDocument
 from docx.oxml import parse_xml
@@ -53,6 +55,7 @@ from docx.text.paragraph import Paragraph
 from lxml import etree
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from supervision import Alert, AlertSeverity, get_alert_sink
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("anonymiseur")
@@ -151,15 +154,26 @@ MAX_REVIEW_ROWS = int(os.environ.get("MAX_REVIEW_ROWS", "2000"))
 MAX_DETECTION_SECONDS = int(os.environ.get("MAX_DETECTION_SECONDS", "90"))
 
 
+def _reject(reason: str, status_code: int, detail: str) -> None:
+    """Incrémente le compteur de rejets (metrics.DOCUMENTS_REJECTED) puis lève
+    l'HTTPException correspondante — point de passage unique pour ne pas
+    oublier d'instrumenter un futur rejet ajouté. `reason` doit rester une
+    catégorie fermée (voir metrics.py) : jamais une valeur dérivée de
+    l'entrée utilisateur."""
+    metrics.DOCUMENTS_REJECTED.labels(reason=reason).inc()
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
 def _check_detection_deadline(start_time: float) -> None:
     """Lève une HTTPException si la détection en cours dépasse
     MAX_DETECTION_SECONDS — à appeler avant chaque lot/page pour ne jamais
     laisser un document proche des limites de taille bloquer le worker
     unique pendant plusieurs minutes (voir MAX_DETECTION_SECONDS)."""
     if time.time() - start_time > MAX_DETECTION_SECONDS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Ce document est trop volumineux pour être analysé dans le temps imparti (max {MAX_DETECTION_SECONDS}s) — réduisez sa taille ou contactez l'administrateur.",
+        _reject(
+            "trop_volumineux",
+            400,
+            f"Ce document est trop volumineux pour être analysé dans le temps imparti (max {MAX_DETECTION_SECONDS}s) — réduisez sa taille ou contactez l'administrateur.",
         )
 
 # Marqueur de remplacement pour le caviardage texte (DOCX/CSV) : une valeur
@@ -307,41 +321,45 @@ def _validate_docx_zip(raw: bytes) -> str:
     """
     entry_count = _peek_zip_entry_count(raw)
     if entry_count is not None and entry_count > MAX_DOCX_ZIP_ENTRIES:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Structure d'archive suspecte détectée (protection anti zip-bomb, {entry_count} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+        _reject(
+            "structure_invalide",
+            400,
+            f"Structure d'archive suspecte détectée (protection anti zip-bomb, {entry_count} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
         )
 
     try:
         zf = zipfile.ZipFile(io.BytesIO(raw))
         names = zf.namelist()
     except zipfile.BadZipFile as exc:
+        metrics.DOCUMENTS_REJECTED.labels(reason="format_invalide").inc()
         raise HTTPException(status_code=400, detail="Fichier ZIP/DOCX invalide ou corrompu") from exc
 
     if "word/document.xml" not in names:
-        raise HTTPException(status_code=400, detail="Ce fichier n'est pas un document Word (.docx) valide.")
+        _reject("format_invalide", 400, "Ce fichier n'est pas un document Word (.docx) valide.")
     if "word/vbaProject.bin" in names:
-        raise HTTPException(status_code=400, detail="Les documents avec macros (.docm) ne sont pas acceptés.")
+        _reject("format_invalide", 400, "Les documents avec macros (.docm) ne sont pas acceptés.")
     if len(names) > MAX_DOCX_ZIP_ENTRIES:
         # Filet de sécurité si l'EOCD n'a pas pu être lu en amont (ex.
         # commentaire ZIP mal formé) : coûte la lecture complète qu'on
         # essaie d'éviter ci-dessus, mais protège quand même contre la
         # dégradation qui suit (python-docx, lxml, etc.) sur le reste du
         # pipeline.
-        raise HTTPException(
-            status_code=400,
-            detail=f"Structure d'archive suspecte détectée (protection anti zip-bomb, {len(names)} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+        _reject(
+            "structure_invalide",
+            400,
+            f"Structure d'archive suspecte détectée (protection anti zip-bomb, {len(names)} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
         )
 
     total_uncompressed = sum(info.file_size for info in zf.infolist())
     if total_uncompressed > MAX_DOCX_UNCOMPRESSED_MB * 1024 * 1024:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Document trop volumineux une fois décompressé (protection anti zip-bomb, max {MAX_DOCX_UNCOMPRESSED_MB} Mo).",
+        _reject(
+            "trop_volumineux",
+            400,
+            f"Document trop volumineux une fois décompressé (protection anti zip-bomb, max {MAX_DOCX_UNCOMPRESSED_MB} Mo).",
         )
     for info in zf.infolist():
         if info.compress_size > 0 and (info.file_size / info.compress_size) > MAX_DOCX_ZIP_RATIO:
-            raise HTTPException(status_code=400, detail="Structure d'archive suspecte détectée (protection anti zip-bomb).")
+            _reject("structure_invalide", 400, "Structure d'archive suspecte détectée (protection anti zip-bomb).")
 
     return "docx"
 
@@ -405,7 +423,17 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
     try:
         result = get_scanner().scan(raw, filename_hint=filename)
     except AntivirusUnavailableError as exc:
+        metrics.AV_SCAN_RESULT.labels(verdict="indisponible").inc()
+        get_alert_sink().send(
+            Alert(
+                severity=AlertSeverity.WARNING,
+                source="antivirus",
+                message="Scanner antivirus indisponible",
+                details={"filename_hash": filename_hash},
+            )
+        )
         if is_av_enforced():
+            metrics.DOCUMENTS_REJECTED.labels(reason="antivirus_indisponible").inc()
             raise HTTPException(
                 status_code=503,
                 detail="Le service d'analyse antivirus est indisponible, veuillez réessayer plus tard.",
@@ -418,7 +446,17 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
 
     if not result.is_clean:
         threat = result.threat_name or "menace inconnue"
+        metrics.AV_SCAN_RESULT.labels(verdict="menace").inc()
+        get_alert_sink().send(
+            Alert(
+                severity=AlertSeverity.CRITICAL,
+                source="antivirus",
+                message="Menace détectée par l'antivirus",
+                details={"filename_hash": filename_hash, "threat": threat},
+            )
+        )
         if is_av_enforced():
+            metrics.DOCUMENTS_REJECTED.labels(reason="menace_antivirus").inc()
             raise HTTPException(
                 status_code=400,
                 detail=f"Menace détectée par l'antivirus ({threat}) — fichier rejeté.",
@@ -427,6 +465,9 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
             "AV_ENFORCE=false : menace détectée (%s) pour fichier %s, fichier traité quand même",
             threat, filename_hash,
         )
+        return
+
+    metrics.AV_SCAN_RESULT.labels(verdict="propre").inc()
 
 
 def _detect_file_kind(raw: bytes) -> str:
@@ -440,10 +481,7 @@ def _detect_file_kind(raw: bytes) -> str:
         return _validate_docx_zip(raw)
     if _looks_like_text(raw):
         return "csv"
-    raise HTTPException(
-        status_code=400,
-        detail="Format de fichier non reconnu (seuls PDF, DOCX et CSV sont acceptés).",
-    )
+    _reject("format_invalide", 400, "Format de fichier non reconnu (seuls PDF, DOCX et CSV sont acceptés).")
 
 
 def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
@@ -455,7 +493,7 @@ def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
             return raw.decode(encoding), encoding
         except UnicodeDecodeError:
             continue
-    raise HTTPException(status_code=400, detail="Encodage de fichier CSV non reconnu (UTF-8 ou Windows-1252 attendu).")
+    _reject("format_invalide", 400, "Encodage de fichier CSV non reconnu (UTF-8 ou Windows-1252 attendu).")
 
 
 def _detect_csv_delimiter(sample_text: str) -> str:
@@ -475,10 +513,7 @@ def _parse_csv_rows(text: str, delimiter: str) -> list[list[str]]:
     for row in reader:
         rows.append(row)
         if len(rows) > MAX_CSV_ROWS:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Fichier CSV trop volumineux ({len(rows)}+ lignes, max {MAX_CSV_ROWS})",
-            )
+            _reject("trop_volumineux", 400, f"Fichier CSV trop volumineux ({len(rows)}+ lignes, max {MAX_CSV_ROWS})")
     return rows
 
 
@@ -535,8 +570,78 @@ def _sweep_stale_jobs():
         ]
         for job_id in stale:
             del PENDING_JOBS[job_id]
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
     if stale:
         log.info("Jobs en révision expirés purgés: %d", len(stale))
+
+
+# Volumes réellement montés (voir docker-compose.yml) dont l'espace disque
+# libre est surveillé. WORKDIR et AUDIT_DIR peuvent être deux points de
+# montage distincts en production (bind mounts séparés) même s'ils partagent
+# le même disque en lab.
+_MONITORED_VOLUMES = {"workdir": WORKDIR, "audit": AUDIT_DIR}
+
+# Seuils d'alerte espace disque : déclenché sur le plus restrictif des deux
+# critères (pourcentage OU valeur absolue), pour rester pertinent aussi bien
+# sur un petit volume (où 10% peut représenter plusieurs Go de marge) que sur
+# un très gros volume (où 10% peut rester énorme alors que l'espace absolu
+# restant est déjà critique).
+_DISK_WARNING_PCT = 10.0
+_DISK_WARNING_MB = 500
+_DISK_CRITICAL_PCT = 5.0
+_DISK_CRITICAL_MB = 100
+
+
+def _check_disk_space(volume: str, path: Path) -> None:
+    try:
+        total, _used, free = shutil.disk_usage(path)
+    except OSError as exc:  # pragma: no cover - lecture best-effort
+        log.warning("Espace disque illisible pour le volume '%s': %s", volume, exc)
+        return
+
+    metrics.DISK_FREE_BYTES.labels(volume=volume).set(free)
+    free_mb = free / (1024 * 1024)
+    free_pct = (free / total * 100) if total else 100.0
+    details = {"volume": volume, "free_mb": round(free_mb, 1), "free_pct": round(free_pct, 1)}
+
+    if free_pct < _DISK_CRITICAL_PCT or free_mb < _DISK_CRITICAL_MB:
+        get_alert_sink().send(
+            Alert(
+                severity=AlertSeverity.CRITICAL,
+                source="disk-space",
+                message=f"Espace disque critique sur le volume '{volume}'",
+                details=details,
+            )
+        )
+    elif free_pct < _DISK_WARNING_PCT or free_mb < _DISK_WARNING_MB:
+        get_alert_sink().send(
+            Alert(
+                severity=AlertSeverity.WARNING,
+                source="disk-space",
+                message=f"Espace disque faible sur le volume '{volume}'",
+                details=details,
+            )
+        )
+
+
+def _check_presidio_health(service: str, base_url: str) -> None:
+    """Vérification de santé légère : une simple requête HTTP suffit, pas
+    besoin de reproduire un vrai appel d'analyse/anonymisation ici."""
+    try:
+        resp = requests.get(f"{base_url}/health", timeout=5)
+        up = resp.ok
+    except requests.RequestException:
+        up = False
+    metrics.PRESIDIO_UP.labels(service=service).set(1 if up else 0)
+    if not up:
+        get_alert_sink().send(
+            Alert(
+                severity=AlertSeverity.WARNING,
+                source="presidio",
+                message=f"Service presidio-{service} injoignable",
+                details={"service": service},
+            )
+        )
 
 
 def _cleanup_sweep_loop(interval_seconds: int = 60):
@@ -544,6 +649,10 @@ def _cleanup_sweep_loop(interval_seconds: int = 60):
         time.sleep(interval_seconds)
         _sweep_orphaned_files()
         _sweep_stale_jobs()
+        for volume, path in _MONITORED_VOLUMES.items():
+            _check_disk_space(volume, path)
+        _check_presidio_health("analyzer", ANALYZER_URL)
+        _check_presidio_health("anonymizer", ANONYMIZER_URL)
 
 
 @asynccontextmanager
@@ -1851,6 +1960,19 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/metrics")
+def metrics_endpoint():
+    """
+    Exposition Prometheus (voir metrics.py). Ne passe PAS par
+    l'authentification oauth2-proxy — un scraper Prometheus ne fait pas de
+    dance OAuth — mais reste protégé par ipallowlist (voir le router
+    Traefik dédié `app-metrics` dans docker-compose.yml, restreint par
+    défaut à 127.0.0.1) plutôt que laissé ouvert à tout Internet.
+    """
+    body, content_type = metrics.metrics_response()
+    return Response(content=body, media_type=content_type)
+
+
 @app.get("/", response_class=HTMLResponse)
 def upload_form():
     options = '<option value="">Aucun (détection générique uniquement)</option>'
@@ -1958,7 +2080,8 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         )
 
     try:
-        detections = _detect_pdf(doc, theme=selected_theme)
+        with metrics.DETECTION_DURATION_SECONDS.labels(format="pdf").time():
+            detections = _detect_pdf(doc, theme=selected_theme)
         clusters = _cluster_detections(detections)
 
         page_sizes = []
@@ -1996,6 +2119,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
             "size_mb": size_mb,
             "created_at": time.time(),
         }
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
 
     log.info(
         "Job %s en révision: fichier#%s, %d détection(s) (%d zone(s) après regroupement), thème=%s",
@@ -2206,7 +2330,8 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
         block_texts = ["".join(run.text for run in p.runs) for _, p, _ in blocks]
         indexed_texts = list(enumerate(block_texts))
         structural = _docx_table_structural_entities(blocks, block_texts, _resolve_column_keywords(selected_theme))
-        detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
+        with metrics.DETECTION_DURATION_SECONDS.labels(format="docx").time():
+            detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
         clusters = _cluster_text_detections(detections)
     except HTTPException:
         raise
@@ -2229,6 +2354,7 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
             "size_mb": size_mb,
             "created_at": time.time(),
         }
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
 
     log.info(
         "Job %s en révision (DOCX): fichier#%s, %d détection(s) (%d zone(s) après regroupement), thème=%s",
@@ -2291,7 +2417,8 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
     try:
         indexed_texts = [(f"{r}:{c}", cell) for r, row in enumerate(rows) for c, cell in enumerate(row)]
         structural = _csv_structural_entities(rows, _resolve_column_keywords(selected_theme))
-        detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
+        with metrics.DETECTION_DURATION_SECONDS.labels(format="csv").time():
+            detections = _detect_text_blocks(indexed_texts, theme=selected_theme, extra_detections=structural)
         clusters = _cluster_text_detections(detections)
     except HTTPException:
         raise
@@ -2315,6 +2442,7 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
             "size_mb": size_mb,
             "created_at": time.time(),
         }
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
 
     log.info(
         "Job %s en révision (CSV): fichier#%s, %d détection(s) (%d zone(s) après regroupement), thème=%s, délimiteur=%r",
@@ -2582,6 +2710,7 @@ async def finalize_document(
     """
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.pop(job_id, None)
+        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
 
     if job is None:
         raise HTTPException(status_code=404, detail="Job introuvable ou expiré, veuillez relancer l'analyse")
@@ -2632,6 +2761,11 @@ async def finalize_document(
 
     total = sum(summary.values())
     excluded_count = len(excluded_cluster_ids)
+
+    metrics.DOCUMENTS_PROCESSED.labels(format=kind).inc()
+    for entity_type, count in summary.items():
+        metrics.ENTITIES_REDACTED.labels(entity_type=entity_type).inc(count)
+
     log.info(
         "Job %s finalisé (%s): %d entité(s) caviardée(s), %d zone(s) exclue(s), %d zone(s) manuelle(s)",
         job_id, kind, total, excluded_count, manual_count,
