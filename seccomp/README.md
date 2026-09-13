@@ -179,3 +179,66 @@ indispensable avant de considérer un profil "prêt".
 volontairement **non ajouté** : comportement de repli déjà établi et
 inoffensif (bascule silencieuse vers `openat`, déjà autorisé), confirmé de
 nouveau ici sans régression.
+
+## Mise à jour : outillage de test (`docker compose run app pytest` sous blocage réel)
+
+Gap distinct de tout ce qui précède : **syscalls nécessaires à `pytest`
+lui-même**, jamais appelés par le code applicatif — jusqu'ici invisibles
+puisque la suite de tests n'avait jamais été rejouée à l'intérieur d'un
+conteneur utilisant `app-enforce.json` (voir l'écart déjà noté à l'origine
+entre "le profil a été validé contre l'application" et "jamais recontrôlé
+contre `pytest`"). Hypothèse de départ (lecture de `_pytest/capture.py`,
+`FDCaptureBase`) : `dup`/`dup2`/`dup3` suffiraient.
+
+**Vérifiée fausse par l'observation, comme la méthode l'exige** :
+`dup2` était déjà présent (ajouté pour le sous-processus `tesseract` ci-
+dessus) et s'est révélé suffisant pour la capture de sortie de `pytest` —
+`dup` et `dup3` ne sont jamais apparus dans le journal, sur aucune des
+répétitions ci-dessous, et n'ont donc **pas** été ajoutés (aucun intérêt à
+élargir la surface autorisée pour un besoin qui ne se présente pas
+réellement).
+
+Ce qui est réellement apparu, en répétant `docker compose run app pytest`
+sous `app-audit.json` (`SCMP_ACT_LOG`) et en inspectant `dmesg` après
+chaque exécution — **non-déterministe d'une exécution à l'autre** (chaque
+`docker compose run` démarre un conteneur neuf, `/tmp` en tmpfs vide à
+chaque fois ; la variation vient de chemins de code internes à `pytest`/
+`tesseract` qui ne s'exécutent pas systématiquement, pas d'un état
+résiduel) — a nécessité **6 exécutions successives** avant d'obtenir 3
+répétitions consécutives sans aucun nouveau syscall :
+
+| Syscall              | Origine (comm observé) | Rôle probable |
+|----------------------|-------------------------|---------------|
+| `setfsuid`, `setfsgid` | `pytest` | `os.access(path, ..., effective_ids=True)` — vérification de propriété du répertoire temporaire partagé avant d'y créer un dossier numéroté (`_pytest.tmpdir`, protection contre les attaques par lien symbolique sur un `/tmp` multi-utilisateur). |
+| `ftruncate`, `sigaltstack` | `pytest` | `sigaltstack` : pile de signal alternative installée par `faulthandler.enable()` (`_pytest.faulthandler`) — c'est exactement l'appel dont l'absence avait été contournée par `-p no:faulthandler` avant cette investigation. `ftruncate` : écriture des fichiers de cache (`.pytest_cache/v/cache/lastfailed`, etc.). |
+| `symlink`, `chmod`, `umask` | `pytest` | Suite du même mécanisme `_pytest.tmpdir` : création/mise à jour du lien symbolique `pytest-current` vers le dernier répertoire numéroté, avec permissions explicites. |
+| `recvmsg`, `sched_getaffinity` | `tesseract` | Détection du nombre de cœurs disponibles par le runtime OpenMP de `tesseract` pour dimensionner son pool de threads (voir `tesseract --version`, "Found OpenMP") — apparaît uniquement quand un test exerçant l'OCR réel (`test_detect_image_sans_texte_renvoie_liste_vide`, etc.) s'exécute avant que l'affinité ne soit mise en cache par le runtime. |
+
+Tous ajoutés à `app-audit.json` **et** `app-enforce.json`, classés comme
+syscalls d'**outillage de test** (jamais appelés par `main.py`/`antivirus.py`
+/`metrics.py`/`supervision.py` eux-mêmes) plutôt que comme besoins
+applicatifs — pour qu'un futur lecteur ne suppose pas à tort qu'ils servent
+au traitement PDF/DOCX/CSV/image.
+
+**Revérification complète, dans l'ordre imposé** :
+1. Sous `app-audit.json` mis à jour : 3 exécutions consécutives de
+   `docker compose run app pytest tests/` sans aucun nouveau syscall
+   journalisé (seul `openat2`, déjà connu et accepté, reste visible sur le
+   bootstrap `runc`).
+2. Bascule de `docker-compose.yml` sur `app-enforce.json` mis à jour,
+   `docker compose up -d --force-recreate app`.
+3. Cycle de non-régression sur le service vivant : démarrage propre,
+   requête HTTP réelle de bout en bout sur le format image (`/api/detect` →
+   `/api/finalize` → `/api/download`, OCR + Presidio réels, 200 partout),
+   arrêt propre (`docker stop`, `SIGTERM` → "Arrêt de l'application" →
+   `Application shutdown complete`).
+4. **Test décisif** : `docker compose run app pytest tests/ -v` dans le
+   conteneur en blocage réel — **97/97 tests passés**, répété **5 fois de
+   suite** sans un seul échec (la non-déterminisme constatée en mode
+   journalisation aurait pu se reproduire ici ; elle ne s'est pas
+   manifestée, cohérent avec le fait que tous les syscalls concernés sont
+   désormais explicitement autorisés).
+
+`docker-compose.yml` redéployé avec `app-enforce.json` mis à jour —
+confirmé lui-même inchangé par rapport à avant cette investigation (toujours
+`seccomp=./seccomp/app-enforce.json`), seul le contenu du profil a changé.
