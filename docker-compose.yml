@@ -271,6 +271,34 @@ services:
       # tous les thèmes existants (medical/it/compta). N'affecte QUE le flux
       # "Aucun thème" ; les thèmes définissent chacun leur propre valeur.
       - DEFAULT_SCORE_THRESHOLD=0.4
+      # --- Scan antivirus (voir app/antivirus.py) ---
+      # AV_ENGINE : moteur utilisé pour scanner chaque fichier avant tout
+      # parsing PDF/DOCX/CSV. "none" (défaut actuel) désactive complètement
+      # le scan, quelle que soit la valeur d'AV_ENFORCE ci-dessous — les deux
+      # réglages sont indépendants, mais AV_ENGINE=none rend AV_ENFORCE sans
+      # effet. Seule autre valeur supportée : "icap" (serveur ICAP RFC 3507
+      # déjà déployé côté infrastructure cliente, voir ICAP_* plus bas).
+      - AV_ENGINE=none
+      # AV_ENFORCE : que faire d'un verdict antivirus défavorable (menace
+      # détectée OU moteur ICAP injoignable). true (défaut si un moteur réel
+      # est un jour activé) = bloque le fichier (HTTPException). false = mode
+      # observation, le fichier continue son traitement normal mais un
+      # avertissement explicite est journalisé (jamais un échec silencieux).
+      - AV_ENFORCE=true
+      # ICAP_HOST : hôte du serveur ICAP à contacter. Requis uniquement si
+      # AV_ENGINE=icap (voir antivirus.py : un simple client FortiGate n'est
+      # PAS un serveur ICAP valide, confirmer avec l'équipe sécurité).
+      - ICAP_HOST=
+      # ICAP_PORT : port du serveur ICAP (1344 est le port standard RFC 3507).
+      - ICAP_PORT=1344
+      # ICAP_SERVICE : nom du service ICAP exposé par le serveur (dépend de
+      # sa configuration, ex: "avscan" pour c-icap/SquidClamav).
+      - ICAP_SERVICE=avscan
+      # ICAP_TIMEOUT_SECONDS : délai maximal d'attente d'une réponse du
+      # serveur ICAP avant de considérer le scan comme indisponible.
+      - ICAP_TIMEOUT_SECONDS=30
+      # ICAP_TLS : true pour chiffrer la connexion au serveur ICAP (ICAPS).
+      - ICAP_TLS=false
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit

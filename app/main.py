@@ -36,6 +36,7 @@ import re
 import struct
 import threading
 import time
+import unicodedata
 import uuid
 import zipfile
 from contextlib import asynccontextmanager
@@ -44,6 +45,7 @@ from pathlib import Path
 
 import pymupdf as fitz  # PyMuPDF — alias 'fitz' conservé, 'import fitz' est déprécié
 import requests
+from antivirus import AntivirusUnavailableError, get_scanner, is_av_enforced
 from docx import Document as WordDocument
 from docx.oxml import parse_xml
 from docx.oxml.ns import qn
@@ -344,6 +346,27 @@ def _validate_docx_zip(raw: bytes) -> str:
     return "docx"
 
 
+def _strip_unicode_control_and_format_chars(value: str) -> str:
+    """
+    Retire tout caractère Unicode de catégorie "Other" (Cc/Cf/Co/Cs/Cn) d'une
+    chaîne d'origine non fiable (en-tête HTTP) avant qu'elle ne rejoigne un
+    job ou le journal d'audit.
+
+    Point de vigilance précis (vérifié empiriquement, voir section 3.5 de
+    l'audit) : `json.dumps(..., ensure_ascii=False)` neutralise déjà toute
+    tentative de forger une fausse ligne JSON (les caractères de contrôle
+    C0/C1, guillemets et antislashs sont échappés) — mais PAS les caractères
+    de formatage bidirectionnel Unicode (catégorie Cf, ex. U+202E "Right-to-
+    Left Override"), valides en UTF-8 et donc réécrits tels quels dans le
+    fichier ET dans la réponse JSON de `/api/audit`. Un tel caractère dans
+    `X-Auth-Request-Email` permettrait d'afficher ce champ dans un ordre
+    trompeur pour quiconque relit le journal (terminal ou UI d'audit) — pas
+    une faille d'intégrité du format, mais un risque de spoofing visuel sur
+    un journal dont la valeur repose justement sur sa lisibilité humaine.
+    """
+    return "".join(ch for ch in value if unicodedata.category(ch)[0] != "C")
+
+
 def _looks_like_text(raw: bytes, sample_size: int = 8192) -> bool:
     """Heuristique faible mais suffisante pour écarter un binaire arbitraire
     présenté comme un .csv : un CSV n'a pas de signature binaire propre, donc
@@ -361,6 +384,49 @@ def _looks_like_text(raw: bytes, sample_size: int = 8192) -> bool:
         except UnicodeDecodeError:
             continue
     return False
+
+
+def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
+    """
+    Scanne le fichier brut via le moteur configuré (voir antivirus.py) avant
+    tout parsing PDF/DOCX/CSV. AV_ENGINE=none (défaut) fait de ceci un no-op
+    silencieux (verdict toujours propre). Le comportement en cas de verdict
+    défavorable dépend d'AV_ENFORCE : blocage (HTTPException) ou simple
+    journalisation d'avertissement en mode observation — jamais un échec
+    silencieux, pour que le choix de laisser passer un fichier menacé reste
+    visible dans les logs.
+
+    `filename` (nom brut) n'est transmis qu'au moteur de scan lui-même
+    (utile pour certains moteurs qui se basent sur l'extension) ; seul
+    `filename_hash` apparaît dans les logs, comme partout ailleurs dans le
+    projet (journal d'audit compris) — un nom de fichier peut contenir une
+    donnée patient réelle.
+    """
+    try:
+        result = get_scanner().scan(raw, filename_hint=filename)
+    except AntivirusUnavailableError as exc:
+        if is_av_enforced():
+            raise HTTPException(
+                status_code=503,
+                detail="Le service d'analyse antivirus est indisponible, veuillez réessayer plus tard.",
+            ) from exc
+        log.warning(
+            "AV_ENFORCE=false : scan antivirus indisponible pour fichier %s, fichier traité quand même (%s)",
+            filename_hash, exc,
+        )
+        return
+
+    if not result.is_clean:
+        threat = result.threat_name or "menace inconnue"
+        if is_av_enforced():
+            raise HTTPException(
+                status_code=400,
+                detail=f"Menace détectée par l'antivirus ({threat}) — fichier rejeté.",
+            )
+        log.warning(
+            "AV_ENFORCE=false : menace détectée (%s) pour fichier %s, fichier traité quand même",
+            threat, filename_hash,
+        )
 
 
 def _detect_file_kind(raw: bytes) -> str:
@@ -483,6 +549,12 @@ def _cleanup_sweep_loop(interval_seconds: int = 60):
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- Démarrage ---
+    # Valide la config antivirus dès maintenant (AV_ENGINE inconnu, ICAP_HOST
+    # manquant, ICAP_PORT/ICAP_TIMEOUT_SECONDS non numériques...) : échec
+    # rapide et explicite au démarrage plutôt qu'un 500 générique sur la
+    # première requête /api/detect venue une fois en production.
+    get_scanner()
+
     # Rattrape immédiatement les fichiers laissés par un précédent process
     # (crash, redéploiement) avant même le premier tour de boucle périodique.
     _sweep_orphaned_files()
@@ -1828,6 +1900,10 @@ async def detect_document(
             detail=f"Fichier trop volumineux ({size_mb:.1f} Mo, max {MAX_UPLOAD_MB} Mo)",
         )
 
+    filename_hash = hashlib.sha256((file.filename or "").encode()).hexdigest()[:12]
+
+    _run_antivirus_scan(raw, file.filename or "", filename_hash)
+
     kind = _detect_file_kind(raw)
 
     # Quota global de jobs en attente de révision (indépendant du débit
@@ -1845,8 +1921,9 @@ async def detect_document(
     if theme and selected_theme is None:
         log.warning("Thème inconnu demandé (%r), poursuite sans thème", theme)
 
-    filename_hash = hashlib.sha256((file.filename or "").encode()).hexdigest()[:12]
-    user_email = request.headers.get("x-auth-request-email", "inconnu")
+    user_email = _strip_unicode_control_and_format_chars(
+        request.headers.get("x-auth-request-email", "inconnu")
+    )
     job_id = uuid.uuid4().hex
 
     if kind == "docx":
