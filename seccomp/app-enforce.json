@@ -53,6 +53,7 @@
         "gettid",
         "getuid",
         "ioctl",
+        "kill",
         "listen",
         "lseek",
         "madvise",

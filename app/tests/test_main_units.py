@@ -544,6 +544,47 @@ def test_detect_image_sans_texte_renvoie_liste_vide():
     assert main._detect_image(img) == []
 
 
+def test_tesseract_cmd_est_un_chemin_absolu_pas_une_recherche_path():
+    # Défense en profondeur contre un détournement de $PATH (voir main.py) :
+    # jamais la valeur par défaut de pytesseract ("tesseract" seul).
+    assert main.pytesseract.pytesseract.tesseract_cmd == "/usr/bin/tesseract"
+
+
+def test_run_ocr_sous_processus_reellement_tue_au_depassement_du_timeout(monkeypatch):
+    """
+    Vérifie le VRAI sous-processus tesseract (pas un mock) : avec un timeout
+    absurdement court, le sous-processus doit être terminé proprement
+    (SIGTERM/SIGKILL côté pytesseract, voir sa fonction kill()) et l'appelant
+    doit recevoir une erreur propre — jamais une requête bloquée
+    indéfiniment, jamais une trace brute. Reproduit le scénario qui a motivé
+    l'ajout de MAX_OCR_SECONDS : un `subprocess.Popen` sans borne de temps
+    peut tourner indéfiniment sur une image pathologique.
+    """
+    monkeypatch.setattr(main, "MAX_OCR_SECONDS", 0.001)
+    img = Image.new("RGB", (200, 200), (255, 255, 255))
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._run_ocr(img)
+    assert exc_info.value.status_code == 400
+    assert "temps imparti" in exc_info.value.detail
+
+
+def test_run_ocr_timeout_error_distinct_de_tesseract_error(monkeypatch):
+    """`TesseractError` hérite de `RuntimeError` — vérifie que le except
+    plus spécifique intercepte bien en premier (pas de faux message de
+    timeout pour une vraie erreur moteur)."""
+    def _raise_tesseract_error(*args, **kwargs):
+        raise main.pytesseract.TesseractError(1, "erreur moteur simulée")
+
+    monkeypatch.setattr(main.pytesseract, "image_to_data", _raise_tesseract_error)
+    img = Image.new("RGB", (10, 10), (255, 255, 255))
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._run_ocr(img)
+    assert exc_info.value.status_code == 400
+    assert "temps imparti" not in exc_info.value.detail
+
+
 def test_build_ocr_text_reconstruit_avec_offsets_corrects():
     words = [
         {"text": "Jean", "left": 0, "top": 0, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},

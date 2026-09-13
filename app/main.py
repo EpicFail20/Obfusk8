@@ -1168,6 +1168,25 @@ def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> l
 
 OCR_LANGUAGE = "fra"
 
+# Chemin absolu plutôt qu'une simple recherche dans $PATH (comportement par
+# défaut de pytesseract, `tesseract_cmd = "tesseract"`) : défense en
+# profondeur contre un détournement de PATH, même si le système de fichiers
+# racine en lecture seule (voir docker-compose.yml, `read_only: true`) rend
+# déjà ce vecteur impraticable — aucun répertoire de PATH n'est inscriptible
+# à l'exécution. Le paquet Debian `tesseract-ocr` (voir Dockerfile) installe
+# toujours le binaire à cet emplacement.
+pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
+
+# Premier chemin de code de cette application à lancer un sous-processus
+# (voir seccomp/README.md) : sans borne de temps explicite, un
+# `subprocess.Popen` bloquant peut tourner indéfiniment sur une image
+# pathologique/adversariale, contournant entièrement le filet
+# `_check_detection_deadline` (qui ne s'exécute qu'APRÈS le retour de
+# l'OCR) — même défaut de conception que celui déjà corrigé pour les appels
+# Presidio (`timeout=30` explicite dans `_analyze_text`), désormais
+# appliqué symétriquement ici.
+MAX_OCR_SECONDS = int(os.environ.get("MAX_OCR_SECONDS", "60"))
+
 
 def _open_and_validate_image(raw: bytes) -> "Image.Image":
     """
@@ -1221,15 +1240,31 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
     (accents), voir Dockerfile pour le paquet de données linguistiques.
     Échec fermé : toute erreur du moteur OCR est une erreur propre (jamais
     une trace brute), jamais un verdict "aucune détection" implicite.
+    `timeout=MAX_OCR_SECONDS` (voir plus haut) borne le sous-processus
+    `tesseract` : au-delà, pytesseract le termine proprement (SIGTERM puis
+    SIGKILL, voir sa fonction `kill()`) et lève une RuntimeError, jamais un
+    processus zombie ou une requête bloquée indéfiniment.
     """
     try:
-        data = pytesseract.image_to_data(img, lang=OCR_LANGUAGE, output_type=pytesseract.Output.DICT)
+        data = pytesseract.image_to_data(
+            img, lang=OCR_LANGUAGE, output_type=pytesseract.Output.DICT, timeout=MAX_OCR_SECONDS
+        )
     except pytesseract.TesseractNotFoundError as exc:
         log.error("Binaire tesseract introuvable : %s", exc)
         raise HTTPException(status_code=503, detail="Le moteur OCR est indisponible, veuillez réessayer plus tard.") from exc
     except pytesseract.TesseractError as exc:
         log.warning("Échec de l'OCR : %s", exc)
         raise HTTPException(status_code=400, detail="Cette image n'a pas pu être analysée par l'OCR.") from exc
+    except RuntimeError as exc:
+        # pytesseract lève une RuntimeError nue (pas TesseractError, capturée
+        # ci-dessus séparément bien qu'elle en hérite) avec le message fixe
+        # "Tesseract process timeout" en cas de dépassement — voir
+        # pytesseract.timeout_manager.
+        log.warning("Timeout OCR après %ss : %s", MAX_OCR_SECONDS, exc)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cette image est trop complexe pour être analysée par l'OCR dans le temps imparti (max {MAX_OCR_SECONDS}s).",
+        ) from exc
 
     words: list[dict] = []
     for i in range(len(data.get("text", []))):
