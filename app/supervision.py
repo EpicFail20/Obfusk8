@@ -26,6 +26,7 @@ import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
+from functools import lru_cache
 
 log = logging.getLogger("anonymiseur.supervision")
 
@@ -98,9 +99,31 @@ class SyslogAlertSink(AlertSink):
         self._logger.log(level, payload)
 
 
+@lru_cache(maxsize=1)
 def get_alert_sink() -> AlertSink:
-    """Point de configuration unique, même principe que get_scanner() pour
-    l'antivirus."""
+    """
+    Point de configuration unique, même principe que get_scanner() pour
+    l'antivirus.
+
+    Mis en cache (la config ne change jamais en cours de vie du conteneur) :
+    sans ce cache, chaque alerte reconstruisait un SyslogAlertSink complet
+    (nouveau socket + nouveau logger nommé enregistré indéfiniment par le
+    module logging — jamais garbage-collecté) — fuite mémoire/FD sans
+    borne, amplifiable par un attaquant capable de déclencher des alertes à
+    volonté (ex. uploads détectés comme menace). `lru_cache` ne met en
+    cache que les appels réussis (une exception n'est jamais mémorisée) :
+    une config valide reste donc mise en cache pour de bon, tandis qu'un
+    hôte syslog temporairement injoignable est retenté à chaque appel
+    suivant plutôt que de rester cassé pour toujours.
+
+    Ne PAS appeler `.send()` directement sur la valeur retournée sans
+    intercepter les exceptions côté appelant (voir `_send_alert` dans
+    main.py) : la construction d'un SyslogAlertSink peut lever (config
+    invalide, DNS injoignable, connexion refusée en TCP) ou, en TCP,
+    bloquer plusieurs secondes/minutes sur un `connect()` sans timeout si
+    l'hôte ne répond pas — une alerte ne doit jamais faire échouer ou geler
+    le flux qu'elle est censée surveiller.
+    """
     sink = os.environ.get("ALERT_SINK", "none").strip().lower()
 
     if sink == "none":

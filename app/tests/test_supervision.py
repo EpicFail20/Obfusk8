@@ -19,6 +19,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from supervision import Alert, AlertSeverity, NullAlertSink, SyslogAlertSink, get_alert_sink  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def _reset_alert_sink_cache():
+    """get_alert_sink() est mis en cache (@lru_cache) pour éviter de
+    reconstruire un socket à chaque alerte en production — mais ça veut
+    dire que d'un test à l'autre, sans ce fixture, tous les tests
+    récupéreraient l'instance du tout premier appel réussi, quelle que
+    soit la config ALERT_SINK simulée par chacun."""
+    get_alert_sink.cache_clear()
+    yield
+    get_alert_sink.cache_clear()
+
+
 @pytest.fixture
 def local_syslog_receiver():
     """Un vrai récepteur UDP local, pas un simulacre — reçoit ce que
@@ -94,3 +106,27 @@ def test_get_alert_sink_valeur_inconnue_leve_erreur(monkeypatch):
     monkeypatch.setenv("ALERT_SINK", "un_truc_qui_nexiste_pas")
     with pytest.raises(ValueError):
         get_alert_sink()
+
+
+def test_get_alert_sink_est_mis_en_cache(monkeypatch):
+    """Sans cache, chaque alerte reconstruirait un socket + un logger nommé
+    jamais nettoyé (fuite mémoire/FD) — voir revue de sécurité, section 10."""
+    monkeypatch.setenv("ALERT_SINK", "syslog")
+    monkeypatch.setenv("SYSLOG_HOST", "127.0.0.1")
+    monkeypatch.setenv("SYSLOG_PORT", "5140")
+    first = get_alert_sink()
+    second = get_alert_sink()
+    assert first is second
+
+
+def test_get_alert_sink_reessaie_apres_un_echec(monkeypatch):
+    """lru_cache ne mémorise jamais une exception : un hôte syslog
+    injoignable au premier appel ne doit pas empêcher un appel ultérieur
+    (une fois la config corrigée) de retenter la construction."""
+    monkeypatch.setenv("ALERT_SINK", "syslog")
+    monkeypatch.delenv("SYSLOG_HOST", raising=False)
+    with pytest.raises(RuntimeError):
+        get_alert_sink()
+
+    monkeypatch.setenv("SYSLOG_HOST", "127.0.0.1")
+    assert isinstance(get_alert_sink(), SyslogAlertSink)

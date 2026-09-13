@@ -166,3 +166,68 @@ def test_check_page_images_sane_rejects_zero_or_negative_dimensions(width, heigh
     with pytest.raises(HTTPException) as exc_info:
         main._check_page_images_sane(page)
     assert exc_info.value.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# _send_alert / _run_antivirus_scan — une alerte défaillante ne doit jamais
+# casser le flux principal qu'elle surveille (revue de sécurité, section 10
+# de plan_audit_consolide.md, même principe que la revue antivirus/ICAP)
+# ---------------------------------------------------------------------------
+
+class _FakeScanner:
+    def __init__(self, is_clean, threat_name=None):
+        self._is_clean = is_clean
+        self._threat_name = threat_name
+
+    def scan(self, raw, filename_hint=""):
+        from antivirus import ScanResult
+        return ScanResult(is_clean=self._is_clean, engine_name="fake", threat_name=self._threat_name)
+
+
+def _raising_alert_sink():
+    raise RuntimeError("ALERT_SINK mal configuré (simulé)")
+
+
+def test_send_alert_n_echoue_jamais_meme_si_get_alert_sink_leve(monkeypatch, caplog):
+    monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
+    main._send_alert(main.Alert(severity=main.AlertSeverity.WARNING, source="test", message="x"))  # ne doit pas lever
+
+
+def test_antivirus_indisponible_renvoie_503_meme_si_alerte_echoue(monkeypatch):
+    """Avant correctif : une exception dans get_alert_sink()/.send() empêchait
+    d'atteindre le HTTPException 503 attendu, remontant un 500 générique à la
+    place — masquant la vraie cause (antivirus indisponible)."""
+    monkeypatch.setattr(main, "get_scanner", lambda: (_ for _ in ()).throw(main.AntivirusUnavailableError("down")))
+    monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
+    monkeypatch.delenv("AV_ENFORCE", raising=False)  # défaut = bloquant
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
+    assert exc_info.value.status_code == 503
+
+
+def test_menace_detectee_renvoie_400_meme_si_alerte_echoue(monkeypatch):
+    monkeypatch.setattr(main, "get_scanner", lambda: _FakeScanner(is_clean=False, threat_name="EICAR-Test"))
+    monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
+    monkeypatch.delenv("AV_ENFORCE", raising=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
+    assert exc_info.value.status_code == 400
+    assert "EICAR-Test" in exc_info.value.detail
+
+
+def test_nom_de_menace_est_assaini_avant_reutilisation(monkeypatch):
+    """Même risque de spoofing visuel par caractère de formatage Unicode
+    (RTL override...) que celui trouvé et corrigé sur le journal d'audit
+    (3.5) — threat_name vient du serveur ICAP, pas du fichier uploadé, mais
+    assaini par précaution avant de rejoindre la réponse HTTP et le journal
+    syslog."""
+    threat_with_rtl_override = "Trojan‮exe.pdf"
+    monkeypatch.setattr(main, "get_scanner", lambda: _FakeScanner(is_clean=False, threat_name=threat_with_rtl_override))
+    monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
+    monkeypatch.delenv("AV_ENFORCE", raising=False)
+
+    with pytest.raises(HTTPException) as exc_info:
+        main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
+    assert "‮" not in exc_info.value.detail

@@ -164,6 +164,25 @@ def _reject(reason: str, status_code: int, detail: str) -> None:
     raise HTTPException(status_code=status_code, detail=detail)
 
 
+def _send_alert(alert: Alert) -> None:
+    """Point de passage unique pour toute alerte (voir supervision.py) —
+    intercepte TOUTE exception plutôt que de la laisser remonter, y
+    compris une config ALERT_SINK invalide (RuntimeError/ValueError) ou un
+    hôte syslog injoignable (DNS, connexion refusée). Sans ce filet, une
+    alerte échouée transformait par exemple un rejet antivirus proprement
+    géré (503/400) en 500 générique non intercepté, ou tuait
+    silencieusement et définitivement le thread `_cleanup_sweep_loop` (pas
+    de relance) — une alerte ne doit jamais faire échouer ou geler le flux
+    qu'elle est censée surveiller."""
+    try:
+        get_alert_sink().send(alert)
+    except Exception:
+        log.warning(
+            "Échec d'envoi d'une alerte (source=%s, sévérité=%s) — poursuite sans bloquer le flux principal",
+            alert.source, alert.severity.value, exc_info=True,
+        )
+
+
 def _check_detection_deadline(start_time: float) -> None:
     """Lève une HTTPException si la détection en cours dépasse
     MAX_DETECTION_SECONDS — à appeler avant chaque lot/page pour ne jamais
@@ -424,7 +443,7 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
         result = get_scanner().scan(raw, filename_hint=filename)
     except AntivirusUnavailableError as exc:
         metrics.AV_SCAN_RESULT.labels(verdict="indisponible").inc()
-        get_alert_sink().send(
+        _send_alert(
             Alert(
                 severity=AlertSeverity.WARNING,
                 source="antivirus",
@@ -445,9 +464,16 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
         return
 
     if not result.is_clean:
-        threat = result.threat_name or "menace inconnue"
+        # threat_name vient du serveur ICAP (en-tête X-Virus-ID/X-Infection-Found,
+        # voir antivirus.py) — pas directement du contenu du fichier uploadé dans
+        # un flux ICAP conforme, mais assaini par précaution avant de rejoindre le
+        # journal syslog et la réponse HTTP : même risque de spoofing visuel par
+        # caractère de formatage Unicode (RTL override...) que celui trouvé et
+        # corrigé sur le journal d'audit (3.5), pour toute source de texte externe
+        # au projet destinée à être relue par un humain.
+        threat = _strip_unicode_control_and_format_chars(result.threat_name or "menace inconnue")
         metrics.AV_SCAN_RESULT.labels(verdict="menace").inc()
-        get_alert_sink().send(
+        _send_alert(
             Alert(
                 severity=AlertSeverity.CRITICAL,
                 source="antivirus",
@@ -605,7 +631,7 @@ def _check_disk_space(volume: str, path: Path) -> None:
     details = {"volume": volume, "free_mb": round(free_mb, 1), "free_pct": round(free_pct, 1)}
 
     if free_pct < _DISK_CRITICAL_PCT or free_mb < _DISK_CRITICAL_MB:
-        get_alert_sink().send(
+        _send_alert(
             Alert(
                 severity=AlertSeverity.CRITICAL,
                 source="disk-space",
@@ -614,7 +640,7 @@ def _check_disk_space(volume: str, path: Path) -> None:
             )
         )
     elif free_pct < _DISK_WARNING_PCT or free_mb < _DISK_WARNING_MB:
-        get_alert_sink().send(
+        _send_alert(
             Alert(
                 severity=AlertSeverity.WARNING,
                 source="disk-space",
@@ -634,7 +660,7 @@ def _check_presidio_health(service: str, base_url: str) -> None:
         up = False
     metrics.PRESIDIO_UP.labels(service=service).set(1 if up else 0)
     if not up:
-        get_alert_sink().send(
+        _send_alert(
             Alert(
                 severity=AlertSeverity.WARNING,
                 source="presidio",
@@ -647,12 +673,22 @@ def _check_presidio_health(service: str, base_url: str) -> None:
 def _cleanup_sweep_loop(interval_seconds: int = 60):
     while True:
         time.sleep(interval_seconds)
-        _sweep_orphaned_files()
-        _sweep_stale_jobs()
-        for volume, path in _MONITORED_VOLUMES.items():
-            _check_disk_space(volume, path)
-        _check_presidio_health("analyzer", ANALYZER_URL)
-        _check_presidio_health("anonymizer", ANONYMIZER_URL)
+        # Ce thread est la seule chose qui purge les fichiers orphelins et les
+        # jobs de révision expirés (1.11/1.14) — une exception non rattrapée
+        # ici (ex. bug dans une vérification ajoutée plus tard) tuerait le
+        # thread silencieusement et POUR TOUJOURS (pas de relance), désactivant
+        # ce nettoyage jusqu'au prochain redémarrage du conteneur sans que
+        # personne ne le remarque. `_send_alert` intercepte déjà les échecs
+        # d'alerte eux-mêmes ; ce filet couvre tout le reste par précaution.
+        try:
+            _sweep_orphaned_files()
+            _sweep_stale_jobs()
+            for volume, path in _MONITORED_VOLUMES.items():
+                _check_disk_space(volume, path)
+            _check_presidio_health("analyzer", ANALYZER_URL)
+            _check_presidio_health("anonymizer", ANONYMIZER_URL)
+        except Exception:
+            log.error("Erreur inattendue dans la boucle de nettoyage périodique, tour ignoré", exc_info=True)
 
 
 @asynccontextmanager
@@ -663,6 +699,17 @@ async def lifespan(app: FastAPI):
     # rapide et explicite au démarrage plutôt qu'un 500 générique sur la
     # première requête /api/detect venue une fois en production.
     get_scanner()
+
+    # Idem pour la config d'alerting (ALERT_SINK) — mais contrairement à
+    # l'antivirus, une supervision mal configurée ne doit jamais empêcher le
+    # service principal (anonymisation, fonction critique) de démarrer :
+    # simple avertissement au démarrage, pas d'échec fatal. `_send_alert`
+    # retentera de toute façon la construction à la prochaine alerte
+    # (lru_cache ne mémorise pas les échecs, voir supervision.py).
+    try:
+        get_alert_sink()
+    except Exception:
+        log.error("Configuration ALERT_SINK invalide, alertes non fonctionnelles pour l'instant", exc_info=True)
 
     # Rattrape immédiatement les fichiers laissés par un précédent process
     # (crash, redéploiement) avant même le premier tour de boucle périodique.
