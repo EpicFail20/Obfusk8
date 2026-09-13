@@ -2429,9 +2429,10 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
 
     limitation_note = (
         '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
-        'border-radius:4px;">⚠️ Les zones de texte, formes, objets incrustés et SmartArt de ce '
-        "document ne sont pas analysés par ce moteur (limite technique connue de python-docx) — "
-        "à vérifier manuellement si le document en contient.</p>"
+        'border-radius:4px;">⚠️ Les images, zones de texte, formes, objets incrustés et SmartArt '
+        "de ce document ne sont pas analysés par ce moteur (limite technique connue de python-docx), "
+        "et il n'existe pour l'instant aucun outil de zone manuelle pour les caviarder ici "
+        "(contrairement au PDF) — à vérifier et traiter manuellement si le document en contient.</p>"
     )
     if truncated:
         limitation_note += (

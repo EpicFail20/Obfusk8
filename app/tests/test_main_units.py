@@ -14,6 +14,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main  # noqa: E402
+import pymupdf as fitz  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -231,3 +232,83 @@ def test_nom_de_menace_est_assaini_avant_reutilisation(monkeypatch):
     with pytest.raises(HTTPException) as exc_info:
         main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
     assert "‮" not in exc_info.value.detail
+
+
+# ---------------------------------------------------------------------------
+# Caviardage manuel d'une image PDF (_apply_manual_redactions) — la zone
+# tracée à la main sur une image doit être réellement irrécupérable dans le
+# fichier de sortie, pas seulement masquée visuellement. Promu en test
+# permanent (auparavant vérifié uniquement via un script jetable, voir
+# app/tests/fixtures/verification_scripts/probe_image_redaction.py et
+# plan_audit_consolide.md section 8) : exerce le VRAI point d'entrée du
+# projet plutôt qu'une réimplémentation du mécanisme PyMuPDF.
+# ---------------------------------------------------------------------------
+
+RED = (255, 0, 0)
+BLUE = (0, 0, 255)
+
+
+def _build_two_color_pdf() -> bytes:
+    """PDF à une page avec une image 200x200 : moitié haute rouge (à
+    caviarder), moitié basse bleue (à conserver telle quelle)."""
+    doc = fitz.open()
+    page = doc.new_page(width=400, height=400)
+    pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 200, 200))
+    pix.set_rect(fitz.IRect(0, 0, 200, 100), RED)
+    pix.set_rect(fitz.IRect(0, 100, 200, 200), BLUE)
+    page.insert_image(fitz.Rect(50, 50, 250, 250), pixmap=pix)
+    raw = doc.tobytes()
+    doc.close()
+    return raw
+
+
+def _color_present_in_any_image_object(pdf_bytes: bytes, target_rgb: tuple) -> bool:
+    """Balaie TOUS les objets image du document (pas seulement ceux
+    atteignables depuis l'arbre de pages courant) — même méthode que celle
+    qui avait révélé la fuite d'objets orphelins post-caviardage (section 7)."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        target = bytes(target_rgb)
+        for xref in range(1, doc.xref_length()):
+            if not doc.xref_is_image(xref):
+                continue
+            try:
+                raw_img = doc.extract_image(xref)["image"]
+                ipix = fitz.Pixmap(raw_img)
+                if ipix.colorspace is None or ipix.colorspace.n < 3:
+                    ipix = fitz.Pixmap(fitz.csRGB, ipix)
+                elif ipix.alpha:
+                    ipix = fitz.Pixmap(ipix, 0)
+            except Exception:
+                continue
+            samples, n = ipix.samples, ipix.n
+            if any(samples[i:i + 3] == target for i in range(0, len(samples) - n + 1, n)):
+                return True
+    finally:
+        doc.close()
+    return False
+
+
+def test_zone_manuelle_sur_image_pdf_est_irrecuperable():
+    raw = _build_two_color_pdf()
+    assert _color_present_in_any_image_object(raw, RED)
+    assert _color_present_in_any_image_object(raw, BLUE)
+
+    # Zone manuelle en coordonnées d'aperçu (display_rect = coordonnées PDF *
+    # PREVIEW_ZOOM), couvrant uniquement la moitié ROUGE de l'image insérée.
+    zone = {
+        "page": 0,
+        "rect": [
+            50 * main.PREVIEW_ZOOM, 50 * main.PREVIEW_ZOOM,
+            250 * main.PREVIEW_ZOOM, 150 * main.PREVIEW_ZOOM,
+        ],
+    }
+    doc = fitz.open(stream=raw, filetype="pdf")
+    manual_count = main._apply_manual_redactions(doc, [zone])
+    main._wipe_pdf_metadata(doc)
+    out_bytes = doc.tobytes(garbage=4, clean=True, deflate=True)
+    doc.close()
+
+    assert manual_count == 1
+    assert not _color_present_in_any_image_object(out_bytes, RED), "le rouge caviardé est encore récupérable"
+    assert _color_present_in_any_image_object(out_bytes, BLUE), "le bleu non caviardé a disparu à tort"
