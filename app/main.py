@@ -32,6 +32,7 @@ gestion d'erreurs minimale. Suffisant pour valider le fonctionnel avant un
 import csv
 import hashlib
 import base64
+import hmac
 import html
 import io
 import json
@@ -839,6 +840,98 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 MAX_REQUEST_BODY_BYTES = (MAX_UPLOAD_MB + 2) * 1024 * 1024
 
 
+# ---------------------------------------------------------------------------
+# Section 3.7 : secret partagé passerelle (Traefik -> app)
+# ---------------------------------------------------------------------------
+# `app` faisait confiance à `X-Auth-Request-Email` (journal d'audit ET
+# contrôle de propriétaire des jobs, section 1.38) sans jamais vérifier que
+# la requête avait bien traversé Traefik -> oauth2-proxy. Un client externe
+# ne peut pas forger cet en-tête (Traefik le supprime et le remplace avant le
+# forwardAuth), MAIS un conteneur du même réseau Docker que `app`
+# (`app-internal` OU `backend` : presidio, ou un voisin compromis/malveillant)
+# peut joindre `app:8000` DIRECTEMENT, en contournant Traefik entièrement, et
+# forger l'en-tête de toutes pièces. Vérifié empiriquement : contournement
+# confirmé de bout en bout (une entrée d'audit `admin@usurpe.fr` a été écrite
+# via un conteneur voisin sans jamais passer par oauth2-proxy).
+#
+# Parade (même principe que les secrets déjà en place) : un secret partagé,
+# connu de Traefik seul et de `app`. Traefik l'injecte, en écrasant toute
+# valeur cliente, sur toute requête routée vers `app` ; `app` le vérifie ICI,
+# AVANT tout traitement, à temps constant (hmac.compare_digest, jamais ==).
+# Absent ou incorrect -> 401 immédiat, avant même de lire X-Auth-Request-Email.
+#
+# Le secret est monté en Docker secret (`/run/secrets/gateway_secret`, même
+# convention que oauth2_*), jamais en clair dans docker-compose.yml. Traefik
+# l'injecte via un fichier de configuration dynamique gitignoré
+# (`traefik/dynamic/gateway-secret.yml`), rendu par generate-secrets.sh à
+# partir de la MÊME valeur.
+#
+# Désactivé (no-op) si aucun secret n'est configuré — dev/test locaux, où
+# aucun /run/secrets n'est monté. Un avertissement explicite est journalisé
+# au démarrage dans ce cas ; jamais un contournement silencieux en production.
+GATEWAY_SECRET_HEADER = b"x-internal-gateway-secret"
+
+
+def _read_gateway_secret() -> str:
+    # Surcharge directe par variable d'env (tests) ; sinon lecture du Docker
+    # secret monté par Docker au démarrage. Absent -> chaîne vide -> désactivé.
+    direct = os.environ.get("GATEWAY_SECRET")
+    if direct is not None:
+        return direct.strip()
+    path = os.environ.get("GATEWAY_SECRET_FILE", "/run/secrets/gateway_secret")
+    try:
+        return Path(path).read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+
+GATEWAY_SECRET = _read_gateway_secret()
+
+if not GATEWAY_SECRET:
+    log.warning(
+        "Secret passerelle (section 3.7) NON configuré : la vérification de "
+        "X-Internal-Gateway-Secret est DÉSACTIVÉE. Attendu uniquement en "
+        "dev/test. En production, générer et monter le Docker secret "
+        "`gateway_secret` (generate-secrets.sh) — sinon un conteneur voisin "
+        "du même réseau Docker peut joindre `app` directement, hors Traefik, "
+        "et forger X-Auth-Request-Email."
+    )
+
+
+class _GatewaySecretMiddleware:
+    """Vérifie le secret partagé injecté par Traefik (section 3.7) AVANT tout
+    traitement de requête — donc avant que le moindre endpoint ne lise
+    `X-Auth-Request-Email`. `/health` est exempté : un HEALTHCHECK Docker
+    éventuel interroge le conteneur en loopback, pas via Traefik, et ne doit
+    pas se mettre à échouer à cause de ce contrôle. Comparaison à temps
+    constant. No-op si aucun secret configuré (voir GATEWAY_SECRET)."""
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.asgi_app(scope, receive, send)
+            return
+
+        secret = GATEWAY_SECRET  # lu à chaque requête (surchargeable en test)
+        if secret and scope.get("path") != "/health":
+            provided = b""
+            for name, value in scope.get("headers", []):
+                if name == GATEWAY_SECRET_HEADER:
+                    provided = value
+                    break
+            if not hmac.compare_digest(provided, secret.encode("utf-8")):
+                response = await http_exception_handler(
+                    Request(scope),
+                    HTTPException(status_code=401, detail="Requête non autorisée"),
+                )
+                await response(scope, receive, send)
+                return
+
+        await self.asgi_app(scope, receive, send)
+
+
 class RequestBodyTooLarge(HTTPException):
     def __init__(self):
         super().__init__(
@@ -969,8 +1062,13 @@ class _SecurityHeadersMiddleware:
 
 
 # Ordre : le dernier ajouté est le plus externe. Les en-têtes doivent envelopper
-# aussi la réponse 413 émise directement par le plafond de taille.
+# aussi la réponse 413 émise directement par le plafond de taille ET la réponse
+# 401 de la passerelle (section 3.7). La vérification du secret passerelle
+# s'exécute AVANT le plafond de corps (inutile de tamponner le corps d'un
+# appelant non autorisé) mais SOUS les en-têtes de sécurité (qui enveloppent
+# donc aussi son 401).
 app.add_middleware(_RequestBodyLimitMiddleware)
+app.add_middleware(_GatewaySecretMiddleware)
 app.add_middleware(_SecurityHeadersMiddleware)
 
 

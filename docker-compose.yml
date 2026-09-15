@@ -37,6 +37,14 @@ secrets:
     file: ./secrets/oauth2_cookie_secret.txt
   keycloak_admin_password:
     file: ./secrets/keycloak_admin_password.txt
+  # Secret partagé passerelle (audit 3.7) : connu de Traefik (injecté via le
+  # fichier dynamique gitignoré traefik/dynamic/gateway-secret.yml) et de
+  # `app` (vérifié par le middleware _GatewaySecretMiddleware). Empêche un
+  # conteneur voisin du même réseau Docker de joindre `app` en contournant
+  # Traefik/oauth2-proxy et de forger X-Auth-Request-Email. Généré par
+  # generate-secrets.sh, jamais en clair ici.
+  gateway_secret:
+    file: ./secrets/gateway_secret.txt
 
 services:
 
@@ -339,6 +347,11 @@ services:
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
       - /var/log/anonymiseur-audit:/data/audit
+    # Secret partagé passerelle (audit 3.7), monté par Docker en
+    # /run/secrets/gateway_secret (chemin par défaut lu par main.py). Vérifié
+    # par _GatewaySecretMiddleware avant tout traitement de requête.
+    secrets:
+      - gateway_secret
     networks:
       - app-internal
       - backend
@@ -348,7 +361,7 @@ services:
       - "traefik.http.routers.app-upload.tls=true"
       - "traefik.http.routers.app-upload.priority=100"
       - "traefik.http.routers.app.priority=1"
-      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-bodylimit"
+      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-upload.service=app"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
@@ -374,7 +387,7 @@ services:
       - "traefik.http.routers.app-preview.entrypoints=websecure"
       - "traefik.http.routers.app-preview.tls=true"
       - "traefik.http.routers.app-preview.priority=100"
-      - "traefik.http.routers.app-preview.middlewares=oauth2-errors,oidc-auth,preview-ratelimit"
+      - "traefik.http.routers.app-preview.middlewares=oauth2-errors,oidc-auth,preview-ratelimit,gateway-secret@file"
       - "traefik.http.routers.app-preview.service=app"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
@@ -391,10 +404,10 @@ services:
       - "traefik.http.routers.app-metrics.entrypoints=websecure"
       - "traefik.http.routers.app-metrics.tls=true"
       - "traefik.http.routers.app-metrics.priority=100"
-      - "traefik.http.routers.app-metrics.middlewares=metrics-allowlist"
+      - "traefik.http.routers.app-metrics.middlewares=metrics-allowlist,gateway-secret@file"
       - "traefik.http.routers.app-metrics.service=app"
       - "traefik.http.middlewares.metrics-allowlist.ipallowlist.sourcerange=127.0.0.1/32"
-      - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth"
+      - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth,gateway-secret@file"
       - "traefik.docker.network=anonymiseur_app-internal"
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"

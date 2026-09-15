@@ -43,8 +43,46 @@ prompt_secret() {
     echo "  -> $target_file écrit (600)."
 }
 
+# -----------------------------------------------------------------------------
+# Secret partagé passerelle (audit 3.7) : connu de Traefik seul et de `app`.
+# Traefik l'injecte (en écrasant toute valeur cliente) sur toute requête
+# routée vers `app` via un fichier de configuration dynamique ; `app` le
+# vérifie avant tout traitement. Empêche un conteneur voisin du même réseau
+# Docker de joindre `app` directement, hors Traefik, et de forger
+# X-Auth-Request-Email. La valeur doit être IDENTIQUE des deux côtés : on la
+# génère une seule fois dans le Docker secret, puis on rend le fichier
+# dynamique Traefik à partir de cette même valeur.
+GATEWAY_DYNAMIC_FILE="./traefik/dynamic/gateway-secret.yml"
+
+render_gateway_dynamic() {
+    local secret_file="$1"
+    local value
+    value="$(cat "$secret_file")"
+    mkdir -p "$(dirname "$GATEWAY_DYNAMIC_FILE")"
+    umask 077
+    cat > "$GATEWAY_DYNAMIC_FILE" <<EOF
+# Fichier GÉNÉRÉ par generate-secrets.sh — NE PAS COMMITER (gitignoré).
+# Contient le secret partagé passerelle (audit 3.7) en clair. Traefik l'injecte
+# sur toutes les requêtes routées vers \`app\` (middleware gateway-secret@file,
+# référencé par les routeurs app/app-upload/app-preview/app-metrics), en
+# écrasant toute valeur fournie par un client. Doit correspondre EXACTEMENT à
+# $secret_file (même valeur, générée en même temps). Régénérer les DEUX
+# ensemble via ce script après toute rotation.
+http:
+  middlewares:
+    gateway-secret:
+      headers:
+        customRequestHeaders:
+          X-Internal-Gateway-Secret: "$value"
+EOF
+    chmod 600 "$GATEWAY_DYNAMIC_FILE"
+    echo "  -> $GATEWAY_DYNAMIC_FILE rendu (600) à partir de $secret_file."
+}
+
 echo "== Secrets générés automatiquement =="
 generate_random_secret "$SECRETS_DIR/oauth2_cookie_secret.txt"
+generate_random_secret "$SECRETS_DIR/gateway_secret.txt"
+render_gateway_dynamic "$SECRETS_DIR/gateway_secret.txt"
 
 echo
 echo "== Secrets à saisir manuellement (valeurs existantes, ex: client secret Keycloak/Entra) =="

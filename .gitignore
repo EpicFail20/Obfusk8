@@ -33,3 +33,7 @@ secrets/
 *.jpg
 *.jpeg
 !app/tests/fixtures/**
+
+# --- Secret passerelle Traefik (audit 3.7) : rendu par generate-secrets.sh,
+#     contient le secret en clair, ne jamais versionner ---
+traefik/dynamic/gateway-secret.yml

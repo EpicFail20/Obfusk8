@@ -110,7 +110,7 @@ Ce qui manquait réellement, découvert par observation répétée (6 exécution
 | 3.4 | Injection de formule CSV | ✅ Implémenté et testé (`_neutralize_csv_formula`, appliqué à toutes les cellules de sortie) |
 | 3.5 | Injection dans le journal d'audit (log injection) | ✅ **Testé empiriquement et corrigé** — voir détail ci-dessous |
 | 3.6 | ReDoS (regex des recognizers) | ✅ Testé sur les 6 regex candidats avec des entrées adverses croissantes (100 à 50 000 caractères) : 5 restent linéaires, mais les motifs **IEP/IPP** (`0+\d{7,}`) montrent une croissance quadratique confirmée (2,7s à 20 000 caractères, extrapolé à ~70s à 100 000 — taille de cellule CSV plausible) — corrigé (`0+\d{7,}` → `0\d{7,}`), équivalence fonctionnelle vérifiée, reste linéaire jusqu'à 500 000 caractères |
-| 3.7 | En-tête `X-Auth-Request-Email` usurpable si contournement du proxy | ⏳ Jamais retesté activement, reporté au pentest |
+| 3.7 | En-tête `X-Auth-Request-Email` usurpable si contournement du proxy | ✅ **Contournement confirmé empiriquement, corrigé et déployé** (voir 11quinquies) : un conteneur voisin du même réseau Docker joignait `app:8000` directement, hors Traefik, et forgeait l'en-tête (entrée d'audit `admin@usurpe.fr` écrite sans authentification). Parade : secret partagé passerelle (Docker secret + injection Traefik), vérifié avant tout traitement. **Déployé sur autorisation explicite : `app` recréé, Traefik a rechargé à chaud le fichier dynamique ; accès direct depuis un voisin = 401, chaîne Traefik→auth intacte (302)** |
 | 3.8 | Fichier malveillant (virus/malware) uploadé, indépendamment de tout parsing PDF/DOCX/CSV | 🟡 Scan antivirus ICAP ajouté en amont du parsing, **désactivé par défaut** (`AV_ENGINE=none`) — voir section 9 pour le détail et les réserves |
 
 **Détail 3.5 — injection dans le journal d'audit (`_record_audit_event`)** : seul un champ traverse ce point d'écriture sans être ni un identifiant généré serveur (`job_id`, uuid4 hex) ni contraint à un ensemble connu (`format`, `theme`) ni numérique — le champ `user`, alimenté par l'en-tête HTTP `X-Auth-Request-Email` (voir 3.7 pour la question distincte de savoir qui peut réellement en contrôler la valeur). Reproduction fidèle de `_record_audit_event` testée avec des payloads adverses sur ce champ (retour à la ligne LF/CRLF suivi d'un faux objet JSON, évasion par guillemet/antislash, séquence d'échappement ANSI, octet NUL, valeur de 200 000 caractères) :
@@ -454,7 +454,7 @@ Depuis le support image (section 11), `app` peut créer des sous-processus ; en 
 
 ### Ce qui a été vérifié sans trouver de problème
 
-Traefik : `forwardAuth` supprime puis remplace `X-Auth-Request-*` depuis la réponse d'oauth2-proxy (un client authentifié ne peut pas usurper l'email d'un autre à travers le proxy — le 3.7 reste limité au cas d'un contournement du proxy) ; `ipallowlist`/`ratelimit` utilisent `RemoteAddr` par défaut, pas `X-Forwarded-For` ; pas de dashboard/API Traefik exposés ; l'erreur `middleware "oidc-auth@docker" does not exist` vue dans les logs à chaque démarrage est transitoire (oauth2-proxy attend Keycloak) et **ferme** les routeurs concernés (404) pendant ce laps de temps plutôt que de les ouvrir sans authentification — comportement Traefik vérifié, sûr par construction. Hôte : `unattended-upgrades` actif ; ports exposés limités à 22/80/443/8080 (ce dernier = console Keycloak, lab) ; Docker 29.8.0 ; `.env` et `secrets/` ignorés par git et jamais présents dans l'historique (vérifié `git log --all`) ; aucun secret réel dans les `.cfg`/`.bak` versionnés. Code : aucun `shell=True`/`eval`/URL externe dans les gabarits ; `download` valide strictement le `job_id` ; `/api/audit` borné ; les détails d'erreur interpolés ne contiennent que des nombres ou des constantes, hors le cas 11ter.4.
+Traefik : `forwardAuth` supprime puis remplace `X-Auth-Request-*` depuis la réponse d'oauth2-proxy (un client authentifié ne peut pas usurper l'email d'un autre à travers le proxy) ; le cas du **contournement du proxy** (3.7), lui, a été testé activement et s'est révélé exploitable — désormais corrigé, voir 11quinquies ; `ipallowlist`/`ratelimit` utilisent `RemoteAddr` par défaut, pas `X-Forwarded-For` ; pas de dashboard/API Traefik exposés ; l'erreur `middleware "oidc-auth@docker" does not exist` vue dans les logs à chaque démarrage est transitoire (oauth2-proxy attend Keycloak) et **ferme** les routeurs concernés (404) pendant ce laps de temps plutôt que de les ouvrir sans authentification — comportement Traefik vérifié, sûr par construction. Hôte : `unattended-upgrades` actif ; ports exposés limités à 22/80/443/8080 (ce dernier = console Keycloak, lab) ; Docker 29.8.0 ; `.env` et `secrets/` ignorés par git et jamais présents dans l'historique (vérifié `git log --all`) ; aucun secret réel dans les `.cfg`/`.bak` versionnés. Code : aucun `shell=True`/`eval`/URL externe dans les gabarits ; `download` valide strictement le `job_id` ; `/api/audit` borné ; les détails d'erreur interpolés ne contiennent que des nombres ou des constantes, hors le cas 11ter.4.
 
 **Non-régression** : **112/112 tests** (103 préexistants + 9 nouveaux) dans le conteneur en blocage réel (`docker compose run app pytest tests/`, profil `app-enforce.json`, `pids: 256`). **Déployé sur autorisation explicite de l'utilisateur** : `app` recréé (image reconstruite ; `PidsLimit=256`, `CapDrop=ALL`, rootfs en lecture seule vérifiés), `oauth2-proxy` recréé deux fois (durcissement + `cookie_samesite`, puis `maxResponseBodySize`), Traefik non touché (relecture dynamique des labels). Vérifications post-déploiement : `/` et `/api/detect` via Traefik → 302 vers la connexion ; sur le conteneur vivant depuis le réseau interne : `Content-Length: 200 Mo` → 413, en-têtes de sécurité présents, aperçu d'un job inconnu → 404 ; aucun avertissement Traefik résiduel hors l'erreur transitoire `oidc-auth does not exist` pendant les quelques secondes de recréation d'oauth2-proxy (fail-closed, voir plus haut).
 
@@ -488,6 +488,45 @@ Traefik : `forwardAuth` supprime puis remplace `X-Auth-Request-*` depuis la rép
 
 ---
 
+## 11quinquies. Contournement de Traefik confirmé sur le point 3.7 — ✅ corrigé et testé, service vivant NON redémarré
+
+### 11quinquies.1 — Phase 1 : vérification empirique du contournement (confirmé)
+
+**Question ouverte du 3.7** : un client externe ne peut pas usurper `X-Auth-Request-Email` (Traefik le remplace avant le `forwardAuth`), mais un conteneur du **même réseau Docker** que `app` peut-il joindre `app` **directement**, hors Traefik, avec un en-tête forgé ? Jamais testé jusqu'ici.
+
+**Constaté empiriquement (conteneur `curl` jetable attaché aux réseaux de `app`)** :
+
+- `app` est connecté à **deux** réseaux : `app-internal` (avec oauth2-proxy, keycloak, traefik) **et** `backend` (avec `presidio-analyzer`/`presidio-anonymizer`). Un voisin sur **l'un ou l'autre** peut donc l'atteindre.
+- Le port 8000 de `app` n'est **pas** publié sur l'hôte (`docker port` vide, rien en écoute côté hôte) — le vecteur est strictement inter-conteneurs, pas l'hôte.
+- Depuis les deux réseaux, `GET http://app:8000/api/audit` répond **200** sans aucune authentification (oauth2-proxy entièrement contourné).
+- Chaîne complète rejouée : `POST /api/detect` puis `POST /api/finalize` avec `X-Auth-Request-Email: admin@usurpe.fr`, sans Traefik → **200**, et l'entrée écrite dans le journal d'audit porte `"user":"admin@usurpe.fr"`. **Contournement confirmé de bout en bout** : n'importe quel conteneur voisin compromis peut agir sous une identité forgée et polluer le journal d'audit comme le contrôle de propriétaire des jobs (1.38).
+
+### 11quinquies.2 — Phase 2 : correctif (secret partagé passerelle)
+
+Même principe que les secrets déjà en place : un secret connu de **Traefik seul et de `app`**.
+
+- **Nouveau Docker secret** `secrets/gateway_secret.txt` (aléatoire, `openssl rand -base64 32`, même convention que `oauth2_*`), gitignoré, généré par `generate-secrets.sh` (fonction ajoutée).
+- **Traefik** injecte `X-Internal-Gateway-Secret` sur **toute** requête routée vers `app` (les 4 routeurs : `app`, `app-upload`, `app-preview`, `app-metrics`), via un **fichier de configuration dynamique gitignoré** (`traefik/dynamic/gateway-secret.yml`) rendu par le même script à partir de la même valeur — jamais en clair dans `docker-compose.yml`. `customRequestHeaders` **écrase** toute valeur fournie par le client : un attaquant externe ne peut pas la fournir lui-même à travers Traefik.
+- **`app`** (`main.py`, `_GatewaySecretMiddleware`) : middleware ASGI exécuté **avant** tout traitement (avant même le plafond de corps et avant toute lecture de `X-Auth-Request-Email`), comparaison à **temps constant** (`hmac.compare_digest`). Absent/incorrect → **401 immédiat**.
+- **`/health` exempté** (un `HEALTHCHECK` Docker interroge en loopback, pas via Traefik). Aucun `HEALTHCHECK` n'existe aujourd'hui (ni Dockerfile ni conteneur), l'exemption est une garantie défensive documentée pour un futur ajout.
+- **`/metrics`** est concerné comme le reste (Traefik injecte le secret sur son routeur) — en **complément** de l'`ipallowlist` (1.10), pas à sa place.
+- **Fail-safe explicite** : si aucun secret n'est configuré (dev/test, pas de `/run/secrets` monté), le middleware est un no-op **et** un avertissement est journalisé au démarrage — jamais un contournement silencieux en production.
+
+### 11quinquies.3 — Tests (tous verts, service vivant non redémarré)
+
+Méthode habituelle du projet : reproduction sur conteneur jetable identique au service (`--security-opt seccomp=seccomp/app-enforce.json --cap-drop ALL --read-only --security-opt no-new-privileges:true`, réseau `backend` pour le Presidio réel), test qui **échoue sur l'ancien code** puis **passe après**. Image reconstruite, testée isolément (`docker run`, **pas** `docker compose run` — évite la recréation des services vivants dont la config a dérivé).
+
+- **Suite complète** : `120/120` (6 nouveaux tests passerelle inclus) sous le profil seccomp d'enforcement.
+- **Démonstration échec-avant/passe-après** : les 6 tests passerelle rejoués sur `HEAD:app/main.py` monté par-dessus la nouvelle image → **6 échecs** (pas de middleware) ; sur le nouveau code → **6 succès**.
+- **Rejeu comportemental réel** (nouvelle image en conteneur isolé, secret monté en `/run/secrets/gateway_secret`, requêtes depuis un voisin sur `backend`) :
+  - contournement de la Phase 1 (`GET /api/audit` et `POST /api/detect` sans secret, en-tête email forgé) → **401** (passait à 200 avant) ;
+  - secret incorrect → **401** ;
+  - secret correct injecté comme le ferait Traefik → **200** (`/api/detect` va au bout, détection Presidio incluse) — **chemin légitime non dégradé** ;
+  - `/health` sans secret → **200** (exemption confirmée).
+- `docker compose config` valide ; le fichier dynamique Traefik est du YAML valide dont la valeur est identique au Docker secret.
+
+**Déployé** (sur autorisation explicite de l'utilisateur) : `docker-compose.yml`, `main.py`, `generate-secrets.sh`, `.gitignore` modifiés ; `secrets/gateway_secret.txt` et `traefik/dynamic/gateway-secret.yml` générés (valeurs identiques vérifiées) ; image `app` reconstruite ; `app` recréé (`docker compose up -d app traefik` — seul `app` a été recréé, les autres services non touchés). Traefik n'a **pas** eu besoin d'être recréé : son file provider (`--providers.file.watch=true`) a chargé à chaud le nouveau middleware `gateway-secret@file` sans erreur. **Vérifications post-déploiement** : `app` sur la nouvelle image, secret monté (`/run/secrets/gateway_secret`, 44 octets), démarrage propre sans l'avertissement « secret non configuré » ; accès direct à `app:8000` depuis un voisin (`backend`) avec email forgé → **401** (passait à 200 avant) ; `/health` direct → **200** ; chemin légitime via Traefik (`Host: anonymiseur.lab.local`, non authentifié) → **302** vers la connexion, ce qui confirme que le routeur `app` et toute sa chaîne de middlewares (dont `gateway-secret@file`) se résolvent et que la chaîne d'authentification est intacte. Les 7 services tournent, presidio/keycloak/etc. `healthy`.
+
 ## 12. Tests différés au pentest final
 
 - Vérification active du correctif `FileResponse`/`Range` (1.22) — jamais exécutée
@@ -520,6 +559,7 @@ Traefik : `forwardAuth` supprime puis remplace `X-Auth-Request-*` depuis la rép
 17. **Exercer le plafond Traefik `upload-bodylimit` et le rate limiting `app-preview` avec une vraie session OIDC** (impossible sans identifiants Keycloak dans cette session) — à faire au pentest ou lors d'un prochain test manuel ; le plafond applicatif équivalent, lui, est vérifié
 18. Décider du point 1.39 (`trusted_proxy_ip` d'oauth2-proxy) au moment de la bascule Entra ID, quand oauth2-proxy changera de réseau
 19. ~~Redéployer les correctifs préparés en 11quater~~ — **fait**, sur demande explicite de l'utilisateur : commit `e82c129`, 5 services recréés, revérifiés vivants (noexec, en-têtes, chaîne Traefik→auth). Reste ouvert, hors périmètre de cette passe : **`/data/tmp`/`/data/audit` (bind mounts hôte) sans `noexec`** (11quater.1)
+20. ~~Redéployer le correctif du contournement 3.7 (11quinquies)~~ — **fait** sur autorisation explicite : image `app` reconstruite, `app` recréé, Traefik a chargé à chaud le fichier dynamique. Vérifié vivant : contournement direct depuis un voisin → 401, `/health` → 200, chaîne Traefik→auth intacte (302). Le `app` en production n'est plus vulnérable au contournement inter-conteneurs du 3.7.
 
 ### Leçons méthodologiques cumulées
 

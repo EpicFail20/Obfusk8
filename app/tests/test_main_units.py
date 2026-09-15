@@ -1222,3 +1222,107 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
         assert resp.status_code == 200
     finally:
         main.PENDING_JOBS.pop(job_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Section 3.7 : secret partagé passerelle (Traefik -> app).
+#
+# Le contournement (un conteneur voisin du même réseau Docker joint `app`
+# directement, hors Traefik, et forge X-Auth-Request-Email) a été confirmé
+# empiriquement. `_GatewaySecretMiddleware` exige, avant tout traitement, un
+# secret que seul Traefik connaît et injecte. Ces tests traversent la pile
+# ASGI COMPLÈTE via `_asgi_request`, exactement le niveau où le middleware
+# agit. Le secret est surchargé par attribut de module (lu à chaque requête).
+# ---------------------------------------------------------------------------
+_GATEWAY_TEST_SECRET = "s3cr3t-passerelle-de-test"
+
+
+def test_gateway_requete_sans_le_secret_rejetee_401(monkeypatch):
+    """Un appelant qui n'a pas traversé Traefik (donc sans le secret injecté)
+    est rejeté 401 avant même d'atteindre le code qui lit
+    X-Auth-Request-Email — c'est précisément le contournement de la Phase 1."""
+    monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
+    status, _headers, _body, consumed = _asgi_request(
+        "POST", "/api/detect",
+        headers={"x-auth-request-email": "admin@usurpe.fr"},
+    )
+    assert status == 401
+    assert consumed == 0, "le corps ne doit même pas commencer à être lu pour un 401 passerelle"
+
+
+def test_gateway_requete_secret_incorrect_rejetee_401(monkeypatch):
+    """Un secret présent mais faux est rejeté (comparaison à temps constant)."""
+    monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
+    status, _headers, _body, _consumed = _asgi_request(
+        "GET", "/",
+        headers={"x-internal-gateway-secret": "mauvais-secret"},
+    )
+    assert status == 401
+
+
+def _drive_gateway(path, headers=None, secret=_GATEWAY_TEST_SECRET, monkeypatch=None):
+    """Pilote `_GatewaySecretMiddleware` seul, autour d'un applicatif interne
+    trivial (une réponse 200 en une étape). Isole la logique du middleware du
+    routage FastAPI (les endpoints synchrones comme `/` ou `/health` passent
+    par un threadpool que `_drive` ne peut pas traverser). Renvoie
+    (statut, applicatif_interne_atteint)."""
+    if monkeypatch is not None:
+        monkeypatch.setattr(main, "GATEWAY_SECRET", secret)
+    reached = {"v": False}
+
+    async def inner(scope, receive, send):
+        reached["v"] = True
+        await send({"type": "http.response.start", "status": 200, "headers": []})
+        await send({"type": "http.response.body", "body": b"inner-ok"})
+
+    mw = main._GatewaySecretMiddleware(inner)
+    raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    scope = {"type": "http", "path": path, "headers": raw_headers,
+             "method": "GET", "query_string": b""}
+    sent = []
+
+    async def receive():
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    async def send(message):
+        sent.append(message)
+
+    _drive(mw(scope, receive, send))
+    status = next(m["status"] for m in sent if m["type"] == "http.response.start")
+    return status, reached["v"]
+
+
+def test_gateway_requete_secret_correct_passe(monkeypatch):
+    """Le chemin légitime (Traefik injecte le bon secret) traverse le middleware
+    jusqu'à l'applicatif : aucune dégradation pour un utilisateur normal."""
+    status, reached = _drive_gateway(
+        "/api/detect", {"x-internal-gateway-secret": _GATEWAY_TEST_SECRET}, monkeypatch=monkeypatch,
+    )
+    assert status == 200
+    assert reached is True
+
+
+def test_gateway_health_exempte_meme_sans_secret(monkeypatch):
+    """/health reste accessible sans le secret : un HEALTHCHECK Docker éventuel
+    interroge le conteneur en loopback, pas via Traefik."""
+    status, reached = _drive_gateway("/health", headers={}, monkeypatch=monkeypatch)
+    assert status == 200
+    assert reached is True, "/health doit atteindre l'applicatif même sans le secret"
+
+
+def test_gateway_desactive_si_aucun_secret_configure(monkeypatch):
+    """Sans secret configuré (dev/test, aucun /run/secrets monté), le middleware
+    est un no-op : la compatibilité du reste de la suite est préservée."""
+    status, reached = _drive_gateway("/api/detect", headers={}, secret="", monkeypatch=monkeypatch)
+    assert status == 200
+    assert reached is True
+
+
+def test_gateway_401_enveloppe_par_les_entetes_de_securite(monkeypatch):
+    """Même un 401 passerelle porte les en-têtes de sécurité (le middleware
+    d'en-têtes reste le plus externe)."""
+    monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
+    status, headers, _body, _consumed = _asgi_request("GET", "/")
+    assert status == 401
+    assert headers.get("cache-control") == "no-store"
+    assert headers.get("x-content-type-options") == "nosniff"
