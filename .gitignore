@@ -21,3 +21,15 @@ secrets/
 .env
 *.env
 !.env.example
+
+# --- Jamais de document réel dans le dépôt (audit, section 11ter.7) ---
+# Un compte-rendu de laboratoire réel a été versionné par mégarde puis purgé
+# de l'historique. Seuls les fixtures FICTIFS de app/tests/fixtures/ sont
+# autorisés ; tout autre document est ignoré par défaut.
+*.pdf
+*.docx
+*.csv
+*.png
+*.jpg
+*.jpeg
+!app/tests/fixtures/**
