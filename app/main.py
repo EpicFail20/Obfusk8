@@ -926,6 +926,25 @@ _SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
 )
 
+# /api/download sert aussi le PDF/image caviardé DANS la page "Aperçu
+# (contrôle visuel)" générée par /api/finalize (<iframe>/<img> sur la même
+# origine). frame-ancestors 'none' + X-Frame-Options: DENY, posés par défaut
+# ci-dessus sur TOUTE réponse, empêchaient alors le navigateur d'afficher
+# cette réponse dans SA PROPRE page ("Firefox ne peut ouvrir cette page"),
+# bien que la requête HTTP elle-même aboutisse (200). Seules les extensions
+# servies en inline (voir _INLINE_EXTENSIONS plus bas) ont besoin de ce
+# relâchement ciblé à 'self' — un site tiers reste bloqué comme avant ; les
+# téléchargements en pièce jointe (.docx/.csv, jamais cadrés) gardent 'none'.
+_INLINE_PREVIEW_HEADERS = {
+    "x-frame-options": "SAMEORIGIN",
+    "content-security-policy": (
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        "connect-src 'self'; form-action 'self'; frame-ancestors 'self'; "
+        "base-uri 'none'; object-src 'none'"
+    ),
+}
+
 
 class _SecurityHeadersMiddleware:
     def __init__(self, asgi_app):
@@ -3809,11 +3828,13 @@ def download(job_id: str):
     theme_slug = path.name[len(job_id) + 1 : -len(f"-anonymise{extension}")]
     public_filename = f"caviarde_{theme_slug}_{job_id[:8]}{extension}"
 
+    is_inline = extension in _INLINE_EXTENSIONS
     return FileResponse(
         path,
         media_type=media_type,
         filename=public_filename,
-        content_disposition_type="inline" if extension in _INLINE_EXTENSIONS else "attachment",
+        content_disposition_type="inline" if is_inline else "attachment",
+        headers=_INLINE_PREVIEW_HEADERS if is_inline else None,
     )
 
 

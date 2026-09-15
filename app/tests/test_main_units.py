@@ -1064,6 +1064,60 @@ def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite():
         assert headers.get(name) == value, f"en-tête {name} absent/incorrect sur le 404"
 
 
+def test_download_pdf_autorise_le_cadrage_par_sa_propre_page_apercu():
+    """
+    La page "Aperçu (contrôle visuel)" servie par /api/finalize embarque le
+    PDF caviardé dans un <iframe src="/api/download/{job_id}">. Les en-têtes
+    de sécurité globaux (frame-ancestors 'none' + X-Frame-Options: DENY)
+    s'appliquaient aussi à cette réponse : le navigateur refuse alors
+    d'afficher sa PROPRE réponse dans SA PROPRE iframe ("Firefox ne peut
+    ouvrir cette page"), alors même que la requête HTTP réussit (200 dans les
+    journaux — la requête part et le fichier est bien renvoyé, seul l'affichage
+    est bloqué côté navigateur après coup). Seules les extensions servies en
+    inline (PDF/PNG/JPG, voir _INLINE_EXTENSIONS) ont besoin d'assouplir
+    frame-ancestors à 'self' — un site tiers reste bloqué, comme les
+    téléchargements en pièce jointe (.docx/.csv) qui gardent 'none'.
+    """
+    # download() est un endpoint SYNCHRONE (def, pas async def) : FastAPI le
+    # dispatche via run_in_threadpool, un vrai point de suspension que _drive
+    # ne peut pas traverser (voir en-tête de section) — appelée directement,
+    # pas à travers _asgi_request, comme toute fonction Python normale. Cela
+    # ne teste donc que les en-têtes posés par la route elle-même : le
+    # middleware (_asgi_request le couvre déjà ailleurs, ex. ligne ~1043) est
+    # responsable de compléter le reste (no-store, nosniff...) en production.
+    job_id = "ab" * 16
+    out = main.WORKDIR / f"{job_id}-medical-anonymise.pdf"
+    out.write_bytes(b"%PDF-1.4 fake")
+    try:
+        resp = main.download(job_id)
+        assert resp.status_code == 200
+        assert resp.headers.get("x-frame-options") == "SAMEORIGIN", (
+            "X-Frame-Options: DENY empêche la page d'aperçu de cadrer son propre PDF"
+        )
+        assert "frame-ancestors 'self'" in resp.headers.get("content-security-policy", ""), (
+            "frame-ancestors 'none' empêche la page d'aperçu de cadrer son propre PDF"
+        )
+    finally:
+        out.unlink(missing_ok=True)
+
+
+def test_download_csv_conserve_frame_ancestors_none():
+    """Non-régression : les téléchargements en pièce jointe (pas d'aperçu
+    intégré, voir main.py ~3712) n'ont aucun besoin d'être cadrables — la
+    route ne doit rien surcharger, pour laisser le middleware appliquer la
+    posture la plus stricte (frame-ancestors 'none' / DENY) en production."""
+    job_id = "cd" * 16
+    out = main.WORKDIR / f"{job_id}-compta-anonymise.csv"
+    out.write_bytes(b"nom,ville\n")
+    try:
+        resp = main.download(job_id)
+        assert resp.status_code == 200
+        assert "x-frame-options" not in resp.headers
+        assert "content-security-policy" not in resp.headers
+    finally:
+        out.unlink(missing_ok=True)
+
+
 def test_page_erreur_html_echappe_le_detail():
     """
     http_exception_handler injectait `exc.detail` tel quel dans une page HTML.

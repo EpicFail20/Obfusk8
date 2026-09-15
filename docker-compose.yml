@@ -84,9 +84,9 @@ services:
       - NET_BIND_SERVICE
     read_only: true
     tmpfs:
-      - /tmp
-      - /var/tmp
-      - /run
+      - /tmp:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
     command:
       - "--providers.docker=true"
       - "--providers.docker.endpoint=tcp://docker-socket-proxy:2375"
@@ -184,7 +184,7 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:noexec,nosuid,nodev
     env_file:
       - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
     environment:
@@ -253,7 +253,7 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp
+      - /tmp:noexec,nosuid,nodev
     # Plafond de tâches (processus + threads) du conteneur. Depuis le support
     # image (OCR), ce service peut créer des sous-processus (tesseract) ; en
     # cas de compromission du process, une bombe de fork n'était bornée que
@@ -422,10 +422,10 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp
-      - /home/presidio/.gunicorn
-      - /run/lock
-      - /var/tmp
+      - /tmp:noexec,nosuid,nodev
+      - /home/presidio/.gunicorn:noexec,nosuid,nodev
+      - /run/lock:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
     environment:
       - PYTHONDONTWRITEBYTECODE=1
     networks:
@@ -453,10 +453,10 @@ services:
       - ALL
     read_only: true
     tmpfs:
-      - /tmp
-      - /home/presidio/.gunicorn
-      - /run/lock
-      - /var/tmp
+      - /tmp:noexec,nosuid,nodev
+      - /home/presidio/.gunicorn:noexec,nosuid,nodev
+      - /run/lock:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
     environment:
       - PYTHONDONTWRITEBYTECODE=1
     networks:
