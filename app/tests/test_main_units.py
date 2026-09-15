@@ -5,6 +5,7 @@ main.py ou d'un fichier de thème.
 
 Exécution : depuis /app dans le conteneur, `pytest` ou `pytest tests/ -v`.
 """
+import json
 import io
 import re
 import struct
@@ -759,3 +760,152 @@ def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
         assert thumb_bytes not in out_bytes, "les octets bruts de la miniature sont encore récupérables"
     finally:
         output_path.unlink(missing_ok=True)
+
+
+
+# ---------------------------------------------------------------------------
+# Passe de vérification de sécurité finale — champ de formulaire `theme` non
+# fiable (spoofing du journal d'audit + débordement du nom de fichier) et gap
+# de gestion d'erreur RecursionError sur `manual_zones`. Tests appelant les
+# VRAIS endpoints (fonctions asynchrones), pas des fonctions internes isolées.
+#
+# Les coroutines sont pilotées manuellement (`_drive`) plutôt que via
+# `asyncio.run()` : créer une nouvelle boucle d'événements appelle un syscall
+# de sélecteur (epoll) absent du profil seccomp de blocage réel du service
+# (`app-enforce.json`), ce qui ferait échouer ces tests dans le conteneur
+# durci — le reste de la suite n'utilise jamais asyncio. Les deux endpoints
+# n'ont aucun point de suspension réel (finalize : zéro `await` ; detect :
+# seulement `await file.read()`, résolu ici par un upload à lecture
+# synchrone), donc un unique `.send(None)` les mène à terme sans boucle.
+# ---------------------------------------------------------------------------
+import time as _time  # noqa: E402
+import unicodedata  # noqa: E402
+
+
+def _drive(coro):
+    """Exécute une coroutine sans point de suspension réel jusqu'à son retour,
+    sans créer de boucle d'événements (voir en-tête de section)."""
+    try:
+        coro.send(None)
+    except StopIteration as stop:
+        return stop.value
+    coro.close()
+    raise AssertionError("la coroutine ne s'est pas terminée en une étape (await réel inattendu)")
+
+
+class _FakeRequest:
+    def __init__(self, headers: dict | None = None):
+        self.headers = headers or {}
+
+
+class _SyncUpload:
+    """Duck-type d'UploadFile : detect_document n'utilise que `.filename` et
+    `await .read()`. Lecture synchrone (async def sans await) pour ne jamais
+    suspendre la coroutine appelante."""
+    def __init__(self, filename: str, data: bytes):
+        self.filename = filename
+        self._data = data
+
+    async def read(self):
+        return self._data
+
+
+def _seed_csv_job(job_id: str, theme: str = "") -> None:
+    with main._PENDING_JOBS_LOCK:
+        main.PENDING_JOBS[job_id] = {
+            "kind": "csv",
+            "csv_text": "nom,ville\nJean,Paris\n",
+            "csv_delimiter": ",",
+            "detections": [],
+            "clusters": {},
+            "theme": theme,
+            "filename_hash": "deadbeef",
+            "user_email": "inconnu",
+            "size_mb": 0.01,
+            "created_at": _time.time(),
+        }
+
+
+def test_finalize_manual_zones_json_profondement_imbrique_ne_fait_pas_planter():
+    """
+    Un tableau JSON profondément imbriqué ("[[[[...") d'à peine ~200 Ko (donc
+    SOUS la limite de partie multipart de Starlette, 1 Mo) fait dépasser la
+    profondeur de récursion du décodeur `json` — une RecursionError, non
+    couverte par `json.JSONDecodeError`, qui remontait jusqu'à un 500
+    générique non maîtrisé. Doit désormais être traitée comme une entrée
+    malformée ordinaire : aucune zone manuelle, finalisation menée à bien.
+    """
+    deep = "[" * 200000
+    job_id = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    _seed_csv_job(job_id)
+    try:
+        resp = _drive(
+            main.finalize_document(
+                _FakeRequest(), job_id=job_id, excluded_ids="",
+                manual_zones=deep, redacted_image_ids="", response_format="json",
+            )
+        )
+        assert resp.status_code == 200
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)
+
+
+def test_finalize_manual_zones_json_invalide_ordinaire_reste_tolere():
+    """Non-régression : un JSON simplement invalide reste traité comme
+    'aucune zone', sans échec — le nouveau `except` ne resserre pas ce
+    comportement déjà en place."""
+    job_id = "0011223344556677889900aabbccddee"
+    _seed_csv_job(job_id)
+    try:
+        resp = _drive(
+            main.finalize_document(
+                _FakeRequest(), job_id=job_id, excluded_ids="",
+                manual_zones="{pas du json", redacted_image_ids="", response_format="json",
+            )
+        )
+        assert resp.status_code == 200
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)
+
+
+def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
+    """
+    Le champ `theme` est librement contrôlé par le client. Sans traitement,
+    (a) un caractère de formatage bidirectionnel Unicode (U+202E) y passe
+    intact jusqu'au journal d'audit (même spoofing que 3.5, corrigé pour
+    `user` mais pas pour `theme`), et (b) une valeur très longue déborde le
+    nom du fichier de sortie (Errno 36) et fait échouer la finalisation avec
+    un message trompeur. Vérifie via les vrais endpoints /api/detect puis
+    /api/finalize que la valeur stockée est nettoyée et bornée, et que le
+    cycle complet aboutit.
+    """
+    monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
+    hostile_theme = "medical‮" + ("a" * 500)
+    upload = _SyncUpload("t.csv", b"nom,ville\nJean Dupont,Paris\n")
+
+    detect_resp = _drive(main.detect_document(_FakeRequest(), file=upload, theme=hostile_theme))
+    assert detect_resp.status_code == 200
+
+    with main._PENDING_JOBS_LOCK:
+        job_id, job = next(iter(main.PENDING_JOBS.items()))
+    stored = job["theme"]
+    try:
+        assert all(unicodedata.category(ch)[0] != "C" for ch in stored), (
+            "un caractère de contrôle/format Unicode a survécu dans le theme stocké"
+        )
+        assert len(stored) <= main.MAX_THEME_CHARS, "theme non borné en longueur"
+
+        final_resp = _drive(
+            main.finalize_document(
+                _FakeRequest(), job_id=job_id, excluded_ids="",
+                manual_zones="[]", redacted_image_ids="", response_format="json",
+            )
+        )
+        assert final_resp.status_code == 200
+        payload = json.loads(bytes(final_resp.body))
+        slug = re.sub(r"[^a-zA-Z0-9_-]", "_", stored)
+        out = main.WORKDIR / f"{payload['job_id']}-{slug}-anonymise.csv"
+        assert out.exists(), "fichier de sortie absent (débordement de nom probable)"
+        out.unlink(missing_ok=True)
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)

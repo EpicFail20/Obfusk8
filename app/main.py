@@ -76,6 +76,11 @@ JOB_REVIEW_TTL_SECONDS = int(os.environ.get("JOB_REVIEW_TTL_SECONDS", "900"))
 MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "20"))
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "200"))
 MAX_MANUAL_ZONES = int(os.environ.get("MAX_MANUAL_ZONES", "500"))
+# Longueur maximale retenue du champ de formulaire `theme` (voir
+# detect_document) : un thème légitime est un identifiant court
+# (medical/it/compta) ; borne défensive contre une valeur arbitrairement
+# longue qui déborderait le nom de fichier de sortie ou le journal d'audit.
+MAX_THEME_CHARS = int(os.environ.get("MAX_THEME_CHARS", "64"))
 MAX_EXCLUDED_IDS = int(os.environ.get("MAX_EXCLUDED_IDS", "2000"))
 # Nombre max d'images DOCX distinctes proposées au caviardage manuel — même
 # esprit de garde-fou anti-abus que MAX_MANUAL_ZONES pour le PDF.
@@ -2488,6 +2493,20 @@ async def detect_document(
                 detail="Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
             )
 
+    # Le champ `theme` est un champ de formulaire librement contrôlé par le
+    # client (falsifiable, non borné, non contraint à un thème connu). Il
+    # rejoint ensuite le journal d'audit (`_record_audit_event(theme=...)`)
+    # ET le nom du fichier de sortie (`theme_slug`). Sans traitement ici :
+    #  - un caractère de formatage Unicode (RTL override U+202E, catégorie
+    #    Cf) y passe intact et permet le même spoofing visuel du journal que
+    #    celui déjà neutralisé sur `X-Auth-Request-Email` (audit section 3.5) ;
+    #  - une valeur très longue produit un `theme_slug` dépassant la limite
+    #    de longueur de nom de fichier du système (Errno 36), faisant échouer
+    #    la finalisation avec un message trompeur ("fichier corrompu").
+    # Assaini une fois, à la source, exactement comme `user_email` ci-dessous,
+    # puis borné en longueur (un vrai thème est court : medical/it/compta).
+    theme = _strip_unicode_control_and_format_chars(theme)[:MAX_THEME_CHARS]
+
     selected_theme = THEMES.get(theme) if theme else None
     if theme and selected_theme is None:
         log.warning("Thème inconnu demandé (%r), poursuite sans thème", theme)
@@ -3418,7 +3437,14 @@ async def finalize_document(
         manual_zones_data = json.loads(manual_zones)
         if not isinstance(manual_zones_data, list):
             manual_zones_data = []
-    except (json.JSONDecodeError, TypeError):
+    except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
+        # RecursionError : un tableau JSON profondément imbriqué ("[[[[...")
+        # d'à peine ~200 Ko (donc SOUS la limite de taille de partie
+        # multipart de Starlette, 1 Mo) fait dépasser la profondeur de
+        # récursion du décodeur `json`. Non couverte par JSONDecodeError,
+        # elle remontait jusqu'à un 500 générique non maîtrisé (fuite d'une
+        # trace Starlette). Traitée comme une entrée malformée ordinaire :
+        # aucune zone manuelle, le reste de la finalisation se poursuit.
         manual_zones_data = []
 
     # Ces champs de formulaire ne passent pas par le contrôle MAX_UPLOAD_MB
