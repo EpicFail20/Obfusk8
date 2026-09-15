@@ -6,7 +6,12 @@ spec.loader.exec_module(m)
 
 import fitz
 
-raw = open("/data/tmp/test_med.pdf", "rb").read()
+# Chemin du PDF d'entrée passé en argument — OBLIGATOIREMENT un document
+# fictif : ce script a historiquement été exécuté sur un compte-rendu de
+# laboratoire réel, retrouvé ensuite versionné dans le dépôt et copié dans le
+# répertoire de travail de production (audit, section 11ter.7). Ne plus jamais
+# faire entrer de vraies données patient dans le dépôt ou sur cette VM.
+raw = open(sys.argv[1], "rb").read()
 job_id = str(uuid.uuid4())
 
 m._handle_detect_pdf(raw, "medical", m.THEMES.get("medical"), job_id, "hashpdf", "test@example.com", len(raw)/1e6)

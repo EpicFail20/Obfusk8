@@ -175,6 +175,16 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    # Durcissement aligné sur app/presidio/traefik (audit 2.2) : binaire Go
+    # statique, utilisateur non-root de l'image, port 4180 non privilégié,
+    # aucune écriture disque (sessions en cookie) — aucune capability requise.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
     env_file:
       - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
     environment:
@@ -238,11 +248,21 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+    # Plafond de tâches (processus + threads) du conteneur. Depuis le support
+    # image (OCR), ce service peut créer des sous-processus (tesseract) ; en
+    # cas de compromission du process, une bombe de fork n'était bornée que
+    # par le défaut systemd (~9500 tâches sur cet hôte). Mesuré en conditions
+    # réelles : 7 tâches au pic pendant l'intégralité de la suite de tests
+    # (OCR compris) ; le pool de threads Starlette peut monter à ~40. 256
+    # laisse une marge très large tout en rendant l'épuisement impossible.
+    # (déclaré sous deploy.resources.limits.pids : compose refuse la forme
+    # courte `pids_limit` dès que deploy.resources.limits est déjà défini.)
     deploy:
       resources:
         limits:
           cpus: "1.0"
           memory: 1G
+          pids: 256
     environment:
       - PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000
       - PRESIDIO_ANONYMIZER_URL=http://presidio-anonymizer:3000
@@ -322,11 +342,37 @@ services:
       - "traefik.http.routers.app-upload.tls=true"
       - "traefik.http.routers.app-upload.priority=100"
       - "traefik.http.routers.app.priority=1"
-      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit"
+      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-bodylimit"
       - "traefik.http.routers.app-upload.service=app"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.burst=10"
+      # Plafond de taille du corps de requête EN BORDURE (défense en
+      # profondeur du même plafond appliqué dans l'application, voir
+      # MAX_REQUEST_BODY_BYTES dans main.py) : un upload surdimensionné est
+      # rejeté 413 par Traefik sans jamais atteindre le worker unique de
+      # l'app. Sans aucun de ces deux plafonds, un seul upload de 700 Mo
+      # tuait le conteneur app par OOM (reproduit sur un conteneur jetable).
+      # 27 Mo = MAX_UPLOAD_MB (25) + 2 Mo d'enrobage multipart/champs — à
+      # réaligner si MAX_UPLOAD_MB change. Au-delà de memRequestBodyBytes,
+      # Traefik tamponne sur /tmp (tmpfs du conteneur traefik).
+      - "traefik.http.middlewares.upload-bodylimit.buffering.maxRequestBodyBytes=28311552"
+      - "traefik.http.middlewares.upload-bodylimit.buffering.memRequestBodyBytes=1048576"
+      # Router dédié pour /api/preview_image : rendu CPU d'une page du
+      # document original (get_pixmap), jusqu'ici sans aucun rate limiting
+      # (seuls /api/detect et /api/finalize en avaient). Seuils distincts de
+      # upload-ratelimit : une révision charge légitimement jusqu'à
+      # MAX_PDF_PAGES (70) aperçus d'un coup, d'où un burst large ; la
+      # moyenne borne l'abus en continu. Même authentification que le reste.
+      - "traefik.http.routers.app-preview.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/preview_image`)"
+      - "traefik.http.routers.app-preview.entrypoints=websecure"
+      - "traefik.http.routers.app-preview.tls=true"
+      - "traefik.http.routers.app-preview.priority=100"
+      - "traefik.http.routers.app-preview.middlewares=oauth2-errors,oidc-auth,preview-ratelimit"
+      - "traefik.http.routers.app-preview.service=app"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.burst=150"
       # Router dédié pour /metrics : un scraper Prometheus ne peut pas faire
       # la dance OAuth d'oidc-auth (voir main.py, endpoint /metrics) — mais
       # Traefik reste exposé côté Internet (réseau frontend non-internal),

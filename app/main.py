@@ -220,6 +220,16 @@ def _check_detection_deadline(start_time: float) -> None:
 # pas laisser fuir la longueur approximative de la donnée masquée.
 REDACTION_MARKER = "[MASQUÉ]"
 
+# Tout fichier créé par le service (document original et caviardé en transit
+# dans /data/tmp, journal d'audit, fichiers temporaires de l'OCR) ne doit être
+# lisible que par l'utilisateur du service. Sans ce umask, le défaut du
+# conteneur (022) produisait des fichiers en 644 : sur l'hôte, le bind mount
+# /var/lib/anonymiseur/workdir exposait alors chaque document (avant ET après
+# caviardage) à n'importe quel utilisateur local pendant toute la durée du
+# TTL, et le journal d'audit en permanence. Placé avant le premier mkdir et
+# avant la création du RotatingFileHandler ci-dessous, pour couvrir tout.
+os.umask(0o077)
+
 WORKDIR = Path("/data/tmp")
 WORKDIR.mkdir(parents=True, exist_ok=True)
 
@@ -782,8 +792,8 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         <head><meta charset="utf-8"><title>{title} - Anonymiseur</title></head>
         <body style="font-family: sans-serif; max-width: 560px; margin: 80px auto; text-align:center;">
           <div style="font-size:3em; margin-bottom:8px;">⚠️</div>
-          <h1 style="margin-bottom:8px;">{title}</h1>
-          <p style="color:#555; font-size:1.1em;">{exc.detail}</p>
+          <h1 style="margin-bottom:8px;">{html.escape(title)}</h1>
+          <p style="color:#555; font-size:1.1em;">{html.escape(str(exc.detail))}</p>
           <p style="margin-top:32px;">
             <a href="/" style="
                 display:inline-block; padding:10px 24px; background:#0d6efd;
@@ -795,6 +805,154 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         </html>
         """,
     )
+
+
+# ---------------------------------------------------------------------------
+# Plafond de taille de requête HTTP, appliqué AVANT tout parsing de formulaire
+# ---------------------------------------------------------------------------
+# Le contrôle MAX_UPLOAD_MB de detect_document s'exécute après `await
+# file.read()`, c'est-à-dire après que Starlette a déjà reçu et stocké
+# l'intégralité du corps multipart (en mémoire jusqu'à 1 Mo, puis dans un
+# fichier temporaire sous /tmp — un tmpfs, donc de la mémoire comptée dans la
+# limite du conteneur), puis que tout a été relu en mémoire. Aucun plafond
+# n'existait en amont (ni ici, ni côté Traefik) : reproduit sur un conteneur
+# jetable identique au service (limite 1 Go, profil seccomp de blocage), un
+# SEUL upload chunké de 700 Mo tue le conteneur par OOM (exit 137) en quelques
+# secondes — et avec lui tous les jobs en attente de révision des autres
+# utilisateurs. Le rate limiting Traefik (5 req/min) ne protège pas : une
+# seule requête suffit.
+#
+# Deux garde-fous, dans l'ordre :
+#  - Content-Length déclaré supérieur au plafond → 413 immédiat, sans lire un
+#    seul octet du corps.
+#  - Corps chunké (sans Content-Length) ou Content-Length mensonger → chaque
+#    fragment reçu est compté ; dès que le total dépasse le plafond, la
+#    lecture est interrompue par une HTTPException 413 (sous-classe, pour que
+#    FastAPI la laisse remonter telle quelle jusqu'à http_exception_handler au
+#    lieu de la convertir en 400 générique). Rien n'a été accumulé au-delà du
+#    plafond à ce moment-là.
+# Le plafond laisse 2 Mo de marge au-dessus de MAX_UPLOAD_MB pour l'enrobage
+# multipart et les autres champs de formulaire (manual_zones, limité par
+# ailleurs à 1 Mo par Starlette). Le contrôle exact et lisible par
+# l'utilisateur ("Fichier trop volumineux (x Mo, max 25 Mo)") reste celui de
+# detect_document ; celui-ci est une barrière de ressources, pas d'ergonomie.
+MAX_REQUEST_BODY_BYTES = (MAX_UPLOAD_MB + 2) * 1024 * 1024
+
+
+class RequestBodyTooLarge(HTTPException):
+    def __init__(self):
+        super().__init__(
+            status_code=413,
+            detail=f"Requête trop volumineuse (fichier limité à {MAX_UPLOAD_MB} Mo)",
+        )
+
+
+class _RequestBodyLimitMiddleware:
+    """Middleware ASGI pur (pas BaseHTTPMiddleware : celui-ci consommerait le
+    corps différemment et casserait le streaming)."""
+
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.asgi_app(scope, receive, send)
+            return
+
+        limit = MAX_REQUEST_BODY_BYTES  # lu à chaque requête (surchargeable en test)
+
+        declared = None
+        for name, value in scope.get("headers", []):
+            if name == b"content-length":
+                try:
+                    declared = int(value)
+                except ValueError:
+                    declared = None
+                break
+        if declared is not None and declared > limit:
+            response = await http_exception_handler(Request(scope), RequestBodyTooLarge())
+            await response(scope, receive, send)
+            return
+
+        received = 0
+
+        async def limited_receive():
+            nonlocal received
+            message = await receive()
+            if message["type"] == "http.request":
+                received += len(message.get("body", b""))
+                if received > limit:
+                    raise RequestBodyTooLarge()
+            return message
+
+        await self.asgi_app(scope, limited_receive, send)
+
+
+# ---------------------------------------------------------------------------
+# En-têtes de sécurité HTTP, sur TOUTES les réponses (pages, aperçus, erreurs)
+# ---------------------------------------------------------------------------
+# Aucun en-tête de ce type n'était posé, ni ici ni par Traefik. Le plus
+# important pour ce projet est `Cache-Control: no-store` : sans lui, les
+# aperçus de pages (/api/preview_image — rendu du document ORIGINAL, avant
+# caviardage) et les fichiers téléchargés étaient écrits dans le cache disque
+# du navigateur du poste utilisateur, où ils survivent à la fermeture de la
+# session et au TTL côté serveur. Les autres en-têtes sont la base attendue
+# d'une application web manipulant des données de santé : anti-MIME-sniffing,
+# anti-clickjacking (frame-ancestors + X-Frame-Options pour les vieux
+# navigateurs), CSP limitant chargement de scripts/images/connexions à
+# l'origine elle-même (les pages de révision utilisent des scripts et styles
+# inline et des images data: pour les aperçus DOCX, d'où 'unsafe-inline' et
+# data: — la CSP bloque surtout toute exfiltration vers un autre domaine et
+# tout script externe), pas de fuite du job_id via le Referer hors origine,
+# HSTS (ignoré par les navigateurs tant que la connexion n'est pas HTTPS, donc
+# sans effet en test direct sur le port 8000), isolation cross-origin des
+# ressources (un site tiers ne peut pas embarquer un aperçu). Un en-tête déjà
+# posé explicitement par une réponse n'est jamais écrasé.
+_SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
+    (b"cache-control", b"no-store"),
+    (b"x-content-type-options", b"nosniff"),
+    (b"x-frame-options", b"DENY"),
+    (
+        b"content-security-policy",
+        b"default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        b"style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+        b"connect-src 'self'; form-action 'self'; frame-ancestors 'none'; "
+        b"base-uri 'none'; object-src 'none'",
+    ),
+    (b"referrer-policy", b"same-origin"),
+    (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
+    (b"cross-origin-opener-policy", b"same-origin"),
+    (b"cross-origin-resource-policy", b"same-origin"),
+    (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
+)
+
+
+class _SecurityHeadersMiddleware:
+    def __init__(self, asgi_app):
+        self.asgi_app = asgi_app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            await self.asgi_app(scope, receive, send)
+            return
+
+        async def send_with_headers(message):
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                present = {name.lower() for name, _ in headers}
+                for name, value in _SECURITY_HEADERS:
+                    if name not in present:
+                        headers.append((name, value))
+                message = {**message, "headers": headers}
+            await send(message)
+
+        await self.asgi_app(scope, receive, send_with_headers)
+
+
+# Ordre : le dernier ajouté est le plus externe. Les en-têtes doivent envelopper
+# aussi la réponse 413 émise directement par le plafond de taille.
+app.add_middleware(_RequestBodyLimitMiddleware)
+app.add_middleware(_SecurityHeadersMiddleware)
 
 
 def _schedule_cleanup(path: Path, delay: int = FILE_TTL_SECONDS):
@@ -3025,14 +3183,46 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
     )
 
 
-@app.get("/api/preview_image/{job_id}/{page_index}")
-def preview_image(job_id: str, page_index: int):
-    """Rend une page du PDF (ou l'image entière, pour un job image) en
-    attente de révision."""
+def _request_user(request: Request) -> str:
+    """Identité de l'appelant telle que garantie par oauth2-proxy via Traefik
+    (`X-Auth-Request-Email`, remplacé — jamais transmis tel quel — par le
+    forwardAuth). Même assainissement qu'à la création du job, pour que la
+    comparaison soit exacte."""
+    return _strip_unicode_control_and_format_chars(
+        request.headers.get("x-auth-request-email", "inconnu")
+    )
+
+
+def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> dict:
+    """Retrouve un job en attente de révision **appartenant à l'appelant**.
+
+    Jusqu'ici, connaître un `job_id` (uuid4, imprévisible, mais présent dans
+    les logs d'accès Traefik et l'historique du navigateur) suffisait pour
+    voir l'aperçu du document ORIGINAL (avant caviardage) de n'importe quel
+    autre utilisateur et finaliser son job à sa place. La décision 1.18 de
+    l'audit (pas de contrôle de propriétaire au téléchargement) reposait sur
+    « fichier déjà caviardé » — argument sans objet ici. Un job d'un autre
+    utilisateur est traité exactement comme un job inexistant (404), sans
+    révéler son existence, et surtout sans le retirer de la file (`pop`
+    seulement une fois la propriété confirmée) — sinon un tiers pourrait
+    détruire le job en cours de révision d'un autre par simple tentative."""
+    user = _request_user(request)
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job introuvable ou expiré")
+        if job is None or job.get("user_email") != user:
+            raise HTTPException(status_code=404, detail="Job introuvable ou expiré")
+        if pop:
+            PENDING_JOBS.pop(job_id, None)
+            metrics.PENDING_JOBS.set(len(PENDING_JOBS))
+    return job
+
+
+@app.get("/api/preview_image/{job_id}/{page_index}")
+def preview_image(job_id: str, page_index: int, request: Request):
+    """Rend une page du PDF (ou l'image entière, pour un job image) en
+    attente de révision — uniquement pour le propriétaire du job (aperçu du
+    document ORIGINAL, voir _get_pending_job_for)."""
+    job = _get_pending_job_for(job_id, request)
 
     if job.get("kind") == "image":
         if page_index != 0:
@@ -3413,12 +3603,10 @@ async def finalize_document(
     sans conteneur d'image), produit le fichier final dans son format
     d'origine.
     """
-    with _PENDING_JOBS_LOCK:
-        job = PENDING_JOBS.pop(job_id, None)
-        metrics.PENDING_JOBS.set(len(PENDING_JOBS))
-
-    if job is None:
-        raise HTTPException(status_code=404, detail="Job introuvable ou expiré, veuillez relancer l'analyse")
+    # Propriété vérifiée AVANT de retirer le job de la file (voir
+    # _get_pending_job_for) : un tiers ne peut ni finaliser ni détruire le
+    # job en cours de révision d'un autre utilisateur.
+    job = _get_pending_job_for(job_id, request, pop=True)
 
     excluded_cluster_ids = {i for i in excluded_ids.split(",") if i}
 

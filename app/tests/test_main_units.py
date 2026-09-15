@@ -909,3 +909,262 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
         out.unlink(missing_ok=True)
     finally:
         main.PENDING_JOBS.pop(job_id, None)
+
+
+# ---------------------------------------------------------------------------
+# Passe de revue de sécurité complémentaire : plafond de taille de requête,
+# en-têtes de sécurité, échappement de la page d'erreur, umask.
+#
+# Ces tests traversent la pile ASGI COMPLÈTE de l'application (middlewares,
+# routage, parsing de formulaire FastAPI, gestionnaire d'exception), pas
+# seulement les fonctions d'endpoint — c'est précisément le niveau où les
+# deux middlewares agissent. Pilotage manuel de la coroutine (voir `_drive`),
+# donc uniquement des chemins sans point de suspension réel : formulaire
+# multipart tenu en mémoire (< 1 Mo, au-delà Starlette passe par un thread),
+# endpoints asynchrones (/api/detect, /api/finalize).
+# ---------------------------------------------------------------------------
+import os as _os  # noqa: E402
+import stat as _stat  # noqa: E402
+
+
+def _asgi_request(method, path, headers=None, body_chunks=(), content_length=None):
+    """Joue une requête HTTP à travers `main.app` (pile ASGI complète) et
+    renvoie (statut, en-têtes, corps, nombre de fragments de corps
+    réellement consommés par l'application)."""
+    raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    if content_length is not None:
+        raw_headers.append((b"content-length", str(content_length).encode()))
+    scope = {
+        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1",
+        "method": method, "scheme": "http", "path": path, "raw_path": path.encode(),
+        "query_string": b"", "root_path": "", "headers": raw_headers,
+        "client": ("127.0.0.1", 1234), "server": ("testserver", 80),
+    }
+    chunks = list(body_chunks)
+    consumed = {"n": 0}
+
+    async def receive():
+        i = consumed["n"]
+        if i < len(chunks):
+            consumed["n"] += 1
+            return {"type": "http.request", "body": chunks[i], "more_body": i < len(chunks) - 1}
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    sent = []
+
+    async def send(message):
+        sent.append(message)
+
+    _drive(main.app(scope, receive, send))
+    start = next(m for m in sent if m["type"] == "http.response.start")
+    resp_headers = {k.decode().lower(): v.decode() for k, v in start["headers"]}
+    body = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")
+    return start["status"], resp_headers, body, consumed["n"]
+
+
+def _multipart_file_body(payload: bytes, boundary: str = "XBOUNDARYX") -> bytes:
+    return (
+        f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"f.bin\"\r\n"
+        f"Content-Type: application/octet-stream\r\n\r\n".encode()
+        + payload
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+
+
+_EXPECTED_SECURITY_HEADERS = {
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff",
+    "x-frame-options": "DENY",
+    "referrer-policy": "same-origin",
+    "cross-origin-resource-policy": "same-origin",
+}
+
+
+def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps():
+    """
+    Un Content-Length au-delà du plafond doit être rejeté AVANT toute lecture
+    du corps : zéro fragment consommé. Sans ce garde-fou, l'intégralité du
+    corps était reçue (tmpfs = mémoire du conteneur) puis relue en mémoire
+    avant le contrôle MAX_UPLOAD_MB — un seul upload suffisait à tuer le
+    conteneur par OOM (reproduit : 700 Mo chunkés → exit 137).
+    """
+    huge = 200 * 1024 * 1024
+    status, headers, body, consumed = _asgi_request(
+        "POST", "/api/detect",
+        headers={"content-type": "multipart/form-data; boundary=XBOUNDARYX", "accept": "application/json"},
+        body_chunks=[b"x" * 1024] * 4, content_length=huge,
+    )
+    assert status == 413
+    assert consumed == 0, "le corps ne doit pas être lu du tout"
+    assert "Requête trop volumineuse" in json.loads(body)["detail"]
+    # Le 413 émis directement par le middleware porte lui aussi les en-têtes
+    # de sécurité (ordre d'empilement des middlewares vérifié).
+    for name, value in _EXPECTED_SECURITY_HEADERS.items():
+        assert headers.get(name) == value, f"en-tête {name} absent/incorrect sur le 413"
+
+
+def test_upload_chunke_sans_content_length_interrompu_au_plafond(monkeypatch):
+    """
+    Sans Content-Length (transfert chunké), le plafond doit s'appliquer au fil
+    de la réception : la lecture s'arrête dès le dépassement, sans consommer
+    le reste du corps, et la réponse est un 413 propre (pas un 400 générique
+    « error parsing the body », ni un 500).
+    """
+    monkeypatch.setattr(main, "MAX_REQUEST_BODY_BYTES", 64 * 1024)
+    chunk = b"\0" * (16 * 1024)
+    body = _multipart_file_body(b"\0" * (256 * 1024))
+    chunks = [body[i:i + len(chunk)] for i in range(0, len(body), len(chunk))]
+    status, headers, resp_body, consumed = _asgi_request(
+        "POST", "/api/detect",
+        headers={"content-type": "multipart/form-data; boundary=XBOUNDARYX", "accept": "application/json"},
+        body_chunks=chunks,
+    )
+    assert status == 413, resp_body[:200]
+    assert consumed < len(chunks), "tout le corps a été consommé malgré le plafond"
+    assert consumed <= 5, f"lecture poursuivie bien au-delà du plafond ({consumed} fragments de 16 Ko)"
+    assert headers.get("cache-control") == "no-store"
+
+
+def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
+    """Non-régression : un upload ordinaire (petit CSV, Content-Length exact)
+    traverse les deux middlewares et aboutit à la page de révision, qui porte
+    les en-têtes de sécurité — dont no-store, essentiel sur cette page qui
+    affiche le contenu détecté EN CLAIR pour révision."""
+    monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
+    body = _multipart_file_body(b"nom,ville\nJean Dupont,Paris\n")
+    status, headers, resp_body, consumed = _asgi_request(
+        "POST", "/api/detect",
+        headers={"content-type": "multipart/form-data; boundary=XBOUNDARYX", "accept": "text/html"},
+        body_chunks=[body], content_length=len(body),
+    )
+    try:
+        assert status == 200, resp_body[:300]
+        assert consumed == 1
+        for name, value in _EXPECTED_SECURITY_HEADERS.items():
+            assert headers.get(name) == value, f"en-tête {name} absent/incorrect"
+        assert "frame-ancestors 'none'" in headers.get("content-security-policy", "")
+        assert "connect-src 'self'" in headers.get("content-security-policy", "")
+        assert headers.get("strict-transport-security", "").startswith("max-age=")
+    finally:
+        with main._PENDING_JOBS_LOCK:
+            main.PENDING_JOBS.clear()
+
+
+def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite():
+    """Les en-têtes doivent aussi couvrir les réponses d'erreur produites par
+    http_exception_handler (ici un 404 de /api/finalize sur un job inconnu)."""
+    form = b"job_id=00000000000000000000000000000000"
+    status, headers, _, _ = _asgi_request(
+        "POST", "/api/finalize",
+        headers={"content-type": "application/x-www-form-urlencoded", "accept": "application/json"},
+        body_chunks=[form], content_length=len(form),
+    )
+    assert status == 404
+    for name, value in _EXPECTED_SECURITY_HEADERS.items():
+        assert headers.get(name) == value, f"en-tête {name} absent/incorrect sur le 404"
+
+
+def test_page_erreur_html_echappe_le_detail():
+    """
+    http_exception_handler injectait `exc.detail` tel quel dans une page HTML.
+    Un seul détail contient une valeur d'origine externe (nom de menace
+    remonté par le serveur ICAP, section 9/10 de l'audit) : assainie des
+    caractères de contrôle Unicode, mais pas des balises HTML. Le détail doit
+    être échappé — quelle que soit sa provenance, présente ou future.
+    """
+    hostile = "<script>alert(1)</script>"
+    resp = _drive(main.http_exception_handler(
+        _FakeRequest({"accept": "text/html"}), HTTPException(status_code=400, detail=hostile)
+    ))
+    page = bytes(resp.body).decode("utf-8")
+    assert hostile not in page
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in page
+
+
+def test_fichiers_crees_par_le_service_ne_sont_pas_lisibles_par_les_autres():
+    """
+    Les documents en transit dans WORKDIR et le journal d'audit ne doivent
+    être lisibles que par l'utilisateur du service (umask 077 posé à l'import
+    de main) — le bind mount côté hôte les exposait sinon en 644 à tout
+    utilisateur local.
+    """
+    probe = main.WORKDIR / "umask-probe-test.tmp"
+    try:
+        with open(probe, "w") as f:
+            f.write("x")
+        mode = _stat.S_IMODE(_os.stat(probe).st_mode)
+        assert mode & 0o077 == 0, f"fichier créé en {oct(mode)} : lisible par le groupe/les autres"
+    finally:
+        probe.unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# Contrôle de propriétaire sur /api/preview_image et /api/finalize
+# ---------------------------------------------------------------------------
+
+def _seed_image_job(job_id: str, user: str) -> None:
+    with main._PENDING_JOBS_LOCK:
+        main.PENDING_JOBS[job_id] = {
+            "kind": "image", "image_format": "PNG", "raw_image": _make_solid_png(8, (255, 0, 0)),
+            "detections": [], "clusters": {}, "theme": "", "filename_hash": "deadbeef",
+            "user_email": user, "size_mb": 0.01, "created_at": _time.time(),
+        }
+
+
+def test_preview_image_refuse_le_job_d_un_autre_utilisateur():
+    """L'aperçu rend le document ORIGINAL : un autre utilisateur authentifié
+    connaissant le job_id doit obtenir un 404 indiscernable d'un job inexistant,
+    et le job doit rester intact pour son propriétaire."""
+    job_id = "11111111222222223333333344444444"
+    _seed_image_job(job_id, "alice@hopital.fr")
+    try:
+        with pytest.raises(HTTPException) as exc:
+            main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"}))
+        assert exc.value.status_code == 404
+        assert job_id in main.PENDING_JOBS, "le job du propriétaire a été retiré par la tentative d'un tiers"
+        resp = main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}))
+        assert resp.status_code == 200 and resp.media_type == "image/png"
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)
+
+
+def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
+    """Un tiers ne doit ni finaliser le job d'un autre, ni le faire disparaître
+    de la file par sa simple tentative ; le propriétaire finalise ensuite
+    normalement."""
+    job_id = "55555555666666667777777788888888"
+    _seed_csv_job(job_id)
+    with main._PENDING_JOBS_LOCK:
+        main.PENDING_JOBS[job_id]["user_email"] = "alice@hopital.fr"
+    try:
+        with pytest.raises(HTTPException) as exc:
+            _drive(main.finalize_document(
+                _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"}), job_id=job_id,
+                excluded_ids="", manual_zones="[]", redacted_image_ids="", response_format="json",
+            ))
+        assert exc.value.status_code == 404
+        assert job_id in main.PENDING_JOBS, "le job a été détruit par la tentative d'un tiers"
+
+        resp = _drive(main.finalize_document(
+            _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}), job_id=job_id,
+            excluded_ids="", manual_zones="[]", redacted_image_ids="", response_format="json",
+        ))
+        assert resp.status_code == 200
+        assert job_id not in main.PENDING_JOBS
+        for out in main.WORKDIR.glob(f"{job_id}-*-anonymise.*"):
+            out.unlink(missing_ok=True)
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)
+
+
+def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
+    """L'en-tête est assaini à la création du job (3.5) ; la comparaison doit
+    appliquer le même traitement, sinon un propriétaire légitime dont
+    l'en-tête contiendrait un caractère de formatage serait rejeté."""
+    job_id = "99999999aaaaaaaabbbbbbbbcccccccc"
+    _seed_image_job(job_id, "alice@hopital.fr")
+    try:
+        resp = main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice‮@hopital.fr"}))
+        assert resp.status_code == 200
+    finally:
+        main.PENDING_JOBS.pop(job_id, None)
