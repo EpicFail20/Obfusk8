@@ -1,0 +1,14 @@
+Je veux ajouter l'option de montage `noexec` (et par la même occasion `nosuid`, `nodev` — même famille de durcissement, même justification) sur tous les montages du projet où aucune exécution de binaire/script n'est légitimement nécessaire. Point relevé lors de la dernière passe de sécurité, resté ouvert.
+
+Périmètre concerné, à confirmer/compléter toi-même en relisant docker-compose.yml :
+- Le montage lié `/data/tmp` (fichiers uploadés/traités, source `/var/lib/anonymiseur/workdir`)
+- Les montages liés `/data/audit` et `/data/debug` (journaux)
+- Tous les `tmpfs` déjà déclarés sur `app`, `traefik`, `presidio-analyzer`, `presidio-anonymizer` (`/tmp`, `/var/tmp`, `/run`, etc.)
+
+Pour chacun :
+1. Vérifie d'abord, AVANT toute modification, si le montage exécute déjà quelque chose légitimement (entrypoint, script généré dynamiquement...) — si c'est le cas, documente-le comme exception justifiée plutôt que d'appliquer noexec aveuglément et de casser le service.
+2. Applique noexec/nosuid/nodev, avec la syntaxe correcte pour la version de docker compose réellement installée sur la VM (vérifie la version avant de choisir la syntaxe, ne suppose rien).
+3. **Vérifie empiriquement, pas seulement par lecture de la config** : pour chaque montage modifié, à l'intérieur du conteneur concerné, écris un petit script (`echo '#!/bin/sh' > /chemin/test.sh && echo 'echo test' >> /chemin/test.sh && chmod +x /chemin/test.sh`) et confirme que sa tentative d'exécution échoue bien avec "Permission denied" (erreur liée à noexec, pas à autre chose comme des permissions de fichier). Supprime le script de test ensuite.
+4. Relance l'intégralité de la suite de tests du projet et un cycle complet (démarrage, une requête réelle par format pdf/docx/csv/image, arrêt propre) pour confirmer qu'aucun comportement légitime n'est cassé par ce changement.
+
+Rapport attendu : la liste des montages effectivement modifiés, la liste de ceux volontairement exclus avec la raison, le résultat du test d'exécution refusée pour chacun, et la confirmation de non-régression. Ne redémarre pas les services en production sans mon autorisation après lecture de ce rapport.

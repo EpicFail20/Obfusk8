@@ -1,0 +1,31 @@
+{
+  "label": "Commun (appliqué à tous les thèmes)",
+  "ad_hoc_recognizers": [
+    {
+      "name": "FrenchStreetAddressRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "adresse postale française (numéro + type de voie + nom de rue)",
+          "regex": "\\b\\d{1,4}\\s?(?:bis|ter)?,?\\s+(?:rue|avenue|av\\.?|boulevard|bd\\.?|impasse|all[ée]e|chemin|place|route|quai|cours|square)\\s+[A-ZÀ-Ýa-zà-ÿ][A-ZÀ-Ýa-zà-ÿ'\\- ]{1,60}",
+          "score": 0.7
+        }
+      ],
+      "context": ["adresse", "domicile", "demeurant", "résidant"],
+      "supported_entity": "STREET_ADDRESS"
+    },
+    {
+      "name": "FrenchInitialSurnameRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "initiale(s) + nom de famille (ex: J-M. Costa, S. Haim-Boukobza, A. Amara Petitjean)",
+          "regex": "\\b[A-ZÀ-Ý](?:-[A-ZÀ-Ý])?\\.\\s?[A-ZÀ-Ý][a-zà-ÿ]+(?:[- ][A-ZÀ-Ý][a-zà-ÿ]+)*\\b",
+          "score": 0.55
+        }
+      ],
+      "context": ["biologiste", "docteur", "responsable", "signature", "signé", "dr"],
+      "supported_entity": "PERSON"
+    }
+  ]
+}

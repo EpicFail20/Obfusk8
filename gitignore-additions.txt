@@ -1,0 +1,10 @@
+# --- Secrets : ne jamais commiter ---
+secrets/
+.env
+*.env
+!.env.example
+*.pem
+*.key
+keycloak-data/
+__pycache__/
+*.pyc

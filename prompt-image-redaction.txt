@@ -1,0 +1,71 @@
+Je veux étendre l'anonymiseur pour supporter les fichiers image (PNG, JPEG, JPG) — capture d'écran, photo de document scanné, etc. — avec le même flux que PDF/DOCX/CSV : détection automatique, écran de révision avec possibilité d'exclure une zone détectée ET de tracer manuellement une zone manquée (comme pour le PDF, PAS comme DOCX/CSV qui n'ont pas cette option), puis caviardage réel et irréversible.
+
+CONSIGNES TRANSVERSALES, valables à CHAQUE phase ci-dessous, pas seulement à la fin :
+- Sécurité vérifiée à chaque étape, pas seulement testée globalement à la fin.
+- Caviardage IRRÉVERSIBLE : les pixels et métadonnées d'origine doivent être réellement détruits, jamais juste masqués visuellement ou recouvrables. Applique le même niveau d'exigence que ce qui a été fait pour les fuites DOCX (suivi de modifications, métadonnées, commentaires) cette session — un test doit prouver l'absence de résidu, pas juste l'absence d'erreur.
+- Toute nouvelle dépendance doit être à sa dernière version stable au moment où tu lis ceci (vérifie sur PyPI/le dépôt système, ne suppose pas un numéro de version) — et si une CVE connue existe sur la version que tu t'apprêtes à épingler, prends la version corrigée.
+- Gestion d'erreurs systématique à chaque nouvelle fonction : jamais d'exception non capturée qui remonterait une trace brute à l'utilisateur, jamais de veredict "propre par défaut" en cas d'échec d'une vérification de sécurité (échec fermé, comme pour l'antivirus).
+- Teste réellement chaque brique au fur et à mesure (pas seulement à la toute fin), et refais tourner TOUTE la suite de tests existante du projet (PDF, DOCX, CSV, antivirus, métriques, supervision) avant de considérer le travail terminé — zéro régression tolérée.
+
+---
+
+## Phase 0 — Dépendances
+
+- Ajoute `pytesseract` (dernière version stable) à `requirements.txt`.
+- Ajoute Pillow si absent, sinon vérifie que la version épinglée actuelle n'a pas de CVE connue et mets à jour si besoin.
+- Ajoute le paquet système `tesseract-ocr` ET **`tesseract-ocr-fra`** (les données linguistiques françaises — indispensable, ce projet traite du français, une OCR en anglais par défaut donnerait un texte extrait dégradé sur les accents) au `Dockerfile` du service `app`.
+- Vérifie la version de `tesseract-ocr` installée par le paquet Debian de l'image de base et confirme l'absence de CVE connue dessus.
+
+## Phase 1 — Validation d'entrée (sécurité avant tout traitement)
+
+- Détection de format par signature binaire réelle, jamais par extension/Content-Type déclaré par le client (même principe que PDF `%PDF-` et DOCX `PK\x03\x04`) : PNG (`\x89PNG\r\n\x1a\n`), JPEG (`\xFF\xD8\xFF`) — JPG et JPEG sont le même format, à traiter de façon identique.
+- Protection contre les bombes de décompression : vérifie explicitement que `PIL.Image.MAX_IMAGE_PIXELS` est actif (pas mis à `None` ou désactivé ailleurs dans le code) et lève une erreur propre si l'image dépasse cette limite, AVANT tout décodage complet — même logique de défense que la vérification de dimensions déclarées ajoutée récemment pour les images intégrées aux PDF (CVE-2026-3308). Réutilise ce même principe : lire les dimensions déclarées avant de décoder le contenu complet.
+- Limite de taille de fichier cohérente avec les autres formats (réutilise `MAX_UPLOAD_MB` existant).
+- Gestion d'erreur propre si l'image est corrompue/tronquée/illisible par Pillow.
+
+## Phase 2 — Extraction OCR + détection PII
+
+- Utilise `pytesseract.image_to_data()` (pas `image_to_string()`) pour obtenir le texte ET la position (bounding box) de chaque mot reconnu, avec `lang="fra"`.
+- Reconstruis le texte complet à partir des mots OCR (avec séparateurs appropriés) et fais-le passer par la fonction d'analyse EXISTANTE du projet (`_analyze_text` ou équivalent dans `main.py`) — même appel Presidio, même système de thèmes, même moteur patché (filtre POS, reconnaisseurs regex). Ne réimplémente PAS un appel Presidio séparé pour les images.
+- Mappe chaque entité détectée (offset de caractères dans le texte reconstruit) vers la ou les bounding box des mots OCR correspondants, pour obtenir des rectangles en coordonnées pixels — même finalité que le mapping page/rectangle déjà fait pour le PDF.
+- Gère le cas où l'OCR ne détecte aucun texte (image sans texte, ou texte illisible) sans planter — renvoie simplement 0 détection.
+
+## Phase 3 — Détection (point d'entrée) et écran de révision
+
+- Ajoute un nouveau type de job (`kind="image"`) au dispatcher existant (`_detect_file_kind`, et le routage vers un nouveau `_handle_detect_image`), sur le modèle de ce qui existe pour pdf/docx/csv.
+- Écran de révision : réutilise le mécanisme existant du PDF (rendu de l'image, rectangles cliquables pour exclure une détection, ET la possibilité de tracer manuellement une nouvelle zone — `manual_zones`) plutôt que d'en réinventer un. Adapte-le à une image unique plutôt qu'à des pages multiples.
+- Stocke dans le job les octets bruts de l'image (comme `raw_pdf`/`raw_docx` existants) pour permettre la ré-ouverture propre à la finalisation, pas l'objet Pillow en mémoire entre les deux appels.
+
+## Phase 4 — Finalisation : caviardage réel et dépouillement des métadonnées
+
+- Applique les rectangles confirmés (détections non exclues + zones manuelles) en dessinant des rectangles pleins opaques directement dans les pixels de l'image (Pillow `ImageDraw`), pas un calque superposable.
+- Dépouille ENTIÈREMENT les métadonnées avant sauvegarde, et vérifie explicitement chacun de ces points par un test qui construit une image avec ces métadonnées puis confirme leur absence dans le fichier final :
+  - EXIF complet, y compris les coordonnées GPS si présentes ET la miniature EXIF intégrée si présente (point de vigilance particulier : si l'image principale est caviardée mais que la miniature EXIF garde les pixels d'origine non caviardés, c'est une fuite directe — vérifie spécifiquement ce cas avec un test dédié, construit une image de test avec une vraie miniature EXIF contenant un texte différent de l'image principale pour le détecter sans ambiguïté).
+  - Chunks de texte PNG (`tEXt`, `zTXt`, `iTXt`) s'il y en a.
+  - Profil ICC (à dépouiller aussi, par simplicité — pas d'usage identifié qui justifierait de le garder).
+- Le fichier de sortie doit rester un PNG/JPEG valide et ouvrable normalement après ce nettoyage.
+
+## Phase 5 — Intégration transversale
+
+- Antivirus (`antivirus.py` déjà en place) : vérifie que le scan s'applique aussi aux images (le point d'intégration dans `main.py` devrait déjà être générique si branché en amont du dispatch par format — confirme que c'est bien le cas, sinon corrige).
+- Métriques (`metrics.py`) : ajoute "image" comme valeur possible du label `format` partout où c'est pertinent (`DOCUMENTS_PROCESSED`, `DOCUMENTS_REJECTED`, `DETECTION_DURATION_SECONDS`).
+- Journal d'audit existant : vérifie que le format "image" y apparaît correctement, sans rien casser sur les formats existants.
+
+## Phase 6 — Tests et vérification finale (ne pas considérer le travail fini sans ça)
+
+- Construis au moins une image de test PNG et une JPEG contenant un nom et une date en texte net (police lisible, contraste suffisant pour une OCR fiable), fais tourner le pipeline complet réel (les vraies fonctions d'entrée, pas seulement des fonctions internes isolées — leçon apprise cette session sur le DOCX, où un bug d'intégration était passé inaperçu à cause de ça) et vérifie que le nom/la date ont bien disparu du fichier final, au niveau des octets bruts, pas seulement visuellement.
+- Teste explicitement le cas "miniature EXIF différente de l'image principale" décrit en Phase 4.
+- Teste une image sans aucun texte (doit donner 0 détection, pas d'erreur).
+- Teste une image légèrement corrompue/tronquée (doit donner une erreur propre, pas un crash).
+- Teste une image dont les dimensions déclarées dépassent la limite anti-bombe de décompression (doit être rejetée proprement).
+- Relance TOUTE la suite de tests existante du projet (pdf, docx, csv, antivirus, metrics, supervision) et confirme explicitement zéro régression.
+
+## Rapport final attendu
+
+À la fin, rapporte clairement :
+1. Ce qui fonctionne tel que décrit ci-dessus, avec le résultat de chaque test de la Phase 6.
+2. Ce que tu as dû ajuster par rapport à ces instructions (et pourquoi).
+3. Toute limite ou angle mort restant que tu identifies mais n'as pas corrigé (sur le modèle des limites documentées pour le DOCX cette session — être honnête sur ce qui reste ouvert plutôt que de sous-entendre que tout est parfaitement couvert).
+4. La liste exacte des nouvelles variables d'environnement/dépendances ajoutées, pour que je les documente.
+
+Ne fais pas de commit/déploiement définitif sans que j'aie validé ce rapport.

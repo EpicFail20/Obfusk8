@@ -1,0 +1,115 @@
+{
+  "label": "Médical",
+  "score_threshold": 0.4,
+  "allow_list": ["Positive", "Conclusion", "Dossier", "Veuillez", "Sexe", "Enregistré", "Enr", "Laboratoire"],
+  "excluded_entity_types": ["ORGANIZATION"],
+  "ad_hoc_recognizers": [
+    {
+      "name": "PatientDossierNumberRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "dossier patient (lettre + chiffres)",
+          "regex": "\\b[A-Z]\\d{8,12}\\b",
+          "score": 0.6
+        },
+        {
+          "name": "dossier patient (chiffres + lettre + chiffres, ex: 22D0755084)",
+          "regex": "\\b\\d{1,4}[A-Z]\\d{6,10}\\b",
+          "score": 0.6
+        }
+      ],
+      "context": ["dossier", "numero", "numéro", "patient", "identifiant"],
+      "supported_entity": "PATIENT_ID"
+    },
+    {
+      "name": "FrenchNirRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "NIR / numéro de sécurité sociale",
+          "regex": "\\b[12]\\s?\\d{2}\\s?(0[1-9]|1[0-2])\\s?(\\d{2}|2[AB])\\s?\\d{3}\\s?\\d{3}\\s?\\d{2}\\b",
+          "score": 0.7
+        }
+      ],
+      "context": ["nir", "securite sociale", "sécurité sociale", "assure", "assuré"],
+      "supported_entity": "FR_NIR"
+    },
+    {
+      "name": "PatientIdentifierRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "IEP (zéro(s) en tête + 8 chiffres min)",
+          "regex": "\\b(?:IEP|iep|Iep)\\s{0,2}[:.\\-]?\\s{0,2}0\\d{7,}\\b",
+          "score": 0.7
+        },
+        {
+          "name": "IPP (zéro(s) en tête + 8 chiffres min)",
+          "regex": "\\b(?:IPP|ipp|Ipp)\\s{0,2}[:.\\-]?\\s{0,2}0\\d{7,}\\b",
+          "score": 0.7
+        }
+      ],
+      "context": ["iep", "ipp"],
+      "supported_entity": "PATIENT_ID"
+    },
+    {
+      "name": "PatientLabelIdentifierRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "numero patient",
+          "regex": "\\bnum[eé]ro\\s{0,2}patient\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "id patient",
+          "regex": "\\bid\\s{0,2}patient\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "numero d'identification",
+          "regex": "\\bnum[eé]ro\\s{0,2}d[''’]?\\s{0,2}identification\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "examen numero",
+          "regex": "\\bexamen\\s{0,2}num[eé]ro\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "numero d'examen",
+          "regex": "\\bnum[eé]ro\\s{0,2}d[''’]?\\s{0,2}examen\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "numero de dossier",
+          "regex": "\\bnum[eé]ro\\s{0,2}de\\s{0,2}dossier\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "dossier numero",
+          "regex": "\\bdossier\\s{0,2}num[eé]ro\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "prelevement numero",
+          "regex": "\\bpr[eé]l[eè]vement\\s{0,2}num[eé]ro\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "numero de prelevement",
+          "regex": "\\bnum[eé]ro\\s{0,2}de\\s{0,2}pr[eé]l[eè]vement\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        },
+        {
+          "name": "numero prelevement",
+          "regex": "\\bnum[eé]ro\\s{0,2}pr[eé]l[eè]vement\\s{0,2}[:.\\-]?\\s{0,2}[A-Za-z0-9]{5,}\\b",
+          "score": 0.65
+        }
+      ],
+      "context": ["patient", "identification", "examen", "dossier", "prelevement", "prélèvement", "numero", "numéro", "id"],
+      "supported_entity": "PATIENT_ID"
+    }
+  ]
+}

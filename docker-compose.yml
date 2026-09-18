@@ -1,0 +1,481 @@
+version: "3.9"
+
+# ---------------------------------------------------------------------------
+# Stack d'anonymisation de documents - variante LAB (test sur VM Proxmox)
+# Identique au stack cible, sauf l'authentification : Keycloak remplace
+# Entra ID le temps du test (même protocole OIDC via oauth2-proxy -> quand
+# tu passeras en entreprise, seules les 3 valeurs d'env OIDC_* changent).
+# ---------------------------------------------------------------------------
+
+networks:
+  frontend:
+    driver: bridge
+    # NON-internal : seul Traefik y est rattaché, pour conserver la
+    # publication des ports 80/443 vers l'hôte (Docker ne publie pas les
+    # ports d'un réseau internal:true — testé et confirmé cette session).
+  app-internal:
+    driver: bridge
+    internal: true   # app, oauth2-proxy, keycloak — aucun accès internet direct.
+                      # ATTENTION AU PASSAGE À ENTRA ID : oauth2-proxy devra alors
+                      # atteindre les serveurs Microsoft. Revoir ce réseau à ce
+                      # moment-là (le sortir vers un réseau non-internal dédié).
+  backend:
+    driver: bridge
+    internal: true   # aucun accès internet direct pour les services internes
+  docker-proxy:
+    driver: bridge
+    internal: true   # isole Traefik <-> docker-socket-proxy, rien d'autre dessus
+
+volumes:
+  traefik-certs:
+  keycloak-data:
+
+secrets:
+  oauth2_client_secret:
+    file: ./secrets/oauth2_client_secret.txt
+  oauth2_cookie_secret:
+    file: ./secrets/oauth2_cookie_secret.txt
+  keycloak_admin_password:
+    file: ./secrets/keycloak_admin_password.txt
+  # Secret partagé passerelle (audit 3.7) : connu de Traefik (injecté via le
+  # fichier dynamique gitignoré traefik/dynamic/gateway-secret.yml) et de
+  # `app` (vérifié par le middleware _GatewaySecretMiddleware). Empêche un
+  # conteneur voisin du même réseau Docker de joindre `app` en contournant
+  # Traefik/oauth2-proxy et de forger X-Auth-Request-Email. Généré par
+  # generate-secrets.sh, jamais en clair ici.
+  gateway_secret:
+    file: ./secrets/gateway_secret.txt
+
+services:
+
+  # -------------------------------------------------------------------------
+  # Proxy Docker en lecture seule pour Traefik - seul ce conteneur touche
+  # directement /var/run/docker.sock. N'expose que 3 catégories d'API
+  # (CONTAINERS, NETWORKS, EVENTS) ; tout le reste (EXEC, POST, IMAGES,
+  # VOLUMES, SECRETS, SWARM...) reste bloqué par défaut (403).
+  # -------------------------------------------------------------------------
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      - CONTAINERS=1
+      - NETWORKS=1
+      - EVENTS=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-proxy
+
+  # -------------------------------------------------------------------------
+  # Reverse proxy + TLS interne
+  # -------------------------------------------------------------------------
+  traefik:
+    image: traefik:v3.7.13   # v3.6 EOL depuis v3.6.25 (2026-07-31, plus aucun patch) ; 3.7 est la ligne stable maintenue
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
+      - /run:noexec,nosuid,nodev
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.endpoint=tcp://docker-socket-proxy:2375"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--log.level=INFO"
+      - "--accesslog=true"
+      - "--global.checknewversion=false"
+      - "--global.sendanonymoususage=false"
+    ports:
+      - "443:443"
+      - "80:80"
+    volumes:
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+      - ./traefik/certs:/etc/traefik/certs:ro
+    networks:
+      - frontend
+      - app-internal
+      - docker-proxy
+    depends_on:
+      - docker-socket-proxy
+
+  # -------------------------------------------------------------------------
+  # Keycloak - simule Entra ID en lab via le protocole OIDC standard
+  # Admin console: http://<ip-vm>:8080 (LAB UNIQUEMENT)
+  # -------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Keycloak n'a pas de variante "_FILE" native fiable pour le mot de passe
+    # admin (contrairement à oauth2-proxy) : on lit le secret depuis le
+    # fichier monté par Docker au démarrage, dans une variable d'env locale
+    # au conteneur, jamais visible via `docker inspect`.
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$(cat /run/secrets/keycloak_admin_password)"
+        exec /opt/keycloak/bin/kc.sh start-dev
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=admin
+      - KC_HOSTNAME=http://keycloak.lab.local:8080
+    secrets:
+      - keycloak_admin_password
+    ports:
+      - "8080:8080"   # console admin exposée directement pour le lab
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    networks:
+      frontend: {}   # nécessaire pour la publication du port 8080 (navigateur -> connexion)
+      app-internal:
+        aliases:
+          - keycloak.lab.local   # pour qu'oauth2-proxy le joigne en interne
+    # Sans ça, `depends_on` (côté oauth2-proxy) n'attend que le démarrage du
+    # CONTENEUR, pas que le port HTTP réponde — Keycloak (JVM) met largement
+    # plus de temps à s'initialiser que oauth2-proxy à tenter sa découverte
+    # OIDC une seule fois au démarrage, d'où un crash-loop systématique de
+    # oauth2-proxy à chaque redémarrage complet de la stack (constaté :
+    # RestartCount=7, toujours la même erreur de connexion refusée).
+    # Pas de curl/wget/python dans cette image (RHEL minimal) : test TCP nu
+    # via /dev/tcp, natif à bash (l'entrypoint du service est déjà bash).
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && exec 3<&-"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+      start_period: 5s
+
+  # -------------------------------------------------------------------------
+  # Authentification OIDC devant l'app (Keycloak en lab, Entra ID en prod)
+  # -------------------------------------------------------------------------
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 était très en retard (CVE + pas de cookie_secret_file)
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    # Durcissement aligné sur app/presidio/traefik (audit 2.2) : binaire Go
+    # statique, utilisateur non-root de l'image, port 4180 non privilégié,
+    # aucune écriture disque (sessions en cookie) — aucune capability requise.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+    env_file:
+      - .env   # ne contient plus que des valeurs non sensibles (APP_DOMAIN, OAUTH2_PROXY_CLIENT_ID)
+    environment:
+      - OAUTH2_PROXY_CLIENT_SECRET_FILE=/run/secrets/oauth2_client_secret
+      - OAUTH2_PROXY_COOKIE_SECRET_FILE=/run/secrets/oauth2_cookie_secret
+    secrets:
+      - oauth2_client_secret
+      - oauth2_cookie_secret
+    volumes:
+      - ./oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
+    command: ["--config=/etc/oauth2-proxy.cfg"]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+    networks:
+      - app-internal
+    labels:
+      - "traefik.http.middlewares.oauth2-errors.errors.status=401-403"
+      - "traefik.http.middlewares.oauth2-errors.errors.service=auth@docker"
+      - "traefik.http.middlewares.oauth2-errors.errors.query=/oauth2/sign_in?rd={url}"
+      - "traefik.http.middlewares.oauth2-errors.errors.statusRewrites.401=302"
+      - "traefik.enable=true"
+      - "traefik.http.routers.auth.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/oauth2`)"
+      - "traefik.http.routers.auth.entrypoints=websecure"
+      - "traefik.http.routers.auth.tls=true"
+      - "traefik.http.services.auth.loadbalancer.server.port=4180"
+      - "traefik.docker.network=anonymiseur_app-internal"
+      - "traefik.http.middlewares.oidc-auth.forwardauth.address=http://oauth2-proxy:4180/oauth2/auth"
+      - "traefik.http.middlewares.oidc-auth.forwardauth.trustForwardHeader=true"
+      - "traefik.http.middlewares.oidc-auth.forwardauth.authResponseHeaders=X-Auth-Request-User,X-Auth-Request-Email"
+      # Traefik 3.7 avertit au démarrage si la taille de la réponse du serveur
+      # d'authentification n'est pas bornée (lecture en mémoire non limitée).
+      # oauth2-proxy répond vide (202) ou par une petite page (401) ; 1 Mo est
+      # très large et supprime le vecteur en cas de compromission du serveur
+      # d'auth. Au-delà, Traefik rejette la requête (jamais « laisse passer »).
+      - "traefik.http.middlewares.oidc-auth.forwardauth.maxResponseBodySize=1048576"
+
+  # -------------------------------------------------------------------------
+  # Application (frontend + API)
+  # -------------------------------------------------------------------------
+  app:
+    build: ./app
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+      # Profil seccomp personnalisé (remplace le profil par défaut de
+      # Docker), construit à partir des syscalls réellement observés par
+      # strace sur ce service (démarrage, detect/finalize PDF/DOCX/CSV, cas
+      # d'erreur, purge différée, arrêt propre) + les syscalls de bootstrap
+      # runc requis pour tout conteneur non-root avec cap_drop:ALL — voir
+      # seccomp/README.md pour la méthode complète.
+      #
+      # BLOCAGE RÉEL (SCMP_ACT_ERRNO) : la phase de journalisation seule
+      # (app-audit.json) n'a révélé aucun syscall légitime manquant. En cas
+      # de besoin légitime après coup (nouveau format de document, mise à
+      # jour de PyMuPDF/python-docx...), revenir à app-audit.json le temps
+      # de rejouer les scénarios et identifier le syscall manquant via
+      # `dmesg | grep 'audit: type=1326'`.
+      - seccomp=./seccomp/app-enforce.json
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+    # Plafond de tâches (processus + threads) du conteneur. Depuis le support
+    # image (OCR), ce service peut créer des sous-processus (tesseract) ; en
+    # cas de compromission du process, une bombe de fork n'était bornée que
+    # par le défaut systemd (~9500 tâches sur cet hôte). Mesuré en conditions
+    # réelles : 7 tâches au pic pendant l'intégralité de la suite de tests
+    # (OCR compris) ; le pool de threads Starlette peut monter à ~40. 256
+    # laisse une marge très large tout en rendant l'épuisement impossible.
+    # (déclaré sous deploy.resources.limits.pids : compose refuse la forme
+    # courte `pids_limit` dès que deploy.resources.limits est déjà défini.)
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+          pids: 256
+    environment:
+      - PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000
+      - PRESIDIO_ANONYMIZER_URL=http://presidio-anonymizer:3000
+      - MAX_UPLOAD_MB=25
+      - FILE_TTL_SECONDS=180
+      - JOB_REVIEW_TTL_SECONDS=600
+      - MAX_PDF_PAGES=70
+      - MAX_DOCX_PARAGRAPHS=5000
+      - MAX_DOCX_UNCOMPRESSED_MB=200
+      - MAX_DOCX_ZIP_RATIO=100
+      - MAX_CSV_ROWS=20000
+      - MAX_CSV_CELLS=5000
+      - MAX_CSV_FIELD_CHARS=100000
+      # IMPORTANT : le score ne peut PAS distinguer un vrai nom d'un mot
+      # administratif ordinaire — les deux partagent le même score fixe
+      # (0.85) attribué par le reconnaisseur spaCy de Presidio, qui ne
+      # fournit pas de confiance réellement calibrée par détection. Un seuil
+      # au-dessus de 0.85 élimine donc la détection PERSON/LOCATION
+      # générique EN BLOC dès qu'aucun thème n'est sélectionné — vrais noms
+      # (PDF médical inclus) compris. Testé et confirmé dangereux : des
+      # informations confidentielles sont passées inaperçues sur un PDF réel
+      # avec ce réglage. Un faux positif se corrige en un clic en révision ;
+      # un faux négatif, lui, passe inaperçu et fuite silencieusement — ne
+      # jamais arbitrer en faveur de moins de faux positifs si ça coûte des
+      # faux négatifs. Revenu à 0.4, cohérent avec le seuil déjà utilisé par
+      # tous les thèmes existants (medical/it/compta). N'affecte QUE le flux
+      # "Aucun thème" ; les thèmes définissent chacun leur propre valeur.
+      - DEFAULT_SCORE_THRESHOLD=0.4
+      # --- Scan antivirus (voir app/antivirus.py) ---
+      # AV_ENGINE : moteur utilisé pour scanner chaque fichier avant tout
+      # parsing PDF/DOCX/CSV. "none" (défaut actuel) désactive complètement
+      # le scan, quelle que soit la valeur d'AV_ENFORCE ci-dessous — les deux
+      # réglages sont indépendants, mais AV_ENGINE=none rend AV_ENFORCE sans
+      # effet. Seule autre valeur supportée : "icap" (serveur ICAP RFC 3507
+      # déjà déployé côté infrastructure cliente, voir ICAP_* plus bas).
+      - AV_ENGINE=none
+      # AV_ENFORCE : que faire d'un verdict antivirus défavorable (menace
+      # détectée OU moteur ICAP injoignable). true (défaut si un moteur réel
+      # est un jour activé) = bloque le fichier (HTTPException). false = mode
+      # observation, le fichier continue son traitement normal mais un
+      # avertissement explicite est journalisé (jamais un échec silencieux).
+      - AV_ENFORCE=true
+      # ICAP_HOST : hôte du serveur ICAP à contacter. Requis uniquement si
+      # AV_ENGINE=icap (voir antivirus.py : un simple client FortiGate n'est
+      # PAS un serveur ICAP valide, confirmer avec l'équipe sécurité).
+      - ICAP_HOST=
+      # ICAP_PORT : port du serveur ICAP (1344 est le port standard RFC 3507).
+      - ICAP_PORT=1344
+      # ICAP_SERVICE : nom du service ICAP exposé par le serveur (dépend de
+      # sa configuration, ex: "avscan" pour c-icap/SquidClamav).
+      - ICAP_SERVICE=avscan
+      # ICAP_TIMEOUT_SECONDS : délai maximal d'attente d'une réponse du
+      # serveur ICAP avant de considérer le scan comme indisponible.
+      - ICAP_TIMEOUT_SECONDS=30
+      # ICAP_TLS : true pour chiffrer la connexion au serveur ICAP (ICAPS).
+      - ICAP_TLS=false
+      # --- Supervision/alerting (voir app/supervision.py) ---
+      # ALERT_SINK : destination des alertes opérationnelles (antivirus
+      # indisponible/menace, espace disque bas, Presidio injoignable...).
+      # "none" (défaut) journalise localement sans transmettre — à passer à
+      # "syslog" dès qu'un collecteur SIEM est disponible côté infrastructure
+      # cliente (même logique que AV_ENGINE=none ci-dessus : le composant est
+      # prêt, l'activation attend l'infrastructure réelle).
+      - ALERT_SINK=none
+      - SYSLOG_HOST=
+      - SYSLOG_PORT=514
+      - SYSLOG_TCP=false
+    volumes:
+      - /var/lib/anonymiseur/workdir:/data/tmp
+      - /var/log/anonymiseur-audit:/data/audit
+    # Secret partagé passerelle (audit 3.7), monté par Docker en
+    # /run/secrets/gateway_secret (chemin par défaut lu par main.py). Vérifié
+    # par _GatewaySecretMiddleware avant tout traitement de requête.
+    secrets:
+      - gateway_secret
+    networks:
+      - app-internal
+      - backend
+    labels:
+      - "traefik.http.routers.app-upload.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api/detect`) || PathPrefix(`/api/finalize`))"
+      - "traefik.http.routers.app-upload.entrypoints=websecure"
+      - "traefik.http.routers.app-upload.tls=true"
+      - "traefik.http.routers.app-upload.priority=100"
+      - "traefik.http.routers.app.priority=1"
+      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-upload.service=app"
+      - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
+      - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.upload-ratelimit.ratelimit.burst=10"
+      # Plafond de taille du corps de requête EN BORDURE (défense en
+      # profondeur du même plafond appliqué dans l'application, voir
+      # MAX_REQUEST_BODY_BYTES dans main.py) : un upload surdimensionné est
+      # rejeté 413 par Traefik sans jamais atteindre le worker unique de
+      # l'app. Sans aucun de ces deux plafonds, un seul upload de 700 Mo
+      # tuait le conteneur app par OOM (reproduit sur un conteneur jetable).
+      # 27 Mo = MAX_UPLOAD_MB (25) + 2 Mo d'enrobage multipart/champs — à
+      # réaligner si MAX_UPLOAD_MB change. Au-delà de memRequestBodyBytes,
+      # Traefik tamponne sur /tmp (tmpfs du conteneur traefik).
+      - "traefik.http.middlewares.upload-bodylimit.buffering.maxRequestBodyBytes=28311552"
+      - "traefik.http.middlewares.upload-bodylimit.buffering.memRequestBodyBytes=1048576"
+      # Router dédié pour /api/preview_image : rendu CPU d'une page du
+      # document original (get_pixmap), jusqu'ici sans aucun rate limiting
+      # (seuls /api/detect et /api/finalize en avaient). Seuils distincts de
+      # upload-ratelimit : une révision charge légitimement jusqu'à
+      # MAX_PDF_PAGES (70) aperçus d'un coup, d'où un burst large ; la
+      # moyenne borne l'abus en continu. Même authentification que le reste.
+      - "traefik.http.routers.app-preview.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/preview_image`)"
+      - "traefik.http.routers.app-preview.entrypoints=websecure"
+      - "traefik.http.routers.app-preview.tls=true"
+      - "traefik.http.routers.app-preview.priority=100"
+      - "traefik.http.routers.app-preview.middlewares=oauth2-errors,oidc-auth,preview-ratelimit,gateway-secret@file"
+      - "traefik.http.routers.app-preview.service=app"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.preview-ratelimit.ratelimit.burst=150"
+      # Router dédié pour /metrics : un scraper Prometheus ne peut pas faire
+      # la dance OAuth d'oidc-auth (voir main.py, endpoint /metrics) — mais
+      # Traefik reste exposé côté Internet (réseau frontend non-internal),
+      # donc pas question de laisser ce endpoint ouvert à quiconque pour
+      # autant : ipallowlist restreint aux adresses du serveur de
+      # supervision réel. "127.0.0.1/32" par défaut = personne depuis
+      # l'extérieur tant que ce n'est pas explicitement ouvert à l'adresse
+      # du collecteur Prometheus une fois celui-ci déployé.
+      - "traefik.http.routers.app-metrics.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/metrics`)"
+      - "traefik.http.routers.app-metrics.entrypoints=websecure"
+      - "traefik.http.routers.app-metrics.tls=true"
+      - "traefik.http.routers.app-metrics.priority=100"
+      - "traefik.http.routers.app-metrics.middlewares=metrics-allowlist,gateway-secret@file"
+      - "traefik.http.routers.app-metrics.service=app"
+      - "traefik.http.middlewares.metrics-allowlist.ipallowlist.sourcerange=127.0.0.1/32"
+      - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth,gateway-secret@file"
+      - "traefik.docker.network=anonymiseur_app-internal"
+      - "traefik.enable=true"
+      - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
+      - "traefik.http.routers.app.entrypoints=websecure"
+      - "traefik.http.routers.app.tls=true"
+      - "traefik.http.services.app.loadbalancer.server.port=8000"
+    depends_on:
+      - presidio-analyzer
+      - presidio-anonymizer
+
+  # -------------------------------------------------------------------------
+  # Moteur de détection PII
+  # -------------------------------------------------------------------------
+  presidio-analyzer:
+    build: ./presidio/analyzer-build
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+      - /home/presidio/.gunicorn:noexec,nosuid,nodev
+      - /run/lock:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 2G
+
+  # -------------------------------------------------------------------------
+  # Moteur d'anonymisation
+  # -------------------------------------------------------------------------
+  presidio-anonymizer:
+    image: ghcr.io/data-privacy-stack/presidio-anonymizer:2.2.364
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:noexec,nosuid,nodev
+      - /home/presidio/.gunicorn:noexec,nosuid,nodev
+      - /run/lock:noexec,nosuid,nodev
+      - /var/tmp:noexec,nosuid,nodev
+    environment:
+      - PYTHONDONTWRITEBYTECODE=1
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
