@@ -8,3 +8,5 @@ secrets/
 keycloak-data/
 __pycache__/
 *.pyc
+plan_audit.md
+plan_audit_consolide.md
