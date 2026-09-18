@@ -1,4 +1,4 @@
-# Anonymiseur — anonymisation automatique de documents
+# Obfusk8 — anonymisation automatique de documents
 
 Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-hébergé, conçu pour tourner entièrement en local — aucune donnée n'est envoyée à un service tiers. Détecte et caviarde les informations personnelles (noms, dates, identifiants, adresses...) via [Presidio](https://github.com/microsoft/presidio), avec une étape de révision humaine avant validation finale.
 
