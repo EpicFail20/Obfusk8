@@ -1,9 +1,22 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Construit un fixture DOCX fictif exerçant toutes les zones structurelles
-déjà corrigées par le pipeline anonymiseur (suivi des modifications,
-métadonnées, hyperliens, commentaires, notes de bas de page/de fin,
-en-tête/pied de page) + une zone de texte (limite connue, non couverte).
-Toutes les données sont fictives, générées pour ce test.
+Builds a fictitious DOCX fixture exercising all the structural areas
+already fixed by the obfusk8 pipeline (tracked changes, metadata,
+hyperlinks, comments, footnotes/endnotes, header/footer) + a text box
+(known limitation, not covered).
+All the data is fictitious, generated for this test.
 """
 import zipfile, shutil, sys
 import docx
@@ -16,16 +29,16 @@ FINAL = sys.argv[1] if len(sys.argv) > 1 else "/data/tmp/docx_fixture.docx"
 
 d = docx.Document()
 
-# --- corps normal ---
+# --- normal body ---
 d.add_paragraph("Ceci est un document de test fictif pour vérifier le pipeline d'anonymisation.")
 d.add_paragraph("Le patient se nomme Isabelle FONTAINE, né le 03/11/1980, joignable au 06 11 22 33 44.")
 
-# --- en-tête / pied de page ---
+# --- header / footer ---
 section = d.sections[0]
 section.header.paragraphs[0].text = "Confidentiel - suivi par Gregoire VASSEUR"
 section.footer.paragraphs[0].text = "Contact urgence : Sylvie MERCIER"
 
-# --- hyperlien (texte affiché + cible séparée) ---
+# --- hyperlink (displayed text + separate target) ---
 part = d.part
 r_id = part.relate_to("mailto:olivier.rousseau@example-fictif.test", RT.HYPERLINK, is_external=True)
 hyperlink_xml = (
@@ -38,7 +51,7 @@ hyperlink_xml = (
 hyperlink_p = parse_xml(hyperlink_xml)
 d.element.body.append(hyperlink_p)
 
-# --- suivi des modifications (texte supprimé, reste dans le XML) ---
+# --- tracked changes (deleted text, remains in the XML) ---
 del_xml = (
     f'<w:p {nsdecls("w")}>'
     f'<w:del w:id="900" w:author="testeur" w:date="2024-01-01T00:00:00Z">'
@@ -49,16 +62,16 @@ del_xml = (
 del_p = parse_xml(del_xml)
 d.element.body.append(del_p)
 
-# --- paragraphe normal final (pour repère de fin de corps) ---
+# --- final normal paragraph (marker for end of body) ---
 last_p = d.add_paragraph("Fin du corps du document de test.")
 
-# --- commentaire ---
+# --- comment ---
 run = last_p.add_run(" [ancre commentaire]")
 d.add_comment(run, text="Voir dossier de Camille GIRARD pour comparaison", author="Relecteur Test")
 
-# --- métadonnées identifiantes (core properties), via l'API python-docx
-# elle-même plutôt qu'une injection XML manuelle -- évite de produire un
-# core.xml invalide (élément dupliqué) qui fausserait le test ---
+# --- identifying metadata (core properties), via the python-docx API
+# itself rather than manual XML injection -- avoids producing an
+# invalid core.xml (duplicated element) that would skew the test ---
 d.core_properties.author = "Nicolas PETIT"
 d.core_properties.last_modified_by = "Nicolas PETIT"
 d.core_properties.subject = "Dossier confidentiel Julie MOREL"
@@ -66,9 +79,9 @@ d.core_properties.comments = "Revu par Nicolas PETIT le 2024-01-01"
 
 d.save(OUT)
 
-# --- footnotes.xml / endnotes.xml : python-docx 1.2.0 n'a pas d'API pour ça,
-# injection manuelle au niveau du zip (mêmes reltypes que NOTE_RELTYPES
-# dans main.py) ---
+# --- footnotes.xml / endnotes.xml: python-docx 1.2.0 has no API for
+# this, manual injection at the zip level (same reltypes as
+# NOTE_RELTYPES in main.py) ---
 FOOTNOTES_XML = f'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:footnotes {nsdecls("w")}>
 <w:footnote w:type="separator" w:id="-1"><w:p><w:r><w:separator/></w:r></w:p></w:footnote>
@@ -103,9 +116,9 @@ contents["[Content_Types].xml"] = ct.encode("utf-8")
 contents["word/footnotes.xml"] = FOOTNOTES_XML.encode("utf-8")
 contents["word/endnotes.xml"] = ENDNOTES_XML.encode("utf-8")
 
-# référence de note dans le corps (réalisme structurel, pas requis par le
-# pipeline de détection mais évite un docx qui semble corrompu si ouvert
-# manuellement dans Word)
+# note reference in the body (structural realism, not required by the
+# detection pipeline but avoids a docx that looks corrupted if opened
+# manually in Word)
 doc_xml = contents["word/document.xml"].decode("utf-8")
 ref_xml = (
     '<w:p><w:r><w:t xml:space="preserve">Renvoi vers note : </w:t></w:r>'

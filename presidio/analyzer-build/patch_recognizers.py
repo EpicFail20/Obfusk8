@@ -1,7 +1,20 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Patch default_recognizers.yaml de façon fiable via un vrai parseur YAML,
-plutôt que par insertion de texte brut (sed) qui s'est révélée fragile
-avec le style d'indentation "séquence zéro" utilisé par Presidio.
+Patches default_recognizers.yaml reliably via a real YAML parser,
+rather than by raw text insertion (sed) which proved fragile with the
+"zero sequence" indentation style used by Presidio.
 """
 import yaml
 
@@ -10,22 +23,22 @@ PATH = "/app/presidio_analyzer/conf/default_recognizers.yaml"
 with open(PATH, encoding="utf-8") as f:
     data = yaml.safe_load(f)
 
-# Déclare le français dans le registry (nécessaire en plus de
-# default_analyzer.yaml, sinon Presidio refuse de démarrer)
+# Declares French in the registry (needed in addition to
+# default_analyzer.yaml, otherwise Presidio refuses to start)
 langs = data.get("supported_languages", [])
 if "fr" not in langs:
     langs.append("fr")
 data["supported_languages"] = langs
 
-# Ajoute notre recognizer personnalisé pour les identifiants patient
+# Adds our custom recognizer for patient identifiers
 #
-# Historique : le motif "chiffres+lettre+chiffres" (ex: 22D0755084) et le
-# libellé abrégé "n°" (ex: "Dossier n° : ...") manquaient ici et n'étaient
-# couverts que par un motif similaire dans themes/medical.json — donc
-# actifs seulement quand ce thème était explicitement sélectionné. Un
-# numéro de dossier reste sensible quel que soit le thème choisi (ou même
-# sans thème) : ces motifs sont désormais intégrés en dur, donc toujours
-# actifs, indépendamment du thème.
+# History: the "digits+letter+digits" pattern (e.g. 22D0755084) and the
+# abbreviated label "n°" (e.g. "Dossier n° : ...") were missing here and
+# were only covered by a similar pattern in themes/medical.json — so
+# active only when that theme was explicitly selected. A file/record
+# number remains sensitive regardless of the chosen theme (or even with
+# no theme): these patterns are now hardcoded in, hence always active,
+# independent of the theme.
 data.setdefault("recognizers", []).append(
     {
         "name": "PatientDossierNumberRecognizer",

@@ -1,11 +1,11 @@
-# Anonymiseur - déploiement lab sur VM Docker (Proxmox)
+# Obfusk8 - déploiement lab sur VM Docker (Proxmox)
 
 ## 1. Copier le stack sur la VM clonée
 
 ```bash
-scp -r anonymiseur-stack-lab debian@<ip-de-la-vm>:~/anonymiseur
+scp -r obfusk8-stack-lab debian@<ip-de-la-vm>:~/obfusk8
 ssh debian@<ip-de-la-vm>
-cd anonymiseur
+cd obfusk8
 ```
 
 ## 2. Ajouter `anonymiseur.lab.local` dans /etc/hosts (poste client, pas la VM)

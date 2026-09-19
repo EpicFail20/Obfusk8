@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import logging
 import warnings
 from typing import List, Optional, Set, Tuple
@@ -19,33 +32,34 @@ class SpacyRecognizer(LocalRecognizer):
     this recognizer only extracts the entities from the NlpArtifacts
     and returns them.
 
-    --- Patch anonymiseur (voir bloc marqué ci-dessous dans analyze()) ---
-    Presidio attribue un score de confiance FIXE (ner_strength, 0.85 par
-    défaut) à absolument toutes les détections de ce recognizer, quelle que
-    soit leur justesse réelle : spaCy ne fournit pas nativement de
-    confiance calibrée par entité. Résultat observé en production : un mot
-    administratif isolé sans contexte de phrase ("Compétences", "Exploiter",
-    "Analyse"...) reçoit exactement le même score qu'un vrai nom propre
-    ("Xavier Carrolaggi") — impossible de les distinguer par le score.
+    --- obfusk8 patch (see block marked below in analyze()) ---
+    Presidio assigns a FIXED confidence score (ner_strength, 0.85 by
+    default) to absolutely all detections from this recognizer,
+    regardless of their actual accuracy: spaCy does not natively
+    provide per-entity calibrated confidence. Result observed in
+    production: an isolated administrative word with no sentence
+    context ("Compétences", "Exploiter", "Analyse"...) gets exactly the
+    same score as a real proper name ("Jean Dupont") — impossible to
+    tell them apart by score alone.
 
-    Le patch ajoute un filtre supplémentaire, INDÉPENDANT du score : pour
-    les types PERSON/ORGANIZATION/LOCATION, on exige qu'au moins un token
-    de l'empan détecté soit étiqueté comme nom propre (PROPN) par le
-    tagger/morphologizer spaCy — déjà actif dans le pipeline chargé, donc
-    sans coût d'inférence supplémentaire. Un verbe à l'infinitif ou un nom
-    commun isolé n'a structurellement aucune raison d'être un nom propre ;
-    un vrai nom (même partiellement composé de particules courantes comme
-    "de"/"du") en contient toujours au moins un.
+    The patch adds an additional filter, INDEPENDENT of the score: for
+    the PERSON/ORGANIZATION/LOCATION types, it requires that at least
+    one token in the detected span be tagged as a proper noun (PROPN)
+    by spaCy's tagger/morphologizer — already active in the loaded
+    pipeline, hence no additional inference cost. An infinitive verb or
+    an isolated common noun structurally has no reason to be a proper
+    noun; a real name (even one partly made up of common particles like
+    "de"/"du") always contains at least one.
     """
 
     ENTITIES = ["DATE_TIME", "NRP", "LOCATION", "PERSON", "ORGANIZATION"]
 
     DEFAULT_EXPLANATION = "Identified as {} by Spacy's Named Entity Recognition"
 
-    # Types pour lesquels le filtre POS (voir docstring de classe) s'applique.
-    # DATE_TIME/NRP ne sont pas concernés : leurs faux positifs suivent un
-    # mécanisme différent (patterns numériques mal formés, pas des mots de
-    # vocabulaire ordinaires pris pour des noms propres).
+    # Types for which the POS filter (see class docstring) applies.
+    # DATE_TIME/NRP are not concerned: their false positives follow a
+    # different mechanism (malformed numeric patterns, not ordinary
+    # vocabulary words mistaken for proper nouns).
     POS_FILTERED_ENTITIES = {"PERSON", "ORGANIZATION", "LOCATION"}
 
     # deprecated, use MODEL_TO_PRESIDIO_MAPPING in NerModelConfiguration instead
@@ -138,11 +152,12 @@ class SpacyRecognizer(LocalRecognizer):
                 )
                 continue
 
-            # --- Patch anonymiseur : filtre par étiquette grammaticale (POS) ---
-            # Voir la docstring de la classe pour le contexte complet. Un
-            # empan PERSON/ORGANIZATION/LOCATION sans aucun token PROPN
-            # (nom propre) est très probablement un faux positif du type
-            # "mot administratif isolé sans contexte de phrase".
+            # --- obfusk8 patch: part-of-speech (POS) tag filter ---
+            # See the class docstring for full context. A
+            # PERSON/ORGANIZATION/LOCATION span with no PROPN (proper
+            # noun) token at all is very likely a false positive of the
+            # "isolated administrative word with no sentence context"
+            # kind.
             if ner_entity.label_ in self.POS_FILTERED_ENTITIES:
                 has_propn = any(
                     getattr(token, "pos_", None) == "PROPN" for token in ner_entity
@@ -150,10 +165,10 @@ class SpacyRecognizer(LocalRecognizer):
                 if not has_propn:
                     logger.debug(
                         f"Skipping {ner_entity.text!r} ({ner_entity.label_}): "
-                        f"aucun token PROPN dans l'empan (filtre POS anonymiseur)"
+                        f"no PROPN token in the span (obfusk8 POS filter)"
                     )
                     continue
-            # --- fin du patch ---
+            # --- end of patch ---
 
             textual_explanation = self.DEFAULT_EXPLANATION.format(ner_entity.label_)
             explanation = self.build_explanation(ner_score, textual_explanation)

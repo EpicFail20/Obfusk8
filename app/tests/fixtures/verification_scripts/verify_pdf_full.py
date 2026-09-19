@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import sys, importlib.util, uuid, zlib
 
 spec = importlib.util.spec_from_file_location("m", "/data/tmp/app_copy/main.py")
@@ -6,11 +19,11 @@ spec.loader.exec_module(m)
 
 import fitz
 
-# Chemin du PDF d'entrée passé en argument — OBLIGATOIREMENT un document
-# fictif : ce script a historiquement été exécuté sur un compte-rendu de
-# laboratoire réel, retrouvé ensuite versionné dans le dépôt et copié dans le
-# répertoire de travail de production (audit, section 11ter.7). Ne plus jamais
-# faire entrer de vraies données patient dans le dépôt ou sur cette VM.
+# Path to the input PDF passed as an argument — MUST BE a fictitious
+# document: this script was historically run on a real lab report,
+# later found versioned in the repository and copied into the
+# production work directory (audit, section 11ter.7). Never again let
+# real patient data enter the repository or this VM.
 raw = open(sys.argv[1], "rb").read()
 job_id = str(uuid.uuid4())
 
@@ -62,7 +75,7 @@ for x in range(1, doc2.xref_length()):
 
 print("\nFuites (tous objets, pas seulement pages visibles):", leaks if leaks else "AUCUNE")
 
-# Vérifie aussi qu'il n'y a pas de mises à jour incrémentales (anciennes
-# révisions du fichier avec plusieurs %%EOF/trailer, autre vecteur classique)
+# Also checks that there are no incremental updates (old revisions of
+# the file with multiple %%EOF/trailer, another classic vector)
 eof_count = raw_out.count(b"%%EOF")
 print("Occurrences de %%EOF dans le fichier de sortie:", eof_count, "(1 attendu pour un fichier sans historique incrémental)")

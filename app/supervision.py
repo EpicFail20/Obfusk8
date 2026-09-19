@@ -1,19 +1,32 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-supervision.py — interface générique d'envoi d'alertes opérationnelles
-(dépendance injoignable, disque plein, certificat bientôt expiré, menace
-antivirus détectée...), avec un adaptateur syslog (RFC 5424) comme
-première implémentation.
+supervision.py — generic interface for sending operational alerts
+(unreachable dependency, disk full, certificate about to expire,
+antivirus threat detected...), with a syslog adapter (RFC 5424) as
+first implementation.
 
-Choix de syslog en premier : standard ancien et universellement supporté
-côté SIEM d'entreprise, déjà disponible dans la bibliothèque standard
-Python (logging.handlers.SysLogHandler) — aucune dépendance externe
-nécessaire pour ce premier adaptateur, contrairement à l'antivirus (ICAP).
+Choosing syslog first: an old and universally supported standard on the
+enterprise SIEM side, already available in the Python standard library
+(logging.handlers.SysLogHandler) — no external dependency needed for
+this first adapter, unlike the antivirus (ICAP).
 
-RÈGLE IMPORTANTE, à respecter pour toute alerte ajoutée plus tard : jamais
-de donnée personnelle dans `message`/`details` — un nom de fichier hashé
-ou un identifiant de job, oui ; un nom de patient ou un email utilisateur,
-non. Une alerte part potentiellement vers un SIEM tiers, hors du contrôle
-direct de ce projet.
+IMPORTANT RULE, to be respected for any alert added later: never put
+personal data in `message`/`details` — a hashed file name or a job
+identifier, yes; a patient name or a user email, no. An alert
+potentially goes out to a third-party SIEM, outside this project's
+direct control.
 """
 
 from __future__ import annotations
@@ -52,12 +65,12 @@ class AlertSink(ABC):
 
 
 class NullAlertSink(AlertSink):
-    """Aucun envoi réel — utilisé quand ALERT_SINK=none (par défaut).
-    Journalise localement pour ne pas perdre l'information silencieusement."""
+    """No real sending — used when ALERT_SINK=none (default).
+    Logs locally so the information is not silently lost."""
 
     def send(self, alert: Alert) -> None:
         log.warning(
-            "[ALERT_SINK=none, non transmise] [%s] %s: %s | %s",
+            "[ALERT_SINK=none, not forwarded] [%s] %s: %s | %s",
             alert.severity.value,
             alert.source,
             alert.message,
@@ -66,9 +79,9 @@ class NullAlertSink(AlertSink):
 
 
 class SyslogAlertSink(AlertSink):
-    """Adaptateur RFC 5424 via logging.handlers.SysLogHandler (bibliothèque
-    standard, aucune dépendance externe nécessaire pour ce protocole ancien
-    et stable)."""
+    """RFC 5424 adapter via logging.handlers.SysLogHandler (standard
+    library, no external dependency needed for this old and stable
+    protocol)."""
 
     _LEVEL_MAP = {
         AlertSeverity.INFO: logging.INFO,
@@ -102,45 +115,45 @@ class SyslogAlertSink(AlertSink):
 @lru_cache(maxsize=1)
 def get_alert_sink() -> AlertSink:
     """
-    Point de configuration unique, même principe que get_scanner() pour
-    l'antivirus.
+    Single configuration point, same principle as get_scanner() for
+    the antivirus.
 
-    Mis en cache (la config ne change jamais en cours de vie du conteneur) :
-    sans ce cache, chaque alerte reconstruisait un SyslogAlertSink complet
-    (nouveau socket + nouveau logger nommé enregistré indéfiniment par le
-    module logging — jamais garbage-collecté) — fuite mémoire/FD sans
-    borne, amplifiable par un attaquant capable de déclencher des alertes à
-    volonté (ex. uploads détectés comme menace). `lru_cache` ne met en
-    cache que les appels réussis (une exception n'est jamais mémorisée) :
-    une config valide reste donc mise en cache pour de bon, tandis qu'un
-    hôte syslog temporairement injoignable est retenté à chaque appel
-    suivant plutôt que de rester cassé pour toujours.
+    Cached (the config never changes during the container's lifetime):
+    without this cache, every alert would rebuild a full SyslogAlertSink
+    (new socket + new named logger registered indefinitely by the
+    logging module — never garbage-collected) — unbounded memory/FD
+    leak, amplifiable by an attacker able to trigger alerts at will
+    (e.g. uploads detected as a threat). `lru_cache` only caches
+    successful calls (an exception is never memoized): a valid config
+    thus stays cached for good, while a temporarily unreachable syslog
+    host is retried on every subsequent call rather than staying broken
+    forever.
 
-    Ne PAS appeler `.send()` directement sur la valeur retournée sans
-    intercepter les exceptions côté appelant (voir `_send_alert` dans
-    main.py) : la construction d'un SyslogAlertSink peut lever (config
-    invalide, DNS injoignable, connexion refusée en TCP) ou, en TCP,
-    bloquer plusieurs secondes/minutes sur un `connect()` sans timeout si
-    l'hôte ne répond pas — une alerte ne doit jamais faire échouer ou geler
-    le flux qu'elle est censée surveiller.
+    Do NOT call `.send()` directly on the returned value without
+    catching exceptions on the caller side (see `_send_alert` in
+    main.py): building a SyslogAlertSink can raise (invalid config, DNS
+    unreachable, connection refused in TCP) or, in TCP, block for
+    several seconds/minutes on a `connect()` with no timeout if the
+    host does not respond — an alert must never cause the flow it is
+    supposed to monitor to fail or freeze.
     """
     sink = os.environ.get("ALERT_SINK", "none").strip().lower()
 
     if sink == "none":
         log.warning(
-            "ALERT_SINK=none : aucune alerte transmise en dehors des journaux "
-            "applicatifs locaux. À configurer avant toute mise en production."
+            "ALERT_SINK=none: no alert forwarded outside local application "
+            "logs. Must be configured before any production deployment."
         )
         return NullAlertSink()
 
     if sink == "syslog":
         host = os.environ.get("SYSLOG_HOST")
         if not host:
-            raise RuntimeError("ALERT_SINK=syslog requiert SYSLOG_HOST")
+            raise RuntimeError("ALERT_SINK=syslog requires SYSLOG_HOST")
         return SyslogAlertSink(
             host=host,
             port=int(os.environ.get("SYSLOG_PORT", "514")),
             use_tcp=os.environ.get("SYSLOG_TCP", "false").strip().lower() == "true",
         )
 
-    raise ValueError(f"ALERT_SINK inconnu: {sink!r} (valeurs valides: none, syslog)")
+    raise ValueError(f"Unknown ALERT_SINK: {sink!r} (valid values: none, syslog)")

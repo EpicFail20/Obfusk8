@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import sys, importlib.util, time, csv, io
 
 spec = importlib.util.spec_from_file_location("m", "/data/tmp/app_copy/main.py")
@@ -5,7 +18,7 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
 n_cols = 15
-n_rows = 1333  # ~20000 cellules, reste large sous le budget de temps (90s)
+n_rows = 1333  # ~20000 cells, stays well under the time budget (90s)
 buf = io.StringIO()
 w = csv.writer(buf)
 w.writerow(["Nom", "Prenom", "Email", "Telephone", "Ville"] + [f"Col{j}" for j in range(n_cols-5)])

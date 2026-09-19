@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import re, time
 
 PATTERNS = {
@@ -10,11 +23,12 @@ PATTERNS = {
 }
 
 ADVERSARIAL = {
-    # Chaine "-Xxxxxxx" repetee N fois, sans point final ni frontiere \b
-    # valide a la fin (termine par un caractere qui casse le mot) pour
-    # forcer le moteur a explorer un maximum de decoupages avant d'echouer.
+    # "-Xxxxxxx" string repeated N times, with no final period nor a
+    # valid \b boundary at the end (ends with a character that breaks
+    # the word) to force the engine to explore as many splits as
+    # possible before failing.
     "FrenchInitialSurnameRecognizer": lambda n: "A." + ("-Bbbbbbbbbb" * n) + "9",
-    # Longue suite de zeros suivie d'un caractere qui casse la frontiere finale
+    # Long run of zeros followed by a character that breaks the final boundary
     "PatientIEP": lambda n: "IEP" + ("0" * n) + "9x",
     "PatientDossier1": lambda n: "A" + ("9" * n) + "x",
     "PatientDossier2": lambda n: ("9" * n) + "Ax",

@@ -1,13 +1,26 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import sys, importlib.util, time, csv, io
 
 spec = importlib.util.spec_from_file_location("m", "/data/tmp/app_copy/main.py")
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 
-# 300000 cellules PRESQUE VIDES (une seule non-vide par ligne) -> la
-# detection saute la quasi-totalite des cellules (rien a analyser), donc
-# ne devrait PAS declencher le budget de temps -- isole le cout pur du
-# rendu de la page HTML, independant de la detection.
+# 300000 ALMOST EMPTY cells (a single non-empty one per row) -> detection
+# skips almost all cells (nothing to analyze), so this should NOT trigger
+# the time budget -- isolates the pure cost of HTML page rendering,
+# independent of detection.
 n_cols = 15
 n_rows = min(m.MAX_CSV_ROWS - 1, m.MAX_CSV_CELLS // n_cols - 1)
 buf = io.StringIO()

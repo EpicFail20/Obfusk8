@@ -1,9 +1,22 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Tests de l'adaptateur IcapScanner, via le client ICAP simulé fourni par
-python-icap (icap.pytest_plugin) — aucun serveur ICAP réel nécessaire pour
-ces tests. Écrits d'après la documentation officielle de la bibliothèque ;
-non exécutés localement faute d'accès réseau pour l'installer — à valider
-réellement avant de faire confiance à ce fichier.
+Tests for the IcapScanner adapter, via the mock ICAP client provided by
+python-icap (icap.pytest_plugin) — no real ICAP server needed for these
+tests. Written from the library's official documentation; not run
+locally due to lack of network access to install it — to be actually
+validated before trusting this file.
 """
 
 import sys
@@ -45,8 +58,8 @@ def test_menace_detectee_est_signalee():
 
 
 def test_eicar_est_detecte():
-    """Fichier de test standard de détection antivirus (pas un vrai virus) —
-    voir https://www.eicar.org/download-anti-malware-testfile/"""
+    """Standard antivirus detection test file (not a real virus) —
+    see https://www.eicar.org/download-anti-malware-testfile/"""
     eicar = b'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
 
     mock_client = MockIcapClient()
@@ -66,9 +79,9 @@ def test_eicar_est_detecte():
 
 
 def test_timeout_serveur_leve_antivirus_unavailable_pas_un_verdict_propre():
-    """Le point le plus important à vérifier : en cas d'indisponibilité du
-    serveur, on ne doit JAMAIS renvoyer un verdict 'propre' par défaut —
-    politique d'échec fermé."""
+    """The most important point to verify: if the server is unavailable,
+    we must NEVER return a 'clean' verdict by default —
+    fail-closed policy."""
     mock_client = MockIcapClient()
     mock_client.on_any(raises=IcapTimeoutError("délai dépassé"))
 
@@ -91,8 +104,8 @@ def test_connexion_refusee_leve_antivirus_unavailable():
 
 
 def test_plusieurs_fichiers_sequentiels_verdicts_distincts():
-    """Vérifie qu'un moteur mal configuré ne 'fige' pas sur le premier
-    verdict rendu — chaque fichier doit être évalué indépendamment."""
+    """Checks that a misconfigured engine does not 'freeze' on the first
+    verdict returned — each file must be evaluated independently."""
     mock_client = MockIcapClient()
     mock_client.on_respmod(
         IcapResponseBuilder().clean().build(),
@@ -111,8 +124,8 @@ def test_plusieurs_fichiers_sequentiels_verdicts_distincts():
 
 
 class TestIsAvEnforced:
-    """is_av_enforced() ne dépend d'aucun client ICAP -- juste de la
-    variable d'environnement AV_ENFORCE."""
+    """is_av_enforced() does not depend on any ICAP client -- only on the
+    AV_ENFORCE environment variable."""
 
     def test_par_defaut_active(self, monkeypatch):
         monkeypatch.delenv("AV_ENFORCE", raising=False)

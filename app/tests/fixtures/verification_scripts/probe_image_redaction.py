@@ -1,16 +1,29 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import fitz
 
-# Construit une image de test : moitié gauche rouge (zone à "caviarder"),
-# moitié droite bleue (zone à laisser intacte) - permet de vérifier après
-# coup si le rouge survit ailleurs dans le fichier.
+# Builds a test image: left half red (zone to "redact"), right half
+# blue (zone to leave intact) - allows checking afterwards whether the
+# red survives elsewhere in the file.
 W, H = 200, 100
 pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, W, H), False)
 for y in range(H):
     for x in range(W):
         if x < W // 2:
-            pix.set_pixel(x, y, (255, 0, 0))   # rouge = "PII" à caviarder
+            pix.set_pixel(x, y, (255, 0, 0))   # red = "PII" to redact
         else:
-            pix.set_pixel(x, y, (0, 0, 255))   # bleu = contenu à conserver
+            pix.set_pixel(x, y, (0, 0, 255))   # blue = content to keep
 img_bytes = pix.tobytes("png")
 
 doc = fitz.open()
@@ -18,11 +31,11 @@ page = doc.new_page(width=300, height=200)
 img_rect = fitz.Rect(50, 50, 250, 150)
 page.insert_image(img_rect, stream=img_bytes)
 
-# Même mécanisme que _apply_manual_redactions() : une zone tracée par
-# l'utilisateur ne couvrant QUE la moitié gauche (rouge) de l'image.
+# Same mechanism as _apply_manual_redactions(): a zone drawn by the user
+# covering ONLY the left (red) half of the image.
 redact_rect = fitz.Rect(50, 50, 150, 150)
 page.add_redact_annot(redact_rect, fill=(0, 0, 0))
-page.apply_redactions()  # défauts réels du code : images=2, graphics=1, text=0
+page.apply_redactions()  # real code defaults: images=2, graphics=1, text=0
 
 out_path = "/tmp/probe_out.pdf"
 doc.save(out_path, garbage=4, clean=True, deflate=True)
@@ -32,16 +45,16 @@ print("=== Après caviardage (garbage=4, clean=True) ===")
 doc2 = fitz.open(out_path)
 page2 = doc2[0]
 
-# 1) Rendu visuel : la zone rouge redactée doit apparaître noire.
+# 1) Visual rendering: the redacted red zone must appear black.
 pm = page2.get_pixmap()
-left_px = pm.pixel(75, 100)   # dans redact_rect (gauche, rouge d'origine)
-right_px = pm.pixel(200, 100)  # hors redact_rect (droite, bleu conservé)
+left_px = pm.pixel(75, 100)   # inside redact_rect (left, originally red)
+right_px = pm.pixel(200, 100)  # outside redact_rect (right, blue kept)
 print("Pixel rendu dans la zone caviardée (attendu noir):", left_px)
 print("Pixel rendu hors zone (attendu bleu conservé):", right_px)
 
-# 2) Inspection de TOUS les objets image du fichier de sortie (pas
-# seulement ceux référencés par la page) - le rouge d'origine survit-il
-# ailleurs, comme un objet orphelin de contenu texte pré-caviardage ?
+# 2) Inspection of ALL image objects in the output file (not just those
+# referenced by the page) - does the original red survive elsewhere, as
+# an orphan object of pre-redaction text content?
 print("\n=== Balayage de tous les objets image du fichier ===")
 found_red_anywhere = False
 n = doc2.xref_length()
@@ -56,7 +69,7 @@ for xref in range(1, n):
     raw = info["image"]
     subpix = fitz.Pixmap(raw)
     if subpix.n >= 3:
-        # cherche un pixel rouge pur quelque part dans cette image
+        # looks for a pure red pixel somewhere in this image
         has_red = False
         for yy in range(0, subpix.height, max(1, subpix.height // 10)):
             for xx in range(0, subpix.width, max(1, subpix.width // 10)):

@@ -1,18 +1,31 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Tests de non-régression pour le point 3.5 de l'audit ("injection dans le
-journal d'audit") : couvrent à la fois le mécanisme d'écriture
-(`_record_audit_event`) et le point d'entrée non fiable qui alimente son
-champ `user` (l'en-tête HTTP `X-Auth-Request-Email`, voir 3.7).
+Regression tests for audit point 3.5 ("injection into the audit log"):
+cover both the write mechanism (`_record_audit_event`) and the
+untrusted entry point that feeds its `user` field (the
+`X-Auth-Request-Email` HTTP header, see 3.7).
 
-Deux couches testées séparément pour ne pas masquer une régression sur l'une
-si l'autre compense :
-- `_record_audit_event` : le format JSON (`json.dumps`) empêche déjà, à lui
-  seul, toute forge de fausse ligne (retour à la ligne, guillemets,
-  antislashs) — vérifié ici sans dépendre de la neutralisation en amont.
-- `_strip_unicode_control_and_format_chars` : neutralise ce que le JSON seul
-  ne couvre pas (caractères de formatage Unicode valides comme le RTL
-  override U+202E, qui permettent un spoofing visuel sans jamais casser le
-  format du fichier).
+Two layers tested separately so a regression on one is not masked if
+the other compensates for it:
+- `_record_audit_event`: the JSON format (`json.dumps`) alone already
+  prevents forging a fake line (newline, quotes, backslashes) —
+  verified here without relying on upstream sanitization.
+- `_strip_unicode_control_and_format_chars`: neutralizes what JSON
+  alone does not cover (valid Unicode formatting characters such as the
+  RTL override U+202E, which allow visual spoofing without ever
+  breaking the file format).
 """
 import json
 import logging
@@ -28,8 +41,8 @@ import main  # noqa: E402
 
 @pytest.fixture
 def redirected_audit_log(tmp_path, monkeypatch):
-    """Redirige le journal d'audit réel vers un fichier jetable, le temps du
-    test — ne doit jamais écrire dans /data/audit (audit.log de production)."""
+    """Redirects the real audit log to a disposable file for the duration
+    of the test — must never write into /data/audit (production audit.log)."""
     log_path = tmp_path / "audit.log"
     handler = RotatingFileHandler(log_path, maxBytes=10 * 1024 * 1024, backupCount=1, encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(message)s"))
@@ -52,7 +65,7 @@ def _lines(log_path: Path) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Couche 1 : le format JSON de _record_audit_event résiste à l'injection
+# Layer 1: the JSON format of _record_audit_event resists injection
 # ---------------------------------------------------------------------------
 
 @pytest.mark.parametrize("malicious_user", [
@@ -71,11 +84,11 @@ def test_record_audit_event_ne_permet_pas_de_forger_une_fausse_ligne(redirected_
     )
 
     lines = _lines(redirected_audit_log)
-    assert len(lines) == 1, "un seul appel doit produire une seule ligne, jamais une ligne forgée en plus"
+    assert len(lines) == 1, "a single call must produce a single line, never an extra forged line"
 
-    entry = json.loads(lines[0])  # lève si la ligne n'est pas un JSON valide
-    assert entry["user"] == malicious_user, "round-trip exact : le payload ne doit être ni tronqué ni altéré"
-    assert entry["job_id"] == "realjob123", "un champ voisin ne doit jamais être écrasé par le payload"
+    entry = json.loads(lines[0])  # raises if the line is not valid JSON
+    assert entry["user"] == malicious_user, "exact round-trip: the payload must be neither truncated nor altered"
+    assert entry["job_id"] == "realjob123", "a neighboring field must never be overwritten by the payload"
 
 
 def test_record_audit_event_valeur_tres_longue_reste_une_seule_ligne(redirected_audit_log):
@@ -86,8 +99,8 @@ def test_record_audit_event_valeur_tres_longue_reste_une_seule_ligne(redirected_
 
 
 # ---------------------------------------------------------------------------
-# Couche 2 : neutralisation des caractères de formatage Unicode (RTL override
-# et consorts) — ce que le JSON seul ne couvre pas
+# Layer 2: neutralization of Unicode formatting characters (RTL override
+# and the like) — what JSON alone does not cover
 # ---------------------------------------------------------------------------
 
 def test_strip_unicode_neutralise_rtl_override():
@@ -99,7 +112,7 @@ def test_strip_unicode_neutralise_rtl_override():
 @pytest.mark.parametrize("char", [
     "‮",  # RTL override
     "‭",  # LRO
-    "⁦", "⁧", "⁨", "⁩",  # isolats directionnels
+    "⁦", "⁧", "⁨", "⁩",  # directional isolates
     "\x00",  # NUL
     "\x1b",  # ESC
     "\n", "\r",
@@ -121,9 +134,9 @@ def test_strip_unicode_preserve_les_valeurs_legitimes(legit):
 
 
 def test_bout_en_bout_email_malveillant_neutralise_avant_le_journal(redirected_audit_log):
-    """Reproduit le chemin réel : en-tête -> _strip_unicode_control_and_format_chars
-    (detect_document) -> job -> _record_audit_event. Le RTL override ne doit
-    survivre à aucune étape."""
+    """Reproduces the real path: header -> _strip_unicode_control_and_format_chars
+    (detect_document) -> job -> _record_audit_event. The RTL override must not
+    survive any step."""
     raw_header_value = "attacker@x.com‮مصمم.gpj"
     sanitized = main._strip_unicode_control_and_format_chars(raw_header_value)
 

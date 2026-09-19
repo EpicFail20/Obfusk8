@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import zipfile, io, sys, time
 
 TARGET_MB = float(sys.argv[1]) if len(sys.argv) > 1 else 24.0
@@ -19,7 +32,7 @@ with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as zf:
         size = buf.tell()
         if size >= TARGET_MB * 1024 * 1024:
             break
-        # nom court, unique, 0 octet de contenu -> cout minimal par entree
+        # short, unique name, 0 bytes of content -> minimal cost per entry
         zf.writestr(f"junk/{n}", b"")
         n += 1
 

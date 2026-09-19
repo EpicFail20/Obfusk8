@@ -1,9 +1,22 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 from lxml import etree
 import time, os
 
-# Marqueur canari sur le volume partagé (accessible tel quel depuis le
-# conteneur "app" via /data/tmp), pour voir si son contenu peut fuiter par
-# une entité externe SYSTEM référencée dans un DOCX malveillant.
+# Canary marker on the shared volume (accessible as-is from the "app"
+# container via /data/tmp), to see whether its content can leak through
+# an external SYSTEM entity referenced in a malicious DOCX.
 canary_path = "/data/tmp/xxe_canary_secret.txt"
 with open(canary_path, "w") as f:
     f.write("SECRET_CANARY_VALUE_1234567890")

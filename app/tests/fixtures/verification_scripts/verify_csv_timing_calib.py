@@ -1,3 +1,16 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import sys, importlib.util, time
 
 spec = importlib.util.spec_from_file_location("m", "/data/tmp/app_copy/main.py")
@@ -9,8 +22,8 @@ print("MAX_CSV_CELLS:", m.MAX_CSV_CELLS, "MAX_CSV_ROWS:", m.MAX_CSV_ROWS, flush=
 
 theme = m.THEMES.get("medical")
 
-# Mesure directe du cout d'un lot (chunk) tel que _detect_text_blocks les
-# construit : jusqu'a TEXT_CHUNK_MAX_BLOCKS blocs par appel a Presidio.
+# Direct measurement of the cost of a batch (chunk) as built by
+# _detect_text_blocks: up to TEXT_CHUNK_MAX_BLOCKS blocks per call to Presidio.
 n_blocks = m.TEXT_CHUNK_MAX_BLOCKS
 block_texts = [(i, f"NOM{i} Prenom{i} user{i}@example.test 06{i:08d} Paris") for i in range(n_blocks)]
 
@@ -27,7 +40,7 @@ for c in range(n_calib_chunks):
 avg = sum(times) / len(times)
 n_total_cells = m.MAX_CSV_CELLS
 n_cols = 15
-n_total_blocks_estimate = n_total_cells  # une cellule = un bloc pour _detect_text_blocks
+n_total_blocks_estimate = n_total_cells  # one cell = one block for _detect_text_blocks
 n_chunks_estimate = n_total_blocks_estimate / n_blocks
 print(f"\nTemps moyen par lot de {n_blocks} blocs: {avg:.3f}s", flush=True)
 print(f"Pour {n_total_cells} cellules (limite MAX_CSV_CELLS) -> ~{n_chunks_estimate:.0f} lots -> ~{avg*n_chunks_estimate:.1f}s estimees", flush=True)

@@ -1,8 +1,21 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Tests du module metrics.py — exécutés et vérifiés avec succès via un venv
-externe où prometheus_client était déjà installé (toujours absent, pas
-d'accès réseau pour l'installer, dans l'environnement principal de
-développement).
+Tests for the metrics.py module — run and successfully verified via an
+external venv where prometheus_client was already installed (always
+missing, no network access to install it, in the main development
+environment).
 """
 
 import sys
@@ -54,7 +67,7 @@ def test_jauge_pending_jobs_peut_etre_mise_a_jour():
 
 def test_histogramme_duree_detection():
     with DETECTION_DURATION_SECONDS.labels(format="pdf").time():
-        pass  # juste vérifier que le context manager ne lève rien
+        pass  # just verify that the context manager does not raise
     body, _ = metrics_response()
     assert b"anonymiseur_detection_duration_seconds" in body
 

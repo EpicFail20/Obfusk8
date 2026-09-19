@@ -1,9 +1,22 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Tests du module supervision.py — récepteur syslog UDP local réel (pas de
-simulation), donc réellement exécutés et vérifiés lors de l'écriture de ce
-fichier, contrairement aux tests d'antivirus.py (ICAP) et de metrics.py
-(prometheus_client), qui dépendent de bibliothèques externes non
-disponibles dans l'environnement où ce fichier a été écrit.
+Tests for the supervision.py module — a real local UDP syslog receiver
+(no mocking), so actually run and verified while this file was written,
+unlike the antivirus.py (ICAP) and metrics.py (prometheus_client) tests,
+which depend on external libraries not available in the environment
+where this file was written.
 """
 
 import json
@@ -21,11 +34,11 @@ from supervision import Alert, AlertSeverity, NullAlertSink, SyslogAlertSink, ge
 
 @pytest.fixture(autouse=True)
 def _reset_alert_sink_cache():
-    """get_alert_sink() est mis en cache (@lru_cache) pour éviter de
-    reconstruire un socket à chaque alerte en production — mais ça veut
-    dire que d'un test à l'autre, sans ce fixture, tous les tests
-    récupéreraient l'instance du tout premier appel réussi, quelle que
-    soit la config ALERT_SINK simulée par chacun."""
+    """get_alert_sink() is cached (@lru_cache) to avoid rebuilding a
+    socket for every alert in production — but that means that from one
+    test to the next, without this fixture, all tests would get the
+    instance from the very first successful call, regardless of the
+    ALERT_SINK config each one simulates."""
     get_alert_sink.cache_clear()
     yield
     get_alert_sink.cache_clear()
@@ -33,8 +46,8 @@ def _reset_alert_sink_cache():
 
 @pytest.fixture
 def local_syslog_receiver():
-    """Un vrai récepteur UDP local, pas un simulacre — reçoit ce que
-    SyslogAlertSink envoie réellement sur le réseau (localhost)."""
+    """A real local UDP receiver, not a mock — receives what
+    SyslogAlertSink actually sends over the network (localhost)."""
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
@@ -71,7 +84,7 @@ def test_alerte_critique_arrive_intacte_via_syslog(local_syslog_receiver):
     )
     thread.join(timeout=3)
 
-    assert len(received) == 1, "le message syslog n'est jamais arrivé"
+    assert len(received) == 1, "the syslog message never arrived"
     raw = received[0]
     assert "dependency-check" in raw
     assert "CVE-2026-XXXX" in raw
@@ -109,8 +122,9 @@ def test_get_alert_sink_valeur_inconnue_leve_erreur(monkeypatch):
 
 
 def test_get_alert_sink_est_mis_en_cache(monkeypatch):
-    """Sans cache, chaque alerte reconstruirait un socket + un logger nommé
-    jamais nettoyé (fuite mémoire/FD) — voir revue de sécurité, section 10."""
+    """Without caching, each alert would rebuild a socket + a named logger
+    that is never cleaned up (memory/FD leak) — see security review,
+    section 10."""
     monkeypatch.setenv("ALERT_SINK", "syslog")
     monkeypatch.setenv("SYSLOG_HOST", "127.0.0.1")
     monkeypatch.setenv("SYSLOG_PORT", "5140")
@@ -120,9 +134,9 @@ def test_get_alert_sink_est_mis_en_cache(monkeypatch):
 
 
 def test_get_alert_sink_reessaie_apres_un_echec(monkeypatch):
-    """lru_cache ne mémorise jamais une exception : un hôte syslog
-    injoignable au premier appel ne doit pas empêcher un appel ultérieur
-    (une fois la config corrigée) de retenter la construction."""
+    """lru_cache never memoizes an exception: a syslog host unreachable
+    on the first call must not prevent a later call (once the config is
+    fixed) from retrying construction."""
     monkeypatch.setenv("ALERT_SINK", "syslog")
     monkeypatch.delenv("SYSLOG_HOST", raising=False)
     with pytest.raises(RuntimeError):

@@ -1,13 +1,26 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 import zipfile, sys
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else "/data/tmp/xxe_fixture.docx"
-BASE = "/data/tmp/docx_fixture.docx"  # fixture DOCX valide déjà construit
+BASE = "/data/tmp/docx_fixture.docx"  # already-built valid DOCX fixture
 
 with zipfile.ZipFile(BASE, "r") as zin:
     contents = {n: zin.read(n) for n in zin.namelist()}
 
-# --- document.xml avec DOCTYPE + entité externe pointant vers un fichier
-# canari sur le volume partagé, et vers /etc/passwd ---
+# --- document.xml with a DOCTYPE + external entity pointing to a
+# canary file on the shared volume, and to /etc/passwd ---
 malicious_doc = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!DOCTYPE w:document [
   <!ENTITY xxe1 SYSTEM "file:///data/tmp/xxe_canary_secret.txt">
@@ -22,8 +35,8 @@ malicious_doc = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 </w:document>'''
 contents["word/document.xml"] = malicious_doc
 
-# --- footnotes.xml avec le meme type de payload, pour tester le chemin de
-# parsing custom (_get_note_part -> docx.oxml.parse_xml) ---
+# --- footnotes.xml with the same kind of payload, to test the custom
+# parsing path (_get_note_part -> docx.oxml.parse_xml) ---
 malicious_footnotes = b'''<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <!DOCTYPE w:footnotes [
   <!ENTITY xxe3 SYSTEM "file:///data/tmp/xxe_canary_secret.txt">

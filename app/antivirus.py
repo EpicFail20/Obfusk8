@@ -1,17 +1,30 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-antivirus.py — interface générique de scan antivirus, avec un adaptateur
-ICAP (RFC 3507) comme première implémentation.
+antivirus.py — generic antivirus scanning interface, with an ICAP adapter
+(RFC 3507) as first implementation.
 
-Objectif : accueillir un antivirus d'entreprise déjà déployé côté
-infrastructure cliente, en parlant un protocole standard plutôt qu'une API
-propriétaire — swap de moteur possible sans réécrire l'intégration
-applicative (voir get_scanner()).
+Goal: accommodate an enterprise antivirus already deployed on the client
+infrastructure side, by speaking a standard protocol rather than a
+proprietary API — engine swap possible without rewriting the application
+integration (see get_scanner()).
 
-Exclu délibérément : tout moteur cloud/SaaS (VirusTotal et équivalents).
-Envoyer un document — potentiellement une donnée médicale réelle, pas
-encore anonymisée à ce stade du pipeline — à un service tiers externe irait
-directement à l'encontre de tout le travail d'isolation réseau et de
-correction des fuites structurelles fait sur ce projet.
+Deliberately excluded: any cloud/SaaS engine (VirusTotal and equivalents).
+Sending a document — potentially real medical data, not yet anonymized at
+this stage of the pipeline — to an external third-party service would go
+directly against all the network isolation work and structural leak fixes
+made on this project.
 """
 
 from __future__ import annotations
@@ -35,58 +48,58 @@ class ScanResult:
 
 class AntivirusUnavailableError(Exception):
     """
-    Levée quand le moteur ne peut pas rendre de verdict fiable (timeout,
-    connexion refusée, erreur de protocole). L'appelant DOIT rejeter le
-    fichier dans ce cas — jamais le traiter comme propre par défaut.
-    Politique d'échec fermé, cohérente avec le reste du projet (ex: un
-    moteur de détection PII indisponible ne doit jamais faire passer un
-    document non vérifié).
+    Raised when the engine cannot give a reliable verdict (timeout,
+    connection refused, protocol error). The caller MUST reject the
+    file in this case — never treat it as clean by default.
+    Fail-closed policy, consistent with the rest of the project (e.g. a
+    PII detection engine that is unavailable must never let an
+    unverified document through).
     """
 
 
 class AntivirusScanner(ABC):
-    """Interface commune à tout moteur antivirus utilisable par l'application."""
+    """Common interface for any antivirus engine usable by the application."""
 
     @abstractmethod
     def scan(self, file_bytes: bytes, filename_hint: str = "") -> ScanResult:
-        """Scanne le contenu fourni. Doit lever AntivirusUnavailableError
-        plutôt que de renvoyer un verdict incertain comme "propre"."""
+        """Scans the provided content. Must raise AntivirusUnavailableError
+        rather than returning an uncertain verdict such as "clean"."""
         raise NotImplementedError
 
 
 class NullScanner(AntivirusScanner):
     """
-    Aucun scan réel — utilisé quand AV_ENGINE=none (par défaut). Existe
-    explicitement, plutôt que de sauter le scan silencieusement, pour que
-    l'absence de protection soit un choix visible (log d'avertissement au
-    démarrage) et non un oubli de configuration.
+    No real scan — used when AV_ENGINE=none (default). Exists
+    explicitly, rather than silently skipping the scan, so that the
+    absence of protection is a visible choice (warning log at
+    startup) rather than a configuration oversight.
     """
 
     def scan(self, file_bytes: bytes, filename_hint: str = "") -> ScanResult:
-        return ScanResult(is_clean=True, engine_name="none (scan désactivé)")
+        return ScanResult(is_clean=True, engine_name="none (scan disabled)")
 
 
 class IcapScanner(AntivirusScanner):
     """
-    Adaptateur pour un serveur ICAP (RFC 3507) déjà déployé côté
-    infrastructure cliente — antivirus d'entreprise, passerelle de scan
-    dédiée (ex: FortiSandbox, un serveur c-icap/SquidClamav...).
+    Adapter for an ICAP server (RFC 3507) already deployed on the client
+    infrastructure side — enterprise antivirus, dedicated scanning
+    gateway (e.g. FortiSandbox, a c-icap/SquidClamav server...).
 
-    ATTENTION, point d'architecture important : ceci suppose un véritable
-    SERVEUR ICAP directement joignable. FortiGate lui-même agit comme
-    CLIENT ICAP (il transmet du trafic qui passe à travers lui vers un
-    serveur externe) — il ne peut PAS être la cible directe de cet
-    adaptateur. Confirmer avec l'équipe sécurité quel est le véritable
-    serveur ICAP à cibler (FortiSandbox ou équivalent) avant de configurer
+    WARNING, important architecture point: this assumes a genuine ICAP
+    SERVER directly reachable. FortiGate itself acts as an ICAP
+    CLIENT (it forwards traffic passing through it to an external
+    server) — it CANNOT be the direct target of this adapter. Confirm
+    with the security team which server is the actual ICAP server to
+    target (FortiSandbox or equivalent) before configuring
     ICAP_HOST/ICAP_PORT.
 
-    Utilise python-icap (RFC 3507, zéro dépendance, licence MIT).
-    Point de vigilance assumé : bibliothèque jeune au moment de l'écriture
-    de ce code (statut "Alpha" sur PyPI, un seul mainteneur) — le protocole
-    ICAP lui-même est ancien et stable (RFC de 2003), ce qui limite le
-    risque associé à la jeunesse de cette implémentation cliente, mais à
-    surveiller comme toute dépendance récente (voir politique de veille
-    dépendances du projet, section 4 de l'audit).
+    Uses python-icap (RFC 3507, zero dependencies, MIT license).
+    Acknowledged risk point: a young library at the time this code was
+    written (status "Alpha" on PyPI, a single maintainer) — the ICAP
+    protocol itself is old and stable (RFC from 2003), which limits the
+    risk associated with how young this client implementation is, but
+    it should still be monitored like any recent dependency (see the
+    project's dependency-watch policy, audit section 4).
     """
 
     def __init__(
@@ -103,9 +116,10 @@ class IcapScanner(AntivirusScanner):
         self.service = service
         self.timeout = timeout
         self.use_tls = use_tls
-        # Permet l'injection d'un client (réel ou simulé) pour les tests —
-        # sans ça, impossible d'utiliser le plugin pytest de python-icap
-        # (MockIcapClient) sans monkeypatcher l'import, plus fragile.
+        # Allows injecting a client (real or mocked) for tests — without
+        # this, it would be impossible to use python-icap's pytest plugin
+        # (MockIcapClient) without monkeypatching the import, which is more
+        # fragile.
         self._client_factory = client_factory
 
     def _make_client(self):
@@ -141,9 +155,9 @@ class IcapScanner(AntivirusScanner):
             IcapServerError,
             IcapException,
         ) as exc:
-            log.error("Scan ICAP échoué (%s:%s): %s", self.host, self.port, exc)
+            log.error("ICAP scan failed (%s:%s): %s", self.host, self.port, exc)
             raise AntivirusUnavailableError(
-                f"Serveur ICAP injoignable ou en erreur: {exc}"
+                f"ICAP server unreachable or in error: {exc}"
             ) from exc
 
         if response.is_no_modification:
@@ -158,28 +172,28 @@ class IcapScanner(AntivirusScanner):
 @lru_cache(maxsize=1)
 def get_scanner() -> AntivirusScanner:
     """
-    Point de configuration unique : change de moteur via variable
-    d'environnement, sans toucher au code appelant (voir main.py).
+    Single configuration point: switch engines via an environment
+    variable, without touching the calling code (see main.py).
 
-    Mis en cache (la config ne change jamais en cours de vie du conteneur) :
-    évite de reconstruire un scanner et de rejouer le warning "scan
-    désactivé" à chaque requête, et permet à main.py de valider la config
-    une seule fois au démarrage (échec rapide si mal configurée) plutôt que
-    de découvrir une AV_ENGINE/ICAP_* invalide sur la première requête venue.
+    Cached (the config never changes during the container's lifetime):
+    avoids rebuilding a scanner and replaying the "scan disabled" warning
+    on every request, and lets main.py validate the config only once at
+    startup (fail fast if misconfigured) rather than discovering an
+    invalid AV_ENGINE/ICAP_* on the first request that comes along.
     """
     engine = os.environ.get("AV_ENGINE", "none").strip().lower()
 
     if engine == "none":
         log.warning(
-            "AV_ENGINE=none : aucun scan antivirus actif. À configurer avant "
-            "toute mise en production avec de vraies données."
+            "AV_ENGINE=none: no antivirus scan active. Must be configured "
+            "before any production deployment with real data."
         )
         return NullScanner()
 
     if engine == "icap":
         host = os.environ.get("ICAP_HOST")
         if not host:
-            raise RuntimeError("AV_ENGINE=icap requiert ICAP_HOST")
+            raise RuntimeError("AV_ENGINE=icap requires ICAP_HOST")
         return IcapScanner(
             host=host,
             port=int(os.environ.get("ICAP_PORT", "1344")),
@@ -188,24 +202,24 @@ def get_scanner() -> AntivirusScanner:
             use_tls=os.environ.get("ICAP_TLS", "false").strip().lower() == "true",
         )
 
-    raise ValueError(f"AV_ENGINE inconnu: {engine!r} (valeurs valides: none, icap)")
+    raise ValueError(f"Unknown AV_ENGINE: {engine!r} (valid values: none, icap)")
 
 
 def is_av_enforced() -> bool:
     """
-    Indique si un verdict antivirus défavorable (menace détectée OU moteur
-    injoignable) doit bloquer le traitement du fichier, ou seulement être
-    journalisé en laissant le fichier continuer dans le pipeline.
+    Indicates whether an unfavorable antivirus verdict (threat detected OR
+    engine unreachable) must block processing of the file, or should only
+    be logged while letting the file continue through the pipeline.
 
-    Volontairement INDÉPENDANT de AV_ENGINE : permet de déployer un nouveau
-    moteur en mode "observation" (voir ce qu'il aurait bloqué, sans
-    perturber l'usage réel de l'application) avant de l'activer en
-    blocage — même logique que le mode SCMP_ACT_LOG avant blocage réel
-    pour le profil seccomp.
+    Deliberately INDEPENDENT from AV_ENGINE: allows deploying a new
+    engine in "observation" mode (see what it would have blocked,
+    without disrupting real application usage) before switching it to
+    blocking — same logic as SCMP_ACT_LOG mode before actual blocking
+    for the seccomp profile.
 
-    Par défaut à True dès qu'un moteur réel est configuré (cohérent avec
-    le principe déjà établi sur ce projet : mieux vaut bloquer à tort
-    qu'laisser passer une vraie menace) — à positionner explicitement à
-    "false" pour un déploiement en observation seule.
+    Defaults to True as soon as a real engine is configured (consistent
+    with the principle already established in this project: better to
+    wrongly block than to let a real threat through) — set explicitly to
+    "false" for an observation-only deployment.
     """
     return os.environ.get("AV_ENFORCE", "true").strip().lower() == "true"

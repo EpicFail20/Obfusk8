@@ -1,9 +1,21 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Tests unitaires — ne nécessitent AUCUN service externe (pas de Presidio, pas
-de Traefik, pas de Keycloak). Rapides, à lancer à chaque modification de
-main.py ou d'un fichier de thème.
+Unit tests — require NO external service (no Presidio, no Traefik, no
+Keycloak). Fast, to be run on every change to main.py or a theme file.
 
-Exécution : depuis /app dans le conteneur, `pytest` ou `pytest tests/ -v`.
+Execution: from /app in the container, `pytest` or `pytest tests/ -v`.
 """
 import json
 import io
@@ -32,7 +44,7 @@ import pymupdf as fitz  # noqa: E402
         ("DURAND Xavier", "Durand Xavier"),
         ("Jean DUPONT habite à Paris", "Jean Dupont habite à Paris"),
         ("déjà en minuscule", "déjà en minuscule"),
-        ("N°123", "N°123"),  # une seule lettre majuscule : jamais touchée
+        ("N°123", "N°123"),  # a single uppercase letter: never touched
     ],
 )
 def test_normalize_allcaps(text, expected):
@@ -40,53 +52,53 @@ def test_normalize_allcaps(text, expected):
 
 
 # ---------------------------------------------------------------------------
-# Regex des thèmes — exemples qui DOIVENT matcher / ne doivent PAS matcher
+# Theme regexes — examples that MUST match / must NOT match
 # ---------------------------------------------------------------------------
 
 def _get_pattern_regex(theme_key: str, pattern_name: str) -> str:
-    """Retrouve le regex d'un pattern précis dans un thème réellement chargé
-    (source unique de vérité : le même JSON que celui envoyé à Presidio)."""
+    """Looks up the regex of a specific pattern in an actually loaded theme
+    (single source of truth: the same JSON sent to Presidio)."""
     theme = main.THEMES[theme_key]
     for recognizer in theme["ad_hoc_recognizers"]:
         for pattern in recognizer["patterns"]:
             if pattern["name"] == pattern_name:
                 return pattern["regex"]
-    raise KeyError(f"Pattern {pattern_name!r} introuvable dans le thème {theme_key!r}")
+    raise KeyError(f"Pattern {pattern_name!r} not found in theme {theme_key!r}")
 
 
 IEP_PATTERN_NAME = "IEP (zéro(s) en tête + 8 chiffres min)"
 
 IEP_SHOULD_MATCH = [
-    "IEP: 00123456",     # 8 chiffres pile, 1 zéro en tête — cas limite
-    "IEP 000456789",     # 9 chiffres, 3 zéros en tête
-    "iep:0012345678",    # casse basse, sans espace
+    "IEP: 00123456",     # exactly 8 digits, 1 leading zero — edge case
+    "IEP 000456789",     # 9 digits, 3 leading zeros
+    "iep:0012345678",    # lowercase, no space
 ]
 IEP_SHOULD_NOT_MATCH = [
-    "IEP: 12345678",     # pas de zéro en tête
-    "IEP: 0012345",      # 7 chiffres seulement (8 attendus minimum)
+    "IEP: 12345678",     # no leading zero
+    "IEP: 0012345",      # only 7 digits (8 expected minimum)
 ]
 
 
 @pytest.mark.parametrize("text", IEP_SHOULD_MATCH)
 def test_iep_pattern_matches_valid_examples(text):
     regex = _get_pattern_regex("medical", IEP_PATTERN_NAME)
-    assert re.search(regex, text) is not None, f"aurait dû matcher: {text!r}"
+    assert re.search(regex, text) is not None, f"should have matched: {text!r}"
 
 
 @pytest.mark.parametrize("text", IEP_SHOULD_NOT_MATCH)
 def test_iep_pattern_rejects_invalid_examples(text):
     regex = _get_pattern_regex("medical", IEP_PATTERN_NAME)
-    assert re.search(regex, text) is None, f"n'aurait pas dû matcher: {text!r}"
+    assert re.search(regex, text) is None, f"should not have matched: {text!r}"
 
 
 # ---------------------------------------------------------------------------
-# _cluster_detections — fusion des zones superposées (bug corrigé ce soir)
+# _cluster_detections — merging of overlapping zones (bug fixed tonight)
 # ---------------------------------------------------------------------------
 
 def test_cluster_detections_merges_overlapping_rects():
-    """Deux détections quasi au même endroit (ex: NER générique + pattern
-    personnalisé sur le même nom) doivent fusionner en une seule zone
-    cliquable, sinon un clic n'en exclut qu'une et l'autre reste caviardée."""
+    """Two detections at almost the same spot (e.g. generic NER + custom
+    pattern on the same name) must merge into a single clickable zone,
+    otherwise a click only excludes one and the other stays redacted."""
     detections = [
         {
             "id": "a", "page": 0, "entity_type": "PERSON",
@@ -103,8 +115,8 @@ def test_cluster_detections_merges_overlapping_rects():
 
 
 def test_cluster_detections_keeps_distinct_zones_separate():
-    """Deux détections clairement à des endroits différents ne doivent
-    jamais être fusionnées à tort."""
+    """Two detections clearly in different spots must never be wrongly
+    merged."""
     detections = [
         {
             "id": "a", "page": 0, "entity_type": "PERSON",
@@ -128,11 +140,11 @@ def test_rect_iou_identical_rects_is_one():
 
 
 # ---------------------------------------------------------------------------
-# _check_page_images_sane — défense en profondeur CVE-2026-3308 (dimensions
-# d'image PDF absurdes avant tout appel à page.get_pixmap()). Un simple objet
-# factice avec get_images(full=True) suffit : la fonction ne lit que les
-# indices 2 (largeur) et 3 (hauteur) du tuple, comme le fait PyMuPDF pour
-# chaque image incrustée référencée par une page.
+# _check_page_images_sane — defense in depth for CVE-2026-3308 (absurd PDF
+# image dimensions before any call to page.get_pixmap()). A simple fake
+# object with get_images(full=True) is enough: the function only reads
+# indices 2 (width) and 3 (height) of the tuple, just like PyMuPDF does for
+# each embedded image referenced by a page.
 # ---------------------------------------------------------------------------
 
 class _FakePage:
@@ -150,12 +162,12 @@ def _fake_image_entry(width, height):
 
 def test_check_page_images_sane_allows_normal_dimensions():
     page = _FakePage([_fake_image_entry(800, 600)])
-    main._check_page_images_sane(page)  # ne doit pas lever
+    main._check_page_images_sane(page)  # must not raise
 
 
 def test_check_page_images_sane_allows_page_without_images():
     page = _FakePage([])
-    main._check_page_images_sane(page)  # ne doit pas lever
+    main._check_page_images_sane(page)  # must not raise
 
 
 def test_check_page_images_sane_rejects_oversized_dimensions():
@@ -175,9 +187,9 @@ def test_check_page_images_sane_rejects_zero_or_negative_dimensions(width, heigh
 
 
 # ---------------------------------------------------------------------------
-# _send_alert / _run_antivirus_scan — une alerte défaillante ne doit jamais
-# casser le flux principal qu'elle surveille (revue de sécurité, section 10
-# de plan_audit_consolide.md, même principe que la revue antivirus/ICAP)
+# _send_alert / _run_antivirus_scan — a failing alert must never break the
+# main flow it monitors (security review, section 10 of
+# plan_audit_consolide.md, same principle as the antivirus/ICAP review)
 # ---------------------------------------------------------------------------
 
 class _FakeScanner:
@@ -196,16 +208,16 @@ def _raising_alert_sink():
 
 def test_send_alert_n_echoue_jamais_meme_si_get_alert_sink_leve(monkeypatch, caplog):
     monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
-    main._send_alert(main.Alert(severity=main.AlertSeverity.WARNING, source="test", message="x"))  # ne doit pas lever
+    main._send_alert(main.Alert(severity=main.AlertSeverity.WARNING, source="test", message="x"))  # must not raise
 
 
 def test_antivirus_indisponible_renvoie_503_meme_si_alerte_echoue(monkeypatch):
-    """Avant correctif : une exception dans get_alert_sink()/.send() empêchait
-    d'atteindre le HTTPException 503 attendu, remontant un 500 générique à la
-    place — masquant la vraie cause (antivirus indisponible)."""
+    """Before the fix: an exception in get_alert_sink()/.send() prevented
+    reaching the expected HTTPException 503, raising a generic 500 instead —
+    masking the real cause (antivirus unavailable)."""
     monkeypatch.setattr(main, "get_scanner", lambda: (_ for _ in ()).throw(main.AntivirusUnavailableError("down")))
     monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
-    monkeypatch.delenv("AV_ENFORCE", raising=False)  # défaut = bloquant
+    monkeypatch.delenv("AV_ENFORCE", raising=False)  # default = blocking
 
     with pytest.raises(HTTPException) as exc_info:
         main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
@@ -224,11 +236,11 @@ def test_menace_detectee_renvoie_400_meme_si_alerte_echoue(monkeypatch):
 
 
 def test_nom_de_menace_est_assaini_avant_reutilisation(monkeypatch):
-    """Même risque de spoofing visuel par caractère de formatage Unicode
-    (RTL override...) que celui trouvé et corrigé sur le journal d'audit
-    (3.5) — threat_name vient du serveur ICAP, pas du fichier uploadé, mais
-    assaini par précaution avant de rejoindre la réponse HTTP et le journal
-    syslog."""
+    """Same visual spoofing risk via Unicode formatting characters
+    (RTL override...) as the one found and fixed on the audit log
+    (3.5) — threat_name comes from the ICAP server, not the uploaded file,
+    but sanitized as a precaution before joining the HTTP response and the
+    syslog log."""
     threat_with_rtl_override = "Trojan‮exe.pdf"
     monkeypatch.setattr(main, "get_scanner", lambda: _FakeScanner(is_clean=False, threat_name=threat_with_rtl_override))
     monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
@@ -240,13 +252,13 @@ def test_nom_de_menace_est_assaini_avant_reutilisation(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Caviardage manuel d'une image PDF (_apply_manual_redactions) — la zone
-# tracée à la main sur une image doit être réellement irrécupérable dans le
-# fichier de sortie, pas seulement masquée visuellement. Promu en test
-# permanent (auparavant vérifié uniquement via un script jetable, voir
-# app/tests/fixtures/verification_scripts/probe_image_redaction.py et
-# plan_audit_consolide.md section 8) : exerce le VRAI point d'entrée du
-# projet plutôt qu'une réimplémentation du mécanisme PyMuPDF.
+# Manual redaction of a PDF image (_apply_manual_redactions) — the zone
+# drawn by hand on an image must be truly unrecoverable in the output file,
+# not just visually masked. Promoted to a permanent test (previously
+# verified only via a disposable script, see
+# app/tests/fixtures/verification_scripts/probe_image_redaction.py and
+# plan_audit_consolide.md section 8): exercises the REAL entry point of
+# the project rather than a reimplementation of the PyMuPDF mechanism.
 # ---------------------------------------------------------------------------
 
 RED = (255, 0, 0)
@@ -254,8 +266,8 @@ BLUE = (0, 0, 255)
 
 
 def _build_two_color_pdf() -> bytes:
-    """PDF à une page avec une image 200x200 : moitié haute rouge (à
-    caviarder), moitié basse bleue (à conserver telle quelle)."""
+    """Single-page PDF with a 200x200 image: top half red (to be
+    redacted), bottom half blue (to be kept as-is)."""
     doc = fitz.open()
     page = doc.new_page(width=400, height=400)
     pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 200, 200))
@@ -268,9 +280,9 @@ def _build_two_color_pdf() -> bytes:
 
 
 def _color_present_in_any_image_object(pdf_bytes: bytes, target_rgb: tuple) -> bool:
-    """Balaie TOUS les objets image du document (pas seulement ceux
-    atteignables depuis l'arbre de pages courant) — même méthode que celle
-    qui avait révélé la fuite d'objets orphelins post-caviardage (section 7)."""
+    """Scans ALL image objects in the document (not just the ones
+    reachable from the current page tree) — same method as the one that
+    revealed the orphan-object leak after redaction (section 7)."""
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     try:
         target = bytes(target_rgb)
@@ -299,8 +311,8 @@ def test_zone_manuelle_sur_image_pdf_est_irrecuperable():
     assert _color_present_in_any_image_object(raw, RED)
     assert _color_present_in_any_image_object(raw, BLUE)
 
-    # Zone manuelle en coordonnées d'aperçu (display_rect = coordonnées PDF *
-    # PREVIEW_ZOOM), couvrant uniquement la moitié ROUGE de l'image insérée.
+    # Manual zone in preview coordinates (display_rect = PDF coordinates *
+    # PREVIEW_ZOOM), covering only the RED half of the inserted image.
     zone = {
         "page": 0,
         "rect": [
@@ -315,16 +327,16 @@ def test_zone_manuelle_sur_image_pdf_est_irrecuperable():
     doc.close()
 
     assert manual_count == 1
-    assert not _color_present_in_any_image_object(out_bytes, RED), "le rouge caviardé est encore récupérable"
-    assert _color_present_in_any_image_object(out_bytes, BLUE), "le bleu non caviardé a disparu à tort"
+    assert not _color_present_in_any_image_object(out_bytes, RED), "the redacted red is still recoverable"
+    assert _color_present_in_any_image_object(out_bytes, BLUE), "the non-redacted blue wrongly disappeared"
 
 
 # ---------------------------------------------------------------------------
-# Caviardage manuel d'une image DOCX entière (_apply_docx_image_redactions) —
-# comble le trou identifié lors de la revue précédente (aucun mécanisme
-# n'existait pour les images DOCX). Granularité "image entière" et non "zone
-# pixel précise" comme pour le PDF : DOCX n'a pas de mise en page fixe en
-# coordonnées sans moteur de rendu complet.
+# Manual redaction of an entire DOCX image (_apply_docx_image_redactions) —
+# fills the gap identified during the previous review (no mechanism
+# existed for DOCX images). "Whole image" granularity rather than "precise
+# pixel zone" as for PDF: DOCX has no fixed coordinate-based layout without
+# a full rendering engine.
 # ---------------------------------------------------------------------------
 
 def _make_solid_png(size: int, rgb: tuple) -> bytes:
@@ -334,12 +346,11 @@ def _make_solid_png(size: int, rgb: tuple) -> bytes:
 
 
 def _docx_media_pixel_colors(raw_docx: bytes) -> list:
-    """Couleur du pixel (0,0) de chaque image trouvée dans word/media/ du zip
-    de sortie — balayage direct du zip plutôt que du graphe de relations
-    python-docx, pour vérifier qu'aucune entrée orpheline ne subsiste non
-    plus (contrairement au PDF, une sauvegarde DOCX/OPC réécrit toujours
-    l'intégralité du paquet depuis le graphe vivant, mais autant vérifier
-    plutôt que supposer)."""
+    """Color of pixel (0,0) of every image found in word/media/ of the
+    output zip — direct zip scan rather than the python-docx relationship
+    graph, to also verify that no orphan entry remains either (unlike PDF,
+    a DOCX/OPC save always rewrites the whole package from the live graph,
+    but it's better to verify than to assume)."""
     colors = []
     with zipfile.ZipFile(io.BytesIO(raw_docx)) as zf:
         for name in zf.namelist():
@@ -384,9 +395,9 @@ def test_image_docx_caviardee_est_irrecuperable():
     reopened.save(out_buf)
     out_colors = _docx_media_pixel_colors(out_buf.getvalue())
 
-    assert (255, 0, 0) not in out_colors, "le rouge caviardé est encore récupérable dans le zip de sortie"
-    assert (0, 0, 255) in out_colors, "le bleu non caviardé a disparu à tort"
-    assert (0, 0, 0) in out_colors, "le carré noir de remplacement est absent"
+    assert (255, 0, 0) not in out_colors, "the redacted red is still recoverable in the output zip"
+    assert (0, 0, 255) in out_colors, "the non-redacted blue wrongly disappeared"
+    assert (0, 0, 0) in out_colors, "the replacement black square is missing"
 
 
 def test_apply_docx_image_redactions_sans_selection_ne_modifie_rien():
@@ -402,8 +413,8 @@ def test_apply_docx_image_redactions_sans_selection_ne_modifie_rien():
 
 @pytest.mark.parametrize("content_type,expected_fmt_ok", [("image/png", True), ("image/jpeg", True), ("image/gif", True)])
 def test_black_placeholder_image_bytes_est_toujours_decodable(content_type, expected_fmt_ok):
-    """Même pour un format non réencodable à l'identique (gif...), le
-    placeholder produit (PNG malgré tout) doit rester une image valide."""
+    """Even for a format that cannot be re-encoded identically (gif...),
+    the produced placeholder (PNG regardless) must remain a valid image."""
     data = main._black_placeholder_image_bytes(content_type)
     pix = fitz.Pixmap(data)
     assert pix.pixel(0, 0)[:3] == (0, 0, 0)
@@ -419,11 +430,11 @@ def test_build_docx_images_review_section_contient_case_a_cocher():
     html_out = main._build_docx_images_review_section(reopened)
     assert 'class="docx-image-checkbox"' in html_out
     assert "data-image-id=" in html_out
-    assert "base64," in html_out  # petite image : aperçu intégré
+    assert "base64," in html_out  # small image: embedded preview
 
 
 def test_build_docx_images_review_section_grosse_image_sans_apercu(monkeypatch):
-    monkeypatch.setattr(main, "MAX_DOCX_IMAGE_PREVIEW_BYTES", 10)  # force le seuil à être dépassé
+    monkeypatch.setattr(main, "MAX_DOCX_IMAGE_PREVIEW_BYTES", 10)  # force the threshold to be exceeded
     doc = WordDocument()
     doc.add_picture(io.BytesIO(_make_solid_png(20, RED)))
     buf = io.BytesIO()
@@ -432,7 +443,7 @@ def test_build_docx_images_review_section_grosse_image_sans_apercu(monkeypatch):
 
     html_out = main._build_docx_images_review_section(reopened)
     assert "Aperçu indisponible" in html_out
-    assert 'class="docx-image-checkbox"' in html_out  # reste sélectionnable malgré tout
+    assert 'class="docx-image-checkbox"' in html_out  # still selectable regardless
 
 
 def test_build_docx_images_review_section_vide_si_aucune_image():
@@ -446,10 +457,11 @@ def test_build_docx_images_review_section_vide_si_aucune_image():
 
 
 class _FakeImagePart:
-    """content_type et partname viennent du fichier .docx uploadé (déclarés
-    dans [Content_Types].xml / les cibles de relation) — donc contrôlables
-    par un attaquant. Vérifie qu'un payload XSS dans l'un ou l'autre ne
-    survit pas tel quel dans la page de révision rendue au navigateur."""
+    """content_type and partname come from the uploaded .docx file
+    (declared in [Content_Types].xml / relationship targets) — hence
+    controllable by an attacker. Verifies that an XSS payload in either
+    one does not survive as-is in the review page rendered to the
+    browser."""
     def __init__(self, partname, content_type, blob):
         self.partname = partname
         self.content_type = content_type
@@ -468,7 +480,7 @@ def test_build_docx_images_review_section_echappe_le_contenu_hostile(monkeypatch
 
 
 # ---------------------------------------------------------------------------
-# Support image (PNG/JPEG) - validation d'entrée, OCR, caviardage, métadonnées
+# Image support (PNG/JPEG) - input validation, OCR, redaction, metadata
 # ---------------------------------------------------------------------------
 
 from PIL import Image  # noqa: E402
@@ -491,10 +503,10 @@ def test_detect_file_kind_reconnait_png_et_jpeg(raw, expected):
 
 
 def test_open_and_validate_image_rejette_dimensions_excessives():
-    # Mode "1" (bilevel) : ~8 Mo pour 8000x8000 = 64 000 000 pixels, très
-    # au-dessus de MAX_IMAGE_PIXELS (40 000 000 par défaut) — vérifie que le
-    # rejet se fait bien sur les dimensions déclarées, sans jamais décoder
-    # les pixels d'une vraie image de cette taille.
+    # Mode "1" (bilevel): ~8 MB for 8000x8000 = 64,000,000 pixels, well
+    # above MAX_IMAGE_PIXELS (40,000,000 by default) — verifies that the
+    # rejection is indeed based on the declared dimensions, without ever
+    # decoding the pixels of a real image of that size.
     img = Image.new("1", (8000, 8000))
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -505,11 +517,11 @@ def test_open_and_validate_image_rejette_dimensions_excessives():
 
 
 def test_open_and_validate_image_rejette_bombe_au_dela_du_double_du_seuil():
-    # Au-delà de 2x MAX_IMAGE_PIXELS, Pillow lève lui-même
-    # DecompressionBombError depuis Image.open() — vérifie que cette
-    # exception interne est bien convertie en rejet propre (400), pas une
-    # trace brute qui remonterait telle quelle.
-    img = Image.new("1", (13000, 13000))  # 169 000 000 pixels
+    # Beyond 2x MAX_IMAGE_PIXELS, Pillow itself raises
+    # DecompressionBombError from Image.open() — verifies that this
+    # internal exception is properly converted into a clean rejection
+    # (400), not a raw traceback that would propagate as-is.
+    img = Image.new("1", (13000, 13000))  # 169,000,000 pixels
     buf = io.BytesIO()
     img.save(buf, format="PNG")
 
@@ -527,39 +539,39 @@ def test_open_and_validate_image_accepte_dimensions_normales():
 
 def test_image_corrompue_ou_tronquee_leve_erreur_propre():
     raw = _solid_image_bytes(50, RED)
-    truncated = raw[:-30]  # en-tête (IHDR) intact, données IDAT tronquées
+    truncated = raw[:-30]  # header (IHDR) intact, IDAT data truncated
 
-    # L'en-tête reste lisible : Image.open() (Phase 1) ne détecte pas encore
-    # le problème, seul un décodage complet (.load(), comme fait par
-    # _handle_detect_image après validation) le révèle — reproduit le
-    # chemin réel plutôt qu'un raccourci de test.
+    # The header remains readable: Image.open() (Phase 1) does not yet
+    # detect the problem, only a full decode (.load(), as done by
+    # _handle_detect_image after validation) reveals it — reproduces the
+    # real path rather than a test shortcut.
     img = main._open_and_validate_image(truncated)
     with pytest.raises(OSError):
         img.load()
 
 
 def test_detect_image_sans_texte_renvoie_liste_vide():
-    # Image blanche unie : aucun mot OCR trouvé -> aucune erreur, liste
-    # vide directement (ne doit jamais appeler Presidio dans ce cas).
+    # Solid white image: no OCR word found -> no error, empty list
+    # directly (must never call Presidio in this case).
     img = Image.new("RGB", (100, 100), (255, 255, 255))
     assert main._detect_image(img) == []
 
 
 def test_tesseract_cmd_est_un_chemin_absolu_pas_une_recherche_path():
-    # Défense en profondeur contre un détournement de $PATH (voir main.py) :
-    # jamais la valeur par défaut de pytesseract ("tesseract" seul).
+    # Defense in depth against a $PATH hijack (see main.py): never
+    # pytesseract's default value ("tesseract" alone).
     assert main.pytesseract.pytesseract.tesseract_cmd == "/usr/bin/tesseract"
 
 
 def test_run_ocr_sous_processus_reellement_tue_au_depassement_du_timeout(monkeypatch):
     """
-    Vérifie le VRAI sous-processus tesseract (pas un mock) : avec un timeout
-    absurdement court, le sous-processus doit être terminé proprement
-    (SIGTERM/SIGKILL côté pytesseract, voir sa fonction kill()) et l'appelant
-    doit recevoir une erreur propre — jamais une requête bloquée
-    indéfiniment, jamais une trace brute. Reproduit le scénario qui a motivé
-    l'ajout de MAX_OCR_SECONDS : un `subprocess.Popen` sans borne de temps
-    peut tourner indéfiniment sur une image pathologique.
+    Verifies the REAL tesseract subprocess (not a mock): with an
+    absurdly short timeout, the subprocess must be cleanly terminated
+    (SIGTERM/SIGKILL on the pytesseract side, see its kill() function)
+    and the caller must receive a clean error — never a request blocked
+    indefinitely, never a raw traceback. Reproduces the scenario that
+    motivated adding MAX_OCR_SECONDS: a `subprocess.Popen` with no time
+    bound can run indefinitely on a pathological image.
     """
     monkeypatch.setattr(main, "MAX_OCR_SECONDS", 0.001)
     img = Image.new("RGB", (200, 200), (255, 255, 255))
@@ -571,9 +583,9 @@ def test_run_ocr_sous_processus_reellement_tue_au_depassement_du_timeout(monkeyp
 
 
 def test_run_ocr_timeout_error_distinct_de_tesseract_error(monkeypatch):
-    """`TesseractError` hérite de `RuntimeError` — vérifie que le except
-    plus spécifique intercepte bien en premier (pas de faux message de
-    timeout pour une vraie erreur moteur)."""
+    """`TesseractError` inherits from `RuntimeError` — verifies that the
+    more specific except clause does intercept first (no false timeout
+    message for a real engine error)."""
     def _raise_tesseract_error(*args, **kwargs):
         raise main.pytesseract.TesseractError(1, "erreur moteur simulée")
 
@@ -610,20 +622,20 @@ def test_map_entities_to_word_boxes_associe_les_bonnes_bounding_boxes():
 
     detections = main._map_entities_to_word_boxes(entities, spans)
 
-    assert len(detections) == 2  # un rectangle par mot recouvert
+    assert len(detections) == 2  # one rectangle per covered word
     assert all(d["entity_type"] == "PERSON" for d in detections)
     assert all(d["page"] == 0 for d in detections)
     rects = sorted(d["page_rect"] for d in detections)
     assert rects == [[0.0, 0.0, 30.0, 10.0], [35.0, 0.0, 75.0, 10.0]]
-    # "habite" (hors de l'empan [0,11)) ne doit produire aucune détection
+    # "habite" (outside the span [0,11)) must produce no detection
     assert all(d["page_rect"][0] < 76 for d in detections)
 
 
 def test_zone_manuelle_image_est_irrecuperable():
-    """Même exigence que pour le PDF (voir
-    test_zone_manuelle_sur_image_pdf_est_irrecuperable) : une zone tracée
-    manuellement sur UNE moitié d'une image doit rendre cette moitié
-    irrécupérable au niveau des pixels, sans toucher à l'autre moitié."""
+    """Same requirement as for PDF (see
+    test_zone_manuelle_sur_image_pdf_est_irrecuperable): a zone drawn
+    manually on ONE half of an image must make that half unrecoverable
+    at the pixel level, without touching the other half."""
     W, H = 200, 100
     img = Image.new("RGB", (W, H), RED)
     for x in range(W // 2, W):
@@ -636,10 +648,10 @@ def test_zone_manuelle_image_est_irrecuperable():
 
     out_bytes = main._strip_image_metadata_and_encode(img, "PNG")
     out_img = Image.open(io.BytesIO(out_bytes))
-    assert out_img.getpixel((10, 10)) == (0, 0, 0), "la zone rouge caviardée n'est pas devenue noire"
-    assert out_img.getpixel((W - 10, 10)) == BLUE, "le bleu non caviardé a été altéré à tort"
-    # Balayage exhaustif : aucun pixel rouge résiduel nulle part dans le fichier de sortie.
-    assert RED not in out_img.get_flattened_data(), "le rouge caviardé est encore récupérable quelque part dans l'image"
+    assert out_img.getpixel((10, 10)) == (0, 0, 0), "the redacted red zone did not turn black"
+    assert out_img.getpixel((W - 10, 10)) == BLUE, "the non-redacted blue was wrongly altered"
+    # Exhaustive scan: no residual red pixel anywhere in the output file.
+    assert RED not in out_img.get_flattened_data(), "the redacted red is still recoverable somewhere in the image"
 
 
 def test_strip_image_metadata_removes_png_text_chunks():
@@ -649,11 +661,11 @@ def test_strip_image_metadata_removes_png_text_chunks():
     buf = io.BytesIO()
     img.save(buf, format="PNG", pnginfo=pnginfo)
     reopened = Image.open(io.BytesIO(buf.getvalue()))
-    assert "Comment" in reopened.text  # précondition : le chunk est bien présent
+    assert "Comment" in reopened.text  # precondition: the chunk is indeed present
 
     out_bytes = main._strip_image_metadata_and_encode(reopened, "PNG")
     out_img = Image.open(io.BytesIO(out_bytes))
-    assert not getattr(out_img, "text", {}), "un chunk de texte PNG a survécu au dépouillement"
+    assert not getattr(out_img, "text", {}), "a PNG text chunk survived stripping"
     assert b"donnee-sensible" not in out_bytes
 
 
@@ -662,7 +674,7 @@ def test_strip_image_metadata_removes_icc_profile():
     buf = io.BytesIO()
     img.save(buf, format="PNG", icc_profile=b"FAKE-ICC-PROFILE-DATA")
     reopened = Image.open(io.BytesIO(buf.getvalue()))
-    assert "icc_profile" in reopened.info  # précondition
+    assert "icc_profile" in reopened.info  # precondition
 
     out_bytes = main._strip_image_metadata_and_encode(reopened, "PNG")
     out_img = Image.open(io.BytesIO(out_bytes))
@@ -687,13 +699,13 @@ def _make_solid_jpeg(size, rgb):
 
 def _embed_exif_gps_and_thumbnail(main_jpeg: bytes, thumb_jpeg: bytes) -> bytes:
     """
-    Construit à la main un segment APP1/EXIF complet (coordonnées GPS +
-    miniature JPEG intégrée dans l'IFD1, comme le ferait un vrai appareil
-    photo/smartphone) et l'insère juste après le marqueur SOI du JPEG
-    principal — reproduit fidèlement la structure EXIF réelle plutôt qu'une
-    approximation, pour que le test de non-fuite (voir
-    test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage) porte
-    sur un cas réaliste.
+    Manually builds a complete APP1/EXIF segment (GPS coordinates + a JPEG
+    thumbnail embedded in IFD1, as a real camera/smartphone would) and
+    inserts it right after the SOI marker of the main JPEG — faithfully
+    reproduces the real EXIF structure rather than an approximation, so
+    that the no-leak test (see
+    test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage) covers
+    a realistic case.
     """
     header = b"II" + struct.pack("<H", 42) + struct.pack("<I", 8)
     ifd0_offset = 8
@@ -728,23 +740,23 @@ def _embed_exif_gps_and_thumbnail(main_jpeg: bytes, thumb_jpeg: bytes) -> bytes:
 
 def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
     """
-    Point de vigilance explicitement demandé : si l'image principale est
-    caviardée mais que la miniature EXIF garde les pixels d'origine, c'est
-    une fuite directe. Construit une image avec une VRAIE miniature EXIF de
-    contenu différent (bleu) de l'image principale (rouge) pour détecter
-    sans ambiguïté toute survivance.
+    Explicitly requested point of vigilance: if the main image is
+    redacted but the EXIF thumbnail keeps the original pixels, that is a
+    direct leak. Builds an image with a REAL EXIF thumbnail whose content
+    (blue) differs from the main image (red) to unambiguously detect any
+    survival.
     """
     main_bytes = _make_solid_jpeg(64, RED)
     thumb_bytes = _make_solid_jpeg(32, BLUE)
     raw = _embed_exif_gps_and_thumbnail(main_bytes, thumb_bytes)
 
-    # Préconditions : EXIF, GPS et miniature bien présents en entrée.
+    # Preconditions: EXIF, GPS and thumbnail indeed present on input.
     opened = Image.open(io.BytesIO(raw))
     assert "exif" in opened.info
     gps_ifd = opened.getexif().get_ifd(0x8825)
-    assert gps_ifd, "précondition invalide : pas de coordonnées GPS dans le fixture"
-    assert thumb_bytes in raw, "précondition invalide : la miniature n'est pas embarquée telle quelle"
-    assert raw.count(b"\xff\xd8\xff") == 2, "précondition invalide : deux flux JPEG (principal + miniature) attendus"
+    assert gps_ifd, "invalid precondition: no GPS coordinates in the fixture"
+    assert thumb_bytes in raw, "invalid precondition: the thumbnail is not embedded as-is"
+    assert raw.count(b"\xff\xd8\xff") == 2, "invalid precondition: two JPEG streams (main + thumbnail) expected"
 
     job = {"raw_image": raw, "image_format": "JPEG", "detections": [], "theme": ""}
     summary, output_path, manual_count = main._finalize_image_job(
@@ -754,43 +766,44 @@ def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
         out_bytes = output_path.read_bytes()
         reopened = Image.open(io.BytesIO(out_bytes))
 
-        assert "exif" not in reopened.info, "l'EXIF (donc le GPS et la miniature) a survécu au caviardage"
-        assert b"\xff\xe1" not in out_bytes, "un segment APP1/EXIF résiduel est présent dans le fichier de sortie"
-        assert out_bytes.count(b"\xff\xd8\xff") == 1, "un second flux JPEG (la miniature) est encore présent"
-        assert thumb_bytes not in out_bytes, "les octets bruts de la miniature sont encore récupérables"
+        assert "exif" not in reopened.info, "EXIF (hence GPS and the thumbnail) survived redaction"
+        assert b"\xff\xe1" not in out_bytes, "a residual APP1/EXIF segment is present in the output file"
+        assert out_bytes.count(b"\xff\xd8\xff") == 1, "a second JPEG stream (the thumbnail) is still present"
+        assert thumb_bytes not in out_bytes, "the raw thumbnail bytes are still recoverable"
     finally:
         output_path.unlink(missing_ok=True)
 
 
 
 # ---------------------------------------------------------------------------
-# Passe de vérification de sécurité finale — champ de formulaire `theme` non
-# fiable (spoofing du journal d'audit + débordement du nom de fichier) et gap
-# de gestion d'erreur RecursionError sur `manual_zones`. Tests appelant les
-# VRAIS endpoints (fonctions asynchrones), pas des fonctions internes isolées.
+# Final security verification pass — untrusted `theme` form field (audit
+# log spoofing + file name overflow) and a RecursionError error-handling
+# gap on `manual_zones`. Tests calling the REAL endpoints (async
+# functions), not isolated internal functions.
 #
-# Les coroutines sont pilotées manuellement (`_drive`) plutôt que via
-# `asyncio.run()` : créer une nouvelle boucle d'événements appelle un syscall
-# de sélecteur (epoll) absent du profil seccomp de blocage réel du service
-# (`app-enforce.json`), ce qui ferait échouer ces tests dans le conteneur
-# durci — le reste de la suite n'utilise jamais asyncio. Les deux endpoints
-# n'ont aucun point de suspension réel (finalize : zéro `await` ; detect :
-# seulement `await file.read()`, résolu ici par un upload à lecture
-# synchrone), donc un unique `.send(None)` les mène à terme sans boucle.
+# Coroutines are driven manually (`_drive`) rather than via
+# `asyncio.run()`: creating a new event loop calls a selector syscall
+# (epoll) absent from the service's real enforcing seccomp profile
+# (`app-enforce.json`), which would make these tests fail inside the
+# hardened container — the rest of the suite never uses asyncio. Neither
+# endpoint has a real suspension point (finalize: zero `await`; detect:
+# only `await file.read()`, resolved here by a synchronously-read
+# upload), so a single `.send(None)` drives them to completion without a
+# loop.
 # ---------------------------------------------------------------------------
 import time as _time  # noqa: E402
 import unicodedata  # noqa: E402
 
 
 def _drive(coro):
-    """Exécute une coroutine sans point de suspension réel jusqu'à son retour,
-    sans créer de boucle d'événements (voir en-tête de section)."""
+    """Runs a coroutine with no real suspension point through to its
+    return, without creating an event loop (see section header)."""
     try:
         coro.send(None)
     except StopIteration as stop:
         return stop.value
     coro.close()
-    raise AssertionError("la coroutine ne s'est pas terminée en une étape (await réel inattendu)")
+    raise AssertionError("the coroutine did not complete in one step (unexpected real await)")
 
 
 class _FakeRequest:
@@ -799,9 +812,9 @@ class _FakeRequest:
 
 
 class _SyncUpload:
-    """Duck-type d'UploadFile : detect_document n'utilise que `.filename` et
-    `await .read()`. Lecture synchrone (async def sans await) pour ne jamais
-    suspendre la coroutine appelante."""
+    """Duck-type of UploadFile: detect_document only uses `.filename` and
+    `await .read()`. Synchronous read (async def with no await) so as to
+    never suspend the calling coroutine."""
     def __init__(self, filename: str, data: bytes):
         self.filename = filename
         self._data = data
@@ -828,12 +841,12 @@ def _seed_csv_job(job_id: str, theme: str = "") -> None:
 
 def test_finalize_manual_zones_json_profondement_imbrique_ne_fait_pas_planter():
     """
-    Un tableau JSON profondément imbriqué ("[[[[...") d'à peine ~200 Ko (donc
-    SOUS la limite de partie multipart de Starlette, 1 Mo) fait dépasser la
-    profondeur de récursion du décodeur `json` — une RecursionError, non
-    couverte par `json.JSONDecodeError`, qui remontait jusqu'à un 500
-    générique non maîtrisé. Doit désormais être traitée comme une entrée
-    malformée ordinaire : aucune zone manuelle, finalisation menée à bien.
+    A deeply nested JSON array ("[[[[...") of barely ~200 KB (so BELOW
+    Starlette's multipart-part limit of 1 MB) exceeds the `json` decoder's
+    recursion depth — a RecursionError, not covered by
+    `json.JSONDecodeError`, which propagated up to an uncontrolled generic
+    500. Must now be treated as an ordinary malformed input: no manual
+    zone, finalization completed successfully.
     """
     deep = "[" * 200000
     job_id = "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
@@ -851,9 +864,9 @@ def test_finalize_manual_zones_json_profondement_imbrique_ne_fait_pas_planter():
 
 
 def test_finalize_manual_zones_json_invalide_ordinaire_reste_tolere():
-    """Non-régression : un JSON simplement invalide reste traité comme
-    'aucune zone', sans échec — le nouveau `except` ne resserre pas ce
-    comportement déjà en place."""
+    """Regression check: a simply invalid JSON is still treated as 'no
+    zone', without failing — the new `except` does not tighten this
+    already-in-place behavior."""
     job_id = "0011223344556677889900aabbccddee"
     _seed_csv_job(job_id)
     try:
@@ -870,14 +883,14 @@ def test_finalize_manual_zones_json_invalide_ordinaire_reste_tolere():
 
 def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
     """
-    Le champ `theme` est librement contrôlé par le client. Sans traitement,
-    (a) un caractère de formatage bidirectionnel Unicode (U+202E) y passe
-    intact jusqu'au journal d'audit (même spoofing que 3.5, corrigé pour
-    `user` mais pas pour `theme`), et (b) une valeur très longue déborde le
-    nom du fichier de sortie (Errno 36) et fait échouer la finalisation avec
-    un message trompeur. Vérifie via les vrais endpoints /api/detect puis
-    /api/finalize que la valeur stockée est nettoyée et bornée, et que le
-    cycle complet aboutit.
+    The `theme` field is freely controlled by the client. Without
+    processing, (a) a Unicode bidirectional formatting character
+    (U+202E) passes through intact into the audit log (same spoofing as
+    3.5, fixed for `user` but not for `theme`), and (b) a very long value
+    overflows the output file name (Errno 36) and makes finalization
+    fail with a misleading message. Verifies via the real /api/detect
+    then /api/finalize endpoints that the stored value is cleaned and
+    bounded, and that the full cycle succeeds.
     """
     monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
     hostile_theme = "medical‮" + ("a" * 500)
@@ -891,9 +904,9 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
     stored = job["theme"]
     try:
         assert all(unicodedata.category(ch)[0] != "C" for ch in stored), (
-            "un caractère de contrôle/format Unicode a survécu dans le theme stocké"
+            "a Unicode control/format character survived in the stored theme"
         )
-        assert len(stored) <= main.MAX_THEME_CHARS, "theme non borné en longueur"
+        assert len(stored) <= main.MAX_THEME_CHARS, "theme not bounded in length"
 
         final_resp = _drive(
             main.finalize_document(
@@ -905,32 +918,32 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
         payload = json.loads(bytes(final_resp.body))
         slug = re.sub(r"[^a-zA-Z0-9_-]", "_", stored)
         out = main.WORKDIR / f"{payload['job_id']}-{slug}-anonymise.csv"
-        assert out.exists(), "fichier de sortie absent (débordement de nom probable)"
+        assert out.exists(), "output file missing (likely name overflow)"
         out.unlink(missing_ok=True)
     finally:
         main.PENDING_JOBS.pop(job_id, None)
 
 
 # ---------------------------------------------------------------------------
-# Passe de revue de sécurité complémentaire : plafond de taille de requête,
-# en-têtes de sécurité, échappement de la page d'erreur, umask.
+# Additional security review pass: request size cap, security headers,
+# error page escaping, umask.
 #
-# Ces tests traversent la pile ASGI COMPLÈTE de l'application (middlewares,
-# routage, parsing de formulaire FastAPI, gestionnaire d'exception), pas
-# seulement les fonctions d'endpoint — c'est précisément le niveau où les
-# deux middlewares agissent. Pilotage manuel de la coroutine (voir `_drive`),
-# donc uniquement des chemins sans point de suspension réel : formulaire
-# multipart tenu en mémoire (< 1 Mo, au-delà Starlette passe par un thread),
-# endpoints asynchrones (/api/detect, /api/finalize).
+# These tests go through the application's FULL ASGI stack (middlewares,
+# routing, FastAPI form parsing, exception handler), not just endpoint
+# functions — precisely the level at which the two middlewares operate.
+# Manual coroutine driving (see `_drive`), so only paths with no real
+# suspension point: multipart form held in memory (< 1 MB, beyond that
+# Starlette goes through a thread), async endpoints (/api/detect,
+# /api/finalize).
 # ---------------------------------------------------------------------------
 import os as _os  # noqa: E402
 import stat as _stat  # noqa: E402
 
 
 def _asgi_request(method, path, headers=None, body_chunks=(), content_length=None):
-    """Joue une requête HTTP à travers `main.app` (pile ASGI complète) et
-    renvoie (statut, en-têtes, corps, nombre de fragments de corps
-    réellement consommés par l'application)."""
+    """Plays an HTTP request through `main.app` (full ASGI stack) and
+    returns (status, headers, body, number of body chunks actually
+    consumed by the application)."""
     raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
     if content_length is not None:
         raw_headers.append((b"content-length", str(content_length).encode()))
@@ -982,11 +995,11 @@ _EXPECTED_SECURITY_HEADERS = {
 
 def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps():
     """
-    Un Content-Length au-delà du plafond doit être rejeté AVANT toute lecture
-    du corps : zéro fragment consommé. Sans ce garde-fou, l'intégralité du
-    corps était reçue (tmpfs = mémoire du conteneur) puis relue en mémoire
-    avant le contrôle MAX_UPLOAD_MB — un seul upload suffisait à tuer le
-    conteneur par OOM (reproduit : 700 Mo chunkés → exit 137).
+    A Content-Length beyond the cap must be rejected BEFORE any body
+    read: zero chunks consumed. Without this safeguard, the entire body
+    was received (tmpfs = container memory) then re-read into memory
+    before the MAX_UPLOAD_MB check — a single upload was enough to kill
+    the container via OOM (reproduced: 700 MB chunked -> exit 137).
     """
     huge = 200 * 1024 * 1024
     status, headers, body, consumed = _asgi_request(
@@ -995,20 +1008,20 @@ def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps():
         body_chunks=[b"x" * 1024] * 4, content_length=huge,
     )
     assert status == 413
-    assert consumed == 0, "le corps ne doit pas être lu du tout"
+    assert consumed == 0, "the body must not be read at all"
     assert "Requête trop volumineuse" in json.loads(body)["detail"]
-    # Le 413 émis directement par le middleware porte lui aussi les en-têtes
-    # de sécurité (ordre d'empilement des middlewares vérifié).
+    # The 413 emitted directly by the middleware also carries the
+    # security headers (middleware stacking order verified).
     for name, value in _EXPECTED_SECURITY_HEADERS.items():
-        assert headers.get(name) == value, f"en-tête {name} absent/incorrect sur le 413"
+        assert headers.get(name) == value, f"header {name} missing/incorrect on the 413"
 
 
 def test_upload_chunke_sans_content_length_interrompu_au_plafond(monkeypatch):
     """
-    Sans Content-Length (transfert chunké), le plafond doit s'appliquer au fil
-    de la réception : la lecture s'arrête dès le dépassement, sans consommer
-    le reste du corps, et la réponse est un 413 propre (pas un 400 générique
-    « error parsing the body », ni un 500).
+    Without Content-Length (chunked transfer), the cap must apply as
+    data is received: reading stops as soon as the cap is exceeded,
+    without consuming the rest of the body, and the response is a clean
+    413 (not a generic 400 "error parsing the body", nor a 500).
     """
     monkeypatch.setattr(main, "MAX_REQUEST_BODY_BYTES", 64 * 1024)
     chunk = b"\0" * (16 * 1024)
@@ -1020,16 +1033,17 @@ def test_upload_chunke_sans_content_length_interrompu_au_plafond(monkeypatch):
         body_chunks=chunks,
     )
     assert status == 413, resp_body[:200]
-    assert consumed < len(chunks), "tout le corps a été consommé malgré le plafond"
-    assert consumed <= 5, f"lecture poursuivie bien au-delà du plafond ({consumed} fragments de 16 Ko)"
+    assert consumed < len(chunks), "the entire body was consumed despite the cap"
+    assert consumed <= 5, f"reading continued well beyond the cap ({consumed} 16 KB chunks)"
     assert headers.get("cache-control") == "no-store"
 
 
 def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
-    """Non-régression : un upload ordinaire (petit CSV, Content-Length exact)
-    traverse les deux middlewares et aboutit à la page de révision, qui porte
-    les en-têtes de sécurité — dont no-store, essentiel sur cette page qui
-    affiche le contenu détecté EN CLAIR pour révision."""
+    """Regression check: an ordinary upload (small CSV, exact
+    Content-Length) goes through both middlewares and reaches the review
+    page, which carries the security headers — including no-store,
+    essential on this page which displays the detected content IN THE
+    CLEAR for review."""
     monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
     body = _multipart_file_body(b"nom,ville\nJean Dupont,Paris\n")
     status, headers, resp_body, consumed = _asgi_request(
@@ -1041,7 +1055,7 @@ def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
         assert status == 200, resp_body[:300]
         assert consumed == 1
         for name, value in _EXPECTED_SECURITY_HEADERS.items():
-            assert headers.get(name) == value, f"en-tête {name} absent/incorrect"
+            assert headers.get(name) == value, f"header {name} missing/incorrect"
         assert "frame-ancestors 'none'" in headers.get("content-security-policy", "")
         assert "connect-src 'self'" in headers.get("content-security-policy", "")
         assert headers.get("strict-transport-security", "").startswith("max-age=")
@@ -1051,8 +1065,9 @@ def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
 
 
 def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite():
-    """Les en-têtes doivent aussi couvrir les réponses d'erreur produites par
-    http_exception_handler (ici un 404 de /api/finalize sur un job inconnu)."""
+    """Headers must also cover the error responses produced by
+    http_exception_handler (here a 404 from /api/finalize for an unknown
+    job)."""
     form = b"job_id=00000000000000000000000000000000"
     status, headers, _, _ = _asgi_request(
         "POST", "/api/finalize",
@@ -1061,30 +1076,31 @@ def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite():
     )
     assert status == 404
     for name, value in _EXPECTED_SECURITY_HEADERS.items():
-        assert headers.get(name) == value, f"en-tête {name} absent/incorrect sur le 404"
+        assert headers.get(name) == value, f"header {name} missing/incorrect on the 404"
 
 
 def test_download_pdf_autorise_le_cadrage_par_sa_propre_page_apercu():
     """
-    La page "Aperçu (contrôle visuel)" servie par /api/finalize embarque le
-    PDF caviardé dans un <iframe src="/api/download/{job_id}">. Les en-têtes
-    de sécurité globaux (frame-ancestors 'none' + X-Frame-Options: DENY)
-    s'appliquaient aussi à cette réponse : le navigateur refuse alors
-    d'afficher sa PROPRE réponse dans SA PROPRE iframe ("Firefox ne peut
-    ouvrir cette page"), alors même que la requête HTTP réussit (200 dans les
-    journaux — la requête part et le fichier est bien renvoyé, seul l'affichage
-    est bloqué côté navigateur après coup). Seules les extensions servies en
-    inline (PDF/PNG/JPG, voir _INLINE_EXTENSIONS) ont besoin d'assouplir
-    frame-ancestors à 'self' — un site tiers reste bloqué, comme les
-    téléchargements en pièce jointe (.docx/.csv) qui gardent 'none'.
+    The "Preview (visual check)" page served by /api/finalize embeds the
+    redacted PDF in an <iframe src="/api/download/{job_id}">. The global
+    security headers (frame-ancestors 'none' + X-Frame-Options: DENY)
+    also applied to this response: the browser then refuses to display
+    its OWN response inside its OWN iframe ("Firefox can't open this
+    page"), even though the HTTP request itself succeeds (200 in the
+    logs — the request goes through and the file is indeed returned,
+    only the display is blocked on the browser side afterwards). Only
+    the extensions served inline (PDF/PNG/JPG, see _INLINE_EXTENSIONS)
+    need frame-ancestors relaxed to 'self' — a third-party site remains
+    blocked, as do attachment downloads (.docx/.csv) which keep 'none'.
     """
-    # download() est un endpoint SYNCHRONE (def, pas async def) : FastAPI le
-    # dispatche via run_in_threadpool, un vrai point de suspension que _drive
-    # ne peut pas traverser (voir en-tête de section) — appelée directement,
-    # pas à travers _asgi_request, comme toute fonction Python normale. Cela
-    # ne teste donc que les en-têtes posés par la route elle-même : le
-    # middleware (_asgi_request le couvre déjà ailleurs, ex. ligne ~1043) est
-    # responsable de compléter le reste (no-store, nosniff...) en production.
+    # download() is a SYNCHRONOUS endpoint (def, not async def): FastAPI
+    # dispatches it via run_in_threadpool, a real suspension point that
+    # _drive cannot traverse (see section header) — called directly, not
+    # through _asgi_request, like any normal Python function. This
+    # therefore only tests the headers set by the route itself: the
+    # middleware (_asgi_request already covers it elsewhere, e.g. line
+    # ~1043) is responsible for completing the rest (no-store,
+    # nosniff...) in production.
     job_id = "ab" * 16
     out = main.WORKDIR / f"{job_id}-medical-anonymise.pdf"
     out.write_bytes(b"%PDF-1.4 fake")
@@ -1092,20 +1108,20 @@ def test_download_pdf_autorise_le_cadrage_par_sa_propre_page_apercu():
         resp = main.download(job_id)
         assert resp.status_code == 200
         assert resp.headers.get("x-frame-options") == "SAMEORIGIN", (
-            "X-Frame-Options: DENY empêche la page d'aperçu de cadrer son propre PDF"
+            "X-Frame-Options: DENY prevents the preview page from framing its own PDF"
         )
         assert "frame-ancestors 'self'" in resp.headers.get("content-security-policy", ""), (
-            "frame-ancestors 'none' empêche la page d'aperçu de cadrer son propre PDF"
+            "frame-ancestors 'none' prevents the preview page from framing its own PDF"
         )
     finally:
         out.unlink(missing_ok=True)
 
 
 def test_download_csv_conserve_frame_ancestors_none():
-    """Non-régression : les téléchargements en pièce jointe (pas d'aperçu
-    intégré, voir main.py ~3712) n'ont aucun besoin d'être cadrables — la
-    route ne doit rien surcharger, pour laisser le middleware appliquer la
-    posture la plus stricte (frame-ancestors 'none' / DENY) en production."""
+    """Regression check: attachment downloads (no embedded preview, see
+    main.py ~3712) have no need to be frameable — the route must not
+    override anything, so the middleware can apply the strictest posture
+    (frame-ancestors 'none' / DENY) in production."""
     job_id = "cd" * 16
     out = main.WORKDIR / f"{job_id}-compta-anonymise.csv"
     out.write_bytes(b"nom,ville\n")
@@ -1120,11 +1136,11 @@ def test_download_csv_conserve_frame_ancestors_none():
 
 def test_page_erreur_html_echappe_le_detail():
     """
-    http_exception_handler injectait `exc.detail` tel quel dans une page HTML.
-    Un seul détail contient une valeur d'origine externe (nom de menace
-    remonté par le serveur ICAP, section 9/10 de l'audit) : assainie des
-    caractères de contrôle Unicode, mais pas des balises HTML. Le détail doit
-    être échappé — quelle que soit sa provenance, présente ou future.
+    http_exception_handler injected `exc.detail` as-is into an HTML page.
+    At least one detail contains a value of external origin (threat name
+    reported by the ICAP server, audit section 9/10): sanitized of
+    Unicode control characters, but not of HTML tags. The detail must be
+    escaped — regardless of its origin, present or future.
     """
     hostile = "<script>alert(1)</script>"
     resp = _drive(main.http_exception_handler(
@@ -1137,23 +1153,23 @@ def test_page_erreur_html_echappe_le_detail():
 
 def test_fichiers_crees_par_le_service_ne_sont_pas_lisibles_par_les_autres():
     """
-    Les documents en transit dans WORKDIR et le journal d'audit ne doivent
-    être lisibles que par l'utilisateur du service (umask 077 posé à l'import
-    de main) — le bind mount côté hôte les exposait sinon en 644 à tout
-    utilisateur local.
+    Documents in transit in WORKDIR and the audit log must only be
+    readable by the service's user (umask 077 set when main is
+    imported) — the host-side bind mount would otherwise expose them as
+    644 to any local user.
     """
     probe = main.WORKDIR / "umask-probe-test.tmp"
     try:
         with open(probe, "w") as f:
             f.write("x")
         mode = _stat.S_IMODE(_os.stat(probe).st_mode)
-        assert mode & 0o077 == 0, f"fichier créé en {oct(mode)} : lisible par le groupe/les autres"
+        assert mode & 0o077 == 0, f"file created with mode {oct(mode)}: readable by group/others"
     finally:
         probe.unlink(missing_ok=True)
 
 
 # ---------------------------------------------------------------------------
-# Contrôle de propriétaire sur /api/preview_image et /api/finalize
+# Ownership check on /api/preview_image and /api/finalize
 # ---------------------------------------------------------------------------
 
 def _seed_image_job(job_id: str, user: str) -> None:
@@ -1166,16 +1182,16 @@ def _seed_image_job(job_id: str, user: str) -> None:
 
 
 def test_preview_image_refuse_le_job_d_un_autre_utilisateur():
-    """L'aperçu rend le document ORIGINAL : un autre utilisateur authentifié
-    connaissant le job_id doit obtenir un 404 indiscernable d'un job inexistant,
-    et le job doit rester intact pour son propriétaire."""
+    """The preview renders the ORIGINAL document: another authenticated
+    user who knows the job_id must get a 404 indistinguishable from a
+    nonexistent job, and the job must remain intact for its owner."""
     job_id = "11111111222222223333333344444444"
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
         with pytest.raises(HTTPException) as exc:
             main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"}))
         assert exc.value.status_code == 404
-        assert job_id in main.PENDING_JOBS, "le job du propriétaire a été retiré par la tentative d'un tiers"
+        assert job_id in main.PENDING_JOBS, "the owner's job was removed by a third party's attempt"
         resp = main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}))
         assert resp.status_code == 200 and resp.media_type == "image/png"
     finally:
@@ -1183,9 +1199,9 @@ def test_preview_image_refuse_le_job_d_un_autre_utilisateur():
 
 
 def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
-    """Un tiers ne doit ni finaliser le job d'un autre, ni le faire disparaître
-    de la file par sa simple tentative ; le propriétaire finalise ensuite
-    normalement."""
+    """A third party must neither finalize someone else's job, nor make
+    it disappear from the queue by merely attempting to; the owner then
+    finalizes normally afterwards."""
     job_id = "55555555666666667777777788888888"
     _seed_csv_job(job_id)
     with main._PENDING_JOBS_LOCK:
@@ -1197,7 +1213,7 @@ def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
                 excluded_ids="", manual_zones="[]", redacted_image_ids="", response_format="json",
             ))
         assert exc.value.status_code == 404
-        assert job_id in main.PENDING_JOBS, "le job a été détruit par la tentative d'un tiers"
+        assert job_id in main.PENDING_JOBS, "the job was destroyed by a third party's attempt"
 
         resp = _drive(main.finalize_document(
             _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}), job_id=job_id,
@@ -1212,9 +1228,10 @@ def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
 
 
 def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
-    """L'en-tête est assaini à la création du job (3.5) ; la comparaison doit
-    appliquer le même traitement, sinon un propriétaire légitime dont
-    l'en-tête contiendrait un caractère de formatage serait rejeté."""
+    """The header is sanitized when the job is created (3.5); the
+    comparison must apply the same processing, otherwise a legitimate
+    owner whose header contained a formatting character would be
+    rejected."""
     job_id = "99999999aaaaaaaabbbbbbbbcccccccc"
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
@@ -1225,33 +1242,35 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
 
 
 # ---------------------------------------------------------------------------
-# Section 3.7 : secret partagé passerelle (Traefik -> app).
+# Section 3.7: shared gateway secret (Traefik -> app).
 #
-# Le contournement (un conteneur voisin du même réseau Docker joint `app`
-# directement, hors Traefik, et forge X-Auth-Request-Email) a été confirmé
-# empiriquement. `_GatewaySecretMiddleware` exige, avant tout traitement, un
-# secret que seul Traefik connaît et injecte. Ces tests traversent la pile
-# ASGI COMPLÈTE via `_asgi_request`, exactement le niveau où le middleware
-# agit. Le secret est surchargé par attribut de module (lu à chaque requête).
+# The bypass (a neighboring container on the same Docker network joins
+# `app` directly, outside Traefik, and forges X-Auth-Request-Email) was
+# empirically confirmed. `_GatewaySecretMiddleware` requires, before any
+# processing, a secret that only Traefik knows and injects. These tests
+# go through the FULL ASGI stack via `_asgi_request`, exactly the level
+# at which the middleware operates. The secret is overridden via a
+# module attribute (read on every request).
 # ---------------------------------------------------------------------------
 _GATEWAY_TEST_SECRET = "s3cr3t-passerelle-de-test"
 
 
 def test_gateway_requete_sans_le_secret_rejetee_401(monkeypatch):
-    """Un appelant qui n'a pas traversé Traefik (donc sans le secret injecté)
-    est rejeté 401 avant même d'atteindre le code qui lit
-    X-Auth-Request-Email — c'est précisément le contournement de la Phase 1."""
+    """A caller who did not go through Traefik (hence without the
+    injected secret) is rejected with 401 before even reaching the code
+    that reads X-Auth-Request-Email — this is precisely the Phase 1
+    bypass."""
     monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
     status, _headers, _body, consumed = _asgi_request(
         "POST", "/api/detect",
         headers={"x-auth-request-email": "admin@usurpe.fr"},
     )
     assert status == 401
-    assert consumed == 0, "le corps ne doit même pas commencer à être lu pour un 401 passerelle"
+    assert consumed == 0, "the body must not even start being read for a gateway 401"
 
 
 def test_gateway_requete_secret_incorrect_rejetee_401(monkeypatch):
-    """Un secret présent mais faux est rejeté (comparaison à temps constant)."""
+    """A present but wrong secret is rejected (constant-time comparison)."""
     monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
     status, _headers, _body, _consumed = _asgi_request(
         "GET", "/",
@@ -1261,11 +1280,11 @@ def test_gateway_requete_secret_incorrect_rejetee_401(monkeypatch):
 
 
 def _drive_gateway(path, headers=None, secret=_GATEWAY_TEST_SECRET, monkeypatch=None):
-    """Pilote `_GatewaySecretMiddleware` seul, autour d'un applicatif interne
-    trivial (une réponse 200 en une étape). Isole la logique du middleware du
-    routage FastAPI (les endpoints synchrones comme `/` ou `/health` passent
-    par un threadpool que `_drive` ne peut pas traverser). Renvoie
-    (statut, applicatif_interne_atteint)."""
+    """Drives `_GatewaySecretMiddleware` alone, around a trivial inner
+    app (a 200 response in one step). Isolates the middleware's logic
+    from FastAPI routing (synchronous endpoints like `/` or `/health` go
+    through a threadpool that `_drive` cannot traverse). Returns
+    (status, inner_app_reached)."""
     if monkeypatch is not None:
         monkeypatch.setattr(main, "GATEWAY_SECRET", secret)
     reached = {"v": False}
@@ -1293,8 +1312,9 @@ def _drive_gateway(path, headers=None, secret=_GATEWAY_TEST_SECRET, monkeypatch=
 
 
 def test_gateway_requete_secret_correct_passe(monkeypatch):
-    """Le chemin légitime (Traefik injecte le bon secret) traverse le middleware
-    jusqu'à l'applicatif : aucune dégradation pour un utilisateur normal."""
+    """The legitimate path (Traefik injects the correct secret) passes
+    through the middleware to the inner app: no degradation for a
+    normal user."""
     status, reached = _drive_gateway(
         "/api/detect", {"x-internal-gateway-secret": _GATEWAY_TEST_SECRET}, monkeypatch=monkeypatch,
     )
@@ -1303,24 +1323,25 @@ def test_gateway_requete_secret_correct_passe(monkeypatch):
 
 
 def test_gateway_health_exempte_meme_sans_secret(monkeypatch):
-    """/health reste accessible sans le secret : un HEALTHCHECK Docker éventuel
-    interroge le conteneur en loopback, pas via Traefik."""
+    """/health remains accessible without the secret: any Docker
+    HEALTHCHECK queries the container over loopback, not via Traefik."""
     status, reached = _drive_gateway("/health", headers={}, monkeypatch=monkeypatch)
     assert status == 200
-    assert reached is True, "/health doit atteindre l'applicatif même sans le secret"
+    assert reached is True, "/health must reach the inner app even without the secret"
 
 
 def test_gateway_desactive_si_aucun_secret_configure(monkeypatch):
-    """Sans secret configuré (dev/test, aucun /run/secrets monté), le middleware
-    est un no-op : la compatibilité du reste de la suite est préservée."""
+    """Without a configured secret (dev/test, no /run/secrets mounted),
+    the middleware is a no-op: compatibility of the rest of the suite is
+    preserved."""
     status, reached = _drive_gateway("/api/detect", headers={}, secret="", monkeypatch=monkeypatch)
     assert status == 200
     assert reached is True
 
 
 def test_gateway_401_enveloppe_par_les_entetes_de_securite(monkeypatch):
-    """Même un 401 passerelle porte les en-têtes de sécurité (le middleware
-    d'en-têtes reste le plus externe)."""
+    """Even a gateway 401 carries the security headers (the headers
+    middleware remains the outermost one)."""
     monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
     status, headers, _body, _consumed = _asgi_request("GET", "/")
     assert status == 401

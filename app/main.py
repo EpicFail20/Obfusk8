@@ -1,32 +1,45 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Anonymiseur de documents (PDF, DOCX, CSV, image) - application de test (lab Proxmox)
+Obfusk8 - document anonymization tool (PDF, DOCX, CSV, image) - test application (Proxmox lab)
 ------------------------------------------------------------------------------
-Flux commun à tous les formats : détection des données sensibles via
-presidio-analyzer, révision humaine (exclusion de zones), puis caviardage
-réel (le contenu original est supprimé de la structure du fichier, pas
-juste masqué visuellement) :
+Common flow for all formats: detection of sensitive data via
+presidio-analyzer, human review (zone exclusion), then actual
+redaction (the original content is removed from the file structure, not
+just visually masked):
 
-  - PDF   : rendu image de chaque page + zones cliquables en pixels
-            (redact_annot PyMuPDF : le texte sous-jacent est retiré).
-  - DOCX  : surlignage inline du texte par paragraphe/cellule de tableau/
-            en-tête-pied de page (python-docx) : le texte du run est remplacé
-            dans le XML, pas juste habillé visuellement.
-  - CSV   : tableau HTML avec cellules surlignées ; le texte de la cellule
-            est remplacé au même titre que pour le DOCX.
-  - Image : texte extrait par OCR (pytesseract) avec position par mot, même
-            écran de révision pixel que le PDF (zones cliquables + tracé
-            manuel), caviardage par rectangles opaques dessinés directement
-            dans les pixels (Pillow), métadonnées entièrement dépouillées.
+  - PDF   : image rendering of each page + clickable zones in pixels
+            (PyMuPDF redact_annot: the underlying text is removed).
+  - DOCX  : inline highlighting of text per paragraph/table cell/
+            header-footer (python-docx): the run's text is replaced
+            in the XML, not just visually dressed up.
+  - CSV   : HTML table with highlighted cells; the cell text
+            is replaced the same way as for DOCX.
+  - Image : text extracted via OCR (pytesseract) with per-word position, same
+            pixel review screen as PDF (clickable zones + manual
+            drawing), redaction via opaque rectangles drawn directly
+            into the pixels (Pillow), metadata fully stripped.
 
-LIMITATION CONNUE (DOCX) : python-docx ne donne pas accès au texte contenu
-dans des zones de texte, formes, SmartArt ou objets OLE incrustés — une
-donnée sensible placée dans un de ces éléments échappe à la détection.
-Documenté à l'utilisateur dans l'écran de révision, à couvrir explicitement
-dans le futur audit de sécurité dédié à ces deux nouveaux formats.
+KNOWN LIMITATION (DOCX): python-docx does not give access to text contained
+in text boxes, shapes, SmartArt, or embedded OLE objects — sensitive
+data placed in one of these elements escapes detection.
+Documented to the user on the review screen, to be explicitly covered
+in the future security audit dedicated to these two new formats.
 
-Ce n'est pas un outil de production : pas de file d'attente, pas de retry,
-gestion d'erreurs minimale. Suffisant pour valider le fonctionnel avant un
-éventuel durcissement.
+This is not a production tool: no queue, no retry,
+minimal error handling. Sufficient to validate functionality before a
+possible hardening pass.
 """
 
 import csv
@@ -51,7 +64,7 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-import pymupdf as fitz  # PyMuPDF — alias 'fitz' conservé, 'import fitz' est déprécié
+import pymupdf as fitz  # PyMuPDF — alias 'fitz' kept, 'import fitz' is deprecated
 import pytesseract
 import requests
 import metrics
@@ -77,124 +90,126 @@ JOB_REVIEW_TTL_SECONDS = int(os.environ.get("JOB_REVIEW_TTL_SECONDS", "900"))
 MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "20"))
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "200"))
 MAX_MANUAL_ZONES = int(os.environ.get("MAX_MANUAL_ZONES", "500"))
-# Longueur maximale retenue du champ de formulaire `theme` (voir
-# detect_document) : un thème légitime est un identifiant court
-# (medical/it/compta) ; borne défensive contre une valeur arbitrairement
-# longue qui déborderait le nom de fichier de sortie ou le journal d'audit.
+# Maximum length allowed for the `theme` form field (see
+# detect_document): a legitimate theme is a short identifier
+# (medical/it/accounting); defensive bound against an arbitrarily
+# long value that would overflow the output filename or the audit log.
 MAX_THEME_CHARS = int(os.environ.get("MAX_THEME_CHARS", "64"))
 MAX_EXCLUDED_IDS = int(os.environ.get("MAX_EXCLUDED_IDS", "2000"))
-# Nombre max d'images DOCX distinctes proposées au caviardage manuel — même
-# esprit de garde-fou anti-abus que MAX_MANUAL_ZONES pour le PDF.
+# Max number of distinct DOCX images offered for manual redaction — same
+# anti-abuse guardrail spirit as MAX_MANUAL_ZONES for PDF.
 MAX_DOCX_IMAGES = int(os.environ.get("MAX_DOCX_IMAGES", "100"))
-# Au-delà, pas d'aperçu intégré en base64 dans la page de révision (juste
-# taille/format affichés) — reste sélectionnable pour caviardage, seul
-# l'aperçu visuel est sauté, pour ne pas alourdir démesurément la page.
+# Beyond this, no embedded base64 preview on the review page (only
+# size/format shown) — still selectable for redaction, only
+# the visual preview is skipped, to avoid excessively bloating the page.
 MAX_DOCX_IMAGE_PREVIEW_BYTES = int(os.environ.get("MAX_DOCX_IMAGE_PREVIEW_BYTES", str(500 * 1024)))
 LANGUAGE = os.environ.get("ANALYZER_LANGUAGE", "fr")
-# Seuil de confiance minimal appliqué par défaut quand le thème n'en définit
-# pas un explicitement. Jusqu'ici, en l'absence de thème (ou avec un thème
-# muet sur ce point), AUCUN filtrage n'avait lieu : Presidio renvoyait toutes
-# ses hypothèses, y compris les plus incertaines — un mot capitalisé isolé
-# en début de puce/titre, sans phrase autour, obtient typiquement un score
-# de confiance NER plus faible qu'un vrai nom dans une phrase complète ; ce
-# seuil filtre ces hypothèses faibles. Valeur de départ raisonnable, à
-# ajuster (env var ou score_threshold par thème) selon le taux réel de
-# faux positifs/négatifs observé.
+# Minimum confidence threshold applied by default when the theme does not
+# define one explicitly. Until now, in the absence of a theme (or with a
+# theme silent on this point), NO filtering took place: Presidio returned
+# all of its hypotheses, including the most uncertain ones — an isolated
+# capitalized word at the start of a bullet/title, with no surrounding
+# sentence, typically gets a lower NER confidence score than a real name
+# in a full sentence; this threshold filters out those weak hypotheses.
+# Reasonable starting value, to be adjusted (env var or per-theme
+# score_threshold) based on the actual observed false positive/negative
+# rate.
 DEFAULT_SCORE_THRESHOLD = float(os.environ.get("DEFAULT_SCORE_THRESHOLD", "0.5"))
 
-# --- Seuils DOCX ---
-# Même raisonnement produit que MAX_CSV_CELLS : la finalisation reste une
-# revue humaine. À 20000 (valeur d'origine), la limite était 10x
-# MAX_REVIEW_ROWS (2000) — jusqu'à 90% d'un document légitime aurait été
-# caviardé "à l'aveugle", jamais montré à l'utilisateur pour relecture,
-# même si le caviardage réel restait correct (job["detections"] couvre
-# toujours tout, voir 14.3). Ramené à un ordre de grandeur cohérent avec
-# ce qui est réellement révisable, aligné sur MAX_CSV_CELLS.
+# --- DOCX thresholds ---
+# Same product reasoning as MAX_CSV_CELLS: finalization remains a human
+# review. At 20000 (original value), the limit was 10x
+# MAX_REVIEW_ROWS (2000) — up to 90% of a legitimate document could have
+# been redacted "blindly", never shown to the user for review,
+# even though the actual redaction remained correct (job["detections"]
+# always covers everything, see 14.3). Brought down to an order of
+# magnitude consistent with what is actually reviewable, aligned with
+# MAX_CSV_CELLS.
 MAX_DOCX_PARAGRAPHS = int(os.environ.get("MAX_DOCX_PARAGRAPHS", "5000"))
-# Protection anti "zip-bomb" : un .docx est une archive ZIP, une archive de
-# quelques Ko peut en théorie se décompresser en plusieurs Go. On borne la
-# taille décompressée totale et le ratio de compression par entrée avant de
-# laisser python-docx/lxml ouvrir quoi que ce soit.
+# Anti "zip-bomb" protection: a .docx is a ZIP archive, an archive of a
+# few KB can theoretically decompress into several GB. We bound the
+# total decompressed size and the compression ratio per entry before
+# letting python-docx/lxml open anything at all.
 MAX_DOCX_UNCOMPRESSED_MB = int(os.environ.get("MAX_DOCX_UNCOMPRESSED_MB", "200"))
 MAX_DOCX_ZIP_RATIO = int(os.environ.get("MAX_DOCX_ZIP_RATIO", "100"))
-# Ni la taille décompressée totale ni le ratio de compression ne bornent le
-# NOMBRE d'entrées — un zip de nombreux fichiers minuscules (voire vides)
-# reste sous les deux seuils ci-dessus tout en coûtant cher rien qu'à
-# parcourir la table des fichiers. Confirmé par test réel : ~24 Mo (juste
-# sous MAX_UPLOAD_MB) avec ~260 000 entrées minimales passe les deux
-# contrôles existants en ~1,2s CPU et fait grossir la mémoire du processus
-# de ~150 Mo pour cette seule requête — sur un service à un seul worker
-# (aucun `--workers` dans le Dockerfile), donc une requête bloque la boucle
-# d'événements pour tous les utilisateurs, et la limite mémoire du conteneur
-# (1 Go, docker-compose.yml) est atteignable avec seulement quelques
-# requêtes de ce type. Un vrai .docx dépasse rarement quelques dizaines
-# d'entrées (contenu + styles/rels/médias) ; 5000 laisse une marge large.
+# Neither the total decompressed size nor the compression ratio bounds
+# the NUMBER of entries — a zip with many tiny (or even empty) files
+# stays under both thresholds above while still being expensive just to
+# walk the file table. Confirmed by real test: ~24 MB (just under
+# MAX_UPLOAD_MB) with ~260,000 minimal entries passes both existing
+# checks in ~1.2s CPU and grows the process memory by ~150 MB for this
+# single request — on a single-worker service (no `--workers` in the
+# Dockerfile), so one request blocks the event loop for all users, and
+# the container's memory limit (1 GB, docker-compose.yml) is reachable
+# with only a few requests of this type. A real .docx rarely exceeds a
+# few dozen entries (content + styles/rels/media); 5000 leaves a wide
+# margin.
 MAX_DOCX_ZIP_ENTRIES = int(os.environ.get("MAX_DOCX_ZIP_ENTRIES", "5000"))
 
-# --- Seuils CSV ---
+# --- CSV thresholds ---
 MAX_CSV_ROWS = int(os.environ.get("MAX_CSV_ROWS", "20000"))
-# Plafond fixé par l'usage réel, pas seulement par ce que le pipeline peut
-# techniquement encaisser : la finalisation reste une revue humaine
-# (l'utilisateur doit pouvoir relire/corriger les détections avant de
-# valider), un CSV de plusieurs dizaines ou centaines de milliers de
-# cellules n'est de toute façon jamais réellement révisable en pratique.
-# Réduit aussi la marge de manœuvre des angles "coût de ressources" 9.6.4
-# (budget de temps de détection) et 9.6.5 (taille de la page de révision) :
-# à 5000 cellules, les deux restent des filets de sécurité qui ne se
-# déclenchent normalement jamais, plutôt que la seule protection réelle.
+# Ceiling set by actual usage, not just by what the pipeline can
+# technically handle: finalization remains a human review
+# (the user must be able to review/correct detections before
+# validating), a CSV with several tens or hundreds of thousands of
+# cells is never actually reviewable in practice anyway.
+# Also reduces the leeway of the "resource cost" angles 9.6.4
+# (detection time budget) and 9.6.5 (review page size):
+# at 5000 cells, both remain safety nets that normally never
+# trigger, rather than the only real protection.
 MAX_CSV_CELLS = int(os.environ.get("MAX_CSV_CELLS", "5000"))
-# Une seule cellule anormalement longue peut consommer du CPU/mémoire de
-# façon disproportionnée à l'analyse ; on fixe explicitement cette limite
-# plutôt que de dépendre de la valeur par défaut du module csv (qui varie
-# selon la plateforme/version Python), cohérent avec la politique
-# d'épinglage explicite adoptée pour les dépendances.
+# A single abnormally long cell can consume CPU/memory
+# disproportionately during analysis; we explicitly set this limit
+# rather than relying on the csv module's default (which varies
+# depending on the platform/Python version), consistent with the
+# explicit pinning policy adopted for dependencies.
 MAX_CSV_FIELD_CHARS = int(os.environ.get("MAX_CSV_FIELD_CHARS", "100000"))
 csv.field_size_limit(MAX_CSV_FIELD_CHARS)
 
-# Limite le nombre de lignes RENDUES dans la page de révision (pas le
-# caviardage lui-même, qui couvre toujours job["detections"] en entier au
-# moment de finaliser, même les lignes au-delà de cette limite). Un CSV de
-# cellules presque vides contourne le budget de temps de détection (rien à
-# analyser -> rapide) tout en produisant, sans cette limite, une page HTML
-# de plusieurs dizaines de Mo avec des centaines de milliers de <td> —
-# confirmé par test réel : 300 000 cellules quasi vides (419 Ko de fichier)
-# -> page de 16,6 Mo. Coûteux pour le serveur (génération) et pour le
-# navigateur du client (rendu), indépendamment de MAX_DETECTION_SECONDS.
+# Limits the number of rows RENDERED on the review page (not the
+# redaction itself, which always covers job["detections"] in full at
+# finalization time, even rows beyond this limit). A CSV with nearly
+# empty cells bypasses the detection time budget (nothing to
+# analyze -> fast) while producing, without this limit, an HTML page
+# of several dozen MB with hundreds of thousands of <td> elements —
+# confirmed by real test: 300,000 nearly empty cells (419 KB file)
+# -> 16.6 MB page. Costly for the server (generation) and for the
+# client's browser (rendering), independent of MAX_DETECTION_SECONDS.
 MAX_REVIEW_ROWS = int(os.environ.get("MAX_REVIEW_ROWS", "2000"))
 
-# Budget de temps global pour la phase de détection (PDF/DOCX/CSV) : chaque
-# appel individuel à Presidio a son propre timeout (30s, voir _analyze_text),
-# mais rien ne bornait jusqu'ici le nombre de lots séquentiels pour un
-# document proche des limites de taille — confirmé par test réel : un CSV
-# à la limite exacte de MAX_CSV_CELLS (300 000) nécessite ~1500 appels
-# séquentiels à ~0,3s chacun, ~490s au total, sur un service à worker
-# unique (aucun `--workers` dans le Dockerfile) qui bloquerait donc
-# l'application pour tout le monde pendant plus de 8 minutes. 90s laisse
-# une marge large pour un document légitime multi-lots tout en bornant le
-# pire cas à environ 3x le timeout d'un seul appel Presidio.
+# Global time budget for the detection phase (PDF/DOCX/CSV): each
+# individual call to Presidio has its own timeout (30s, see _analyze_text),
+# but until now nothing bounded the number of sequential batches for a
+# document close to the size limits — confirmed by real test: a CSV
+# at the exact MAX_CSV_CELLS limit (300,000) requires ~1500 sequential
+# calls at ~0.3s each, ~490s total, on a single-worker service
+# (no `--workers` in the Dockerfile) which would therefore block
+# the application for everyone for over 8 minutes. 90s leaves
+# a wide margin for a legitimate multi-batch document while bounding
+# the worst case to about 3x the timeout of a single Presidio call.
 MAX_DETECTION_SECONDS = int(os.environ.get("MAX_DETECTION_SECONDS", "90"))
 
 
 def _reject(reason: str, status_code: int, detail: str) -> None:
-    """Incrémente le compteur de rejets (metrics.DOCUMENTS_REJECTED) puis lève
-    l'HTTPException correspondante — point de passage unique pour ne pas
-    oublier d'instrumenter un futur rejet ajouté. `reason` doit rester une
-    catégorie fermée (voir metrics.py) : jamais une valeur dérivée de
-    l'entrée utilisateur."""
+    """Increments the rejection counter (metrics.DOCUMENTS_REJECTED) then raises
+    the corresponding HTTPException — single choke point so a future added
+    rejection is never left uninstrumented. `reason` must remain a
+    closed category (see metrics.py): never a value derived from
+    user input."""
     metrics.DOCUMENTS_REJECTED.labels(reason=reason).inc()
     raise HTTPException(status_code=status_code, detail=detail)
 
 
 def _send_alert(alert: Alert) -> None:
-    """Point de passage unique pour toute alerte (voir supervision.py) —
-    intercepte TOUTE exception plutôt que de la laisser remonter, y
-    compris une config ALERT_SINK invalide (RuntimeError/ValueError) ou un
-    hôte syslog injoignable (DNS, connexion refusée). Sans ce filet, une
-    alerte échouée transformait par exemple un rejet antivirus proprement
-    géré (503/400) en 500 générique non intercepté, ou tuait
-    silencieusement et définitivement le thread `_cleanup_sweep_loop` (pas
-    de relance) — une alerte ne doit jamais faire échouer ou geler le flux
-    qu'elle est censée surveiller."""
+    """Single choke point for any alert (see supervision.py) —
+    catches ANY exception rather than letting it propagate, including
+    an invalid ALERT_SINK config (RuntimeError/ValueError) or an
+    unreachable syslog host (DNS, connection refused). Without this
+    safety net, a failed alert could, for instance, turn a properly
+    handled antivirus rejection (503/400) into an uncaught generic 500,
+    or silently and permanently kill the `_cleanup_sweep_loop` thread
+    (no restart) — an alert must never cause the flow it is supposed
+    to monitor to fail or hang."""
     try:
         get_alert_sink().send(alert)
     except Exception:
@@ -205,10 +220,10 @@ def _send_alert(alert: Alert) -> None:
 
 
 def _check_detection_deadline(start_time: float) -> None:
-    """Lève une HTTPException si la détection en cours dépasse
-    MAX_DETECTION_SECONDS — à appeler avant chaque lot/page pour ne jamais
-    laisser un document proche des limites de taille bloquer le worker
-    unique pendant plusieurs minutes (voir MAX_DETECTION_SECONDS)."""
+    """Raises an HTTPException if the ongoing detection exceeds
+    MAX_DETECTION_SECONDS — to be called before each batch/page to never
+    let a document close to the size limits block the single worker
+    for several minutes (see MAX_DETECTION_SECONDS)."""
     if time.time() - start_time > MAX_DETECTION_SECONDS:
         _reject(
             "trop_volumineux",
@@ -216,42 +231,42 @@ def _check_detection_deadline(start_time: float) -> None:
             f"Ce document est trop volumineux pour être analysé dans le temps imparti (max {MAX_DETECTION_SECONDS}s) — réduisez sa taille ou contactez l'administrateur.",
         )
 
-# Marqueur de remplacement pour le caviardage texte (DOCX/CSV) : une valeur
-# fixe plutôt que des blocs proportionnels à la longueur d'origine, pour ne
-# pas laisser fuir la longueur approximative de la donnée masquée.
+# Replacement marker for text redaction (DOCX/CSV): a fixed value
+# rather than blocks proportional to the original length, so as not to
+# leak the approximate length of the masked data.
 REDACTION_MARKER = "[MASQUÉ]"
 
-# Tout fichier créé par le service (document original et caviardé en transit
-# dans /data/tmp, journal d'audit, fichiers temporaires de l'OCR) ne doit être
-# lisible que par l'utilisateur du service. Sans ce umask, le défaut du
-# conteneur (022) produisait des fichiers en 644 : sur l'hôte, le bind mount
-# /var/lib/anonymiseur/workdir exposait alors chaque document (avant ET après
-# caviardage) à n'importe quel utilisateur local pendant toute la durée du
-# TTL, et le journal d'audit en permanence. Placé avant le premier mkdir et
-# avant la création du RotatingFileHandler ci-dessous, pour couvrir tout.
+# Every file created by the service (original and redacted document in
+# transit in /data/tmp, audit log, OCR temp files) must be
+# readable only by the service's user. Without this umask, the
+# container's default (022) produced files with 644 permissions: on the host,
+# the bind mount /var/lib/anonymiseur/workdir then exposed every document
+# (before AND after redaction) to any local user for the entire
+# TTL duration, and the audit log permanently. Placed before the first mkdir
+# and before the RotatingFileHandler creation below, to cover everything.
 os.umask(0o077)
 
 WORKDIR = Path("/data/tmp")
 WORKDIR.mkdir(parents=True, exist_ok=True)
 
-# Jobs en attente de révision humaine (entre la détection et la validation).
-# En mémoire uniquement : acceptable pour un process unique (lab), mais ne
-# survit pas à un redémarrage du conteneur — un job en cours de révision au
-# moment d'un redéploiement doit être relancé par l'utilisateur.
+# Jobs awaiting human review (between detection and validation).
+# In-memory only: acceptable for a single process (lab), but does not
+# survive a container restart — a job under review at the
+# time of a redeployment must be restarted by the user.
 PENDING_JOBS: dict[str, dict] = {}
 _PENDING_JOBS_LOCK = threading.Lock()
 
-# Journal d'audit : emplacement séparé des fichiers temporaires, PAS soumis à
-# la purge FILE_TTL_SECONDS. Ne contient jamais le nom réel du fichier ni le
-# contenu du document — uniquement des métadonnées (qui, quand, quoi comme
-# volumétrie de caviardage), suffisant pour un contrôle de conformité sans
-# recréer un risque de fuite de données.
+# Audit log: location separate from temp files, NOT subject to
+# the FILE_TTL_SECONDS purge. Never contains the real file name or
+# document content — only metadata (who, when, what, such as
+# redaction volume), sufficient for a compliance check without
+# recreating a data leak risk.
 AUDIT_DIR = Path("/data/audit")
 AUDIT_DIR.mkdir(parents=True, exist_ok=True)
 
 audit_log = logging.getLogger("anonymiseur.audit")
 audit_log.setLevel(logging.INFO)
-audit_log.propagate = False  # ne pas dupliquer dans les logs applicatifs normaux
+audit_log.propagate = False  # do not duplicate into normal application logs
 _audit_handler = RotatingFileHandler(
     AUDIT_DIR / "audit.log", maxBytes=10 * 1024 * 1024, backupCount=10, encoding="utf-8"
 )
@@ -260,7 +275,7 @@ audit_log.addHandler(_audit_handler)
 
 
 def _record_audit_event(**fields):
-    """Ajoute une ligne JSON au journal d'audit (append-only, avec rotation)."""
+    """Appends a JSON line to the audit log (append-only, with rotation)."""
     event = {"timestamp": time.strftime("%Y-%m-%dT%H:%M:%S%z"), **fields}
     audit_log.info(json.dumps(event, ensure_ascii=False))
 
@@ -270,9 +285,9 @@ COMMON_RECOGNIZERS_FILENAME = "common.json"
 
 
 def _load_themes() -> dict:
-    """Charge tous les fichiers de thèmes sélectionnables (app/themes/*.json),
-    à l'exception de common.json qui n'est pas un thème mais un socle de
-    reconnaisseurs appliqué à tous les thèmes (voir _load_common_recognizers)."""
+    """Loads all selectable theme files (app/themes/*.json),
+    except for common.json which is not a theme but a base set of
+    recognizers applied to all themes (see _load_common_recognizers)."""
     themes = {}
     for path in sorted(THEMES_DIR.glob("*.json")):
         if path.name == COMMON_RECOGNIZERS_FILENAME:
@@ -286,9 +301,9 @@ def _load_themes() -> dict:
 
 
 def _load_common_recognizers() -> list[dict]:
-    """Reconnaisseurs communs (ex: adresses postales) appliqués quel que soit
-    le thème choisi, y compris si aucun thème n'est sélectionné — pour les
-    faux négatifs qui ne sont pas spécifiques à un domaine métier."""
+    """Common recognizers (e.g. postal addresses) applied regardless of
+    the chosen theme, including when no theme is selected — for
+    false negatives that are not specific to a particular business domain."""
     path = THEMES_DIR / COMMON_RECOGNIZERS_FILENAME
     if not path.exists():
         return []
@@ -317,20 +332,20 @@ log.info("Reconnaisseurs communs chargés: %d", len(COMMON_RECOGNIZERS))
 
 def _peek_zip_entry_count(raw: bytes) -> int | None:
     """
-    Lit le nombre d'entrées déclaré dans l'enregistrement de fin de
-    répertoire central (EOCD) d'un ZIP, sans jamais appeler
-    `zipfile.ZipFile()` — c'est justement l'ouverture par `zipfile`, qui
-    parse tout le répertoire central d'un coup, qui coûte cher sur une
-    archive à très grand nombre d'entrées (confirmé par test réel : ~1,1s
-    CPU et ~150 Mo de mémoire pour ~260 000 entrées minimales tenant dans
-    ~24 Mo, sur un service à worker unique où ce temps bloque la boucle
-    d'événements pour tout le monde). Renvoie None si l'EOCD est introuvable
-    (laisse `zipfile.ZipFile` lever l'erreur "corrompu" habituelle).
+    Reads the entry count declared in a ZIP's end-of-central-directory
+    record (EOCD), without ever calling
+    `zipfile.ZipFile()` — it is precisely opening via `zipfile`, which
+    parses the whole central directory at once, that is expensive on an
+    archive with a very large number of entries (confirmed by real test: ~1.1s
+    CPU and ~150 MB of memory for ~260,000 minimal entries fitting in
+    ~24 MB, on a single-worker service where this time blocks the
+    event loop for everyone). Returns None if the EOCD cannot be found
+    (lets `zipfile.ZipFile` raise the usual "corrupted" error).
 
-    Gère le cas Zip64 (champ 16 bits saturé à 0xFFFF, vrai compte dans le
-    "Zip64 EOCD record" localisé via le "Zip64 EOCD locator" qui précède
-    l'EOCD standard) — un zip à nombre d'entrées extrême en a nécessairement
-    besoin, donc l'ignorer laisserait passer exactement le cas à bloquer.
+    Handles the Zip64 case (16-bit field saturated at 0xFFFF, real count in the
+    "Zip64 EOCD record" located via the "Zip64 EOCD locator" that precedes
+    the standard EOCD) — a zip with an extreme entry count necessarily
+    needs this, so ignoring it would let through exactly the case meant to be blocked.
     """
     window = raw[-(22 + 65535):]
     idx = window.rfind(b"PK\x05\x06")
@@ -359,15 +374,15 @@ def _peek_zip_entry_count(raw: bytes) -> int | None:
 
 def _validate_docx_zip(raw: bytes) -> str:
     """
-    Vérifie qu'une archive ZIP est bien un .docx exploitable en sécurité :
-      - contient réellement word/document.xml (pas un .xlsx/.pptx renommé)
-      - ne contient pas de macro VBA (word/vbaProject.bin -> .docm déguisé)
-      - n'est pas une "zip bomb" (taille décompressée disproportionnée par
-        rapport à la taille de l'archive, par entrée et au global, OU nombre
-        d'entrées disproportionné — un ratio/volume individuellement sages
-        n'empêchent pas des dizaines de milliers de fichiers minuscules,
-        coûteux à eux seuls rien qu'à parcourir la table des fichiers)
-    Toute condition non respectée lève une HTTPException 400 explicite.
+    Verifies that a ZIP archive is indeed a .docx that can be safely processed:
+      - actually contains word/document.xml (not a renamed .xlsx/.pptx)
+      - contains no VBA macro (word/vbaProject.bin -> disguised .docm)
+      - is not a "zip bomb" (decompressed size disproportionate
+        to the archive size, per entry and overall, OR a disproportionate
+        number of entries — an individually reasonable ratio/volume
+        does not prevent tens of thousands of tiny files,
+        expensive on their own just to walk the file table)
+    Any unmet condition raises an explicit 400 HTTPException.
     """
     entry_count = _peek_zip_entry_count(raw)
     if entry_count is not None and entry_count > MAX_DOCX_ZIP_ENTRIES:
@@ -389,11 +404,11 @@ def _validate_docx_zip(raw: bytes) -> str:
     if "word/vbaProject.bin" in names:
         _reject("format_invalide", 400, "Les documents avec macros (.docm) ne sont pas acceptés.")
     if len(names) > MAX_DOCX_ZIP_ENTRIES:
-        # Filet de sécurité si l'EOCD n'a pas pu être lu en amont (ex.
-        # commentaire ZIP mal formé) : coûte la lecture complète qu'on
-        # essaie d'éviter ci-dessus, mais protège quand même contre la
-        # dégradation qui suit (python-docx, lxml, etc.) sur le reste du
-        # pipeline.
+        # Safety net if the EOCD could not be read upstream (e.g.
+        # malformed ZIP comment): costs the full read we're
+        # trying to avoid above, but still protects against the
+        # degradation that follows (python-docx, lxml, etc.) on the rest of
+        # the pipeline.
         _reject(
             "structure_invalide",
             400,
@@ -416,32 +431,32 @@ def _validate_docx_zip(raw: bytes) -> str:
 
 def _strip_unicode_control_and_format_chars(value: str) -> str:
     """
-    Retire tout caractère Unicode de catégorie "Other" (Cc/Cf/Co/Cs/Cn) d'une
-    chaîne d'origine non fiable (en-tête HTTP) avant qu'elle ne rejoigne un
-    job ou le journal d'audit.
+    Removes every Unicode character of category "Other" (Cc/Cf/Co/Cs/Cn) from an
+    untrusted-origin string (HTTP header) before it joins a
+    job or the audit log.
 
-    Point de vigilance précis (vérifié empiriquement, voir section 3.5 de
-    l'audit) : `json.dumps(..., ensure_ascii=False)` neutralise déjà toute
-    tentative de forger une fausse ligne JSON (les caractères de contrôle
-    C0/C1, guillemets et antislashs sont échappés) — mais PAS les caractères
-    de formatage bidirectionnel Unicode (catégorie Cf, ex. U+202E "Right-to-
-    Left Override"), valides en UTF-8 et donc réécrits tels quels dans le
-    fichier ET dans la réponse JSON de `/api/audit`. Un tel caractère dans
-    `X-Auth-Request-Email` permettrait d'afficher ce champ dans un ordre
-    trompeur pour quiconque relit le journal (terminal ou UI d'audit) — pas
-    une faille d'intégrité du format, mais un risque de spoofing visuel sur
-    un journal dont la valeur repose justement sur sa lisibilité humaine.
+    Precise point of concern (empirically verified, see section 3.5 of
+    the audit): `json.dumps(..., ensure_ascii=False)` already neutralizes any
+    attempt to forge a fake JSON line (C0/C1 control characters,
+    quotes and backslashes are escaped) — but NOT Unicode bidirectional
+    formatting characters (category Cf, e.g. U+202E "Right-to-
+    Left Override"), valid in UTF-8 and therefore rewritten as-is in the
+    file AND in the JSON response of `/api/audit`. Such a character in
+    `X-Auth-Request-Email` would allow this field to be displayed in a
+    misleading order to anyone reading the log (terminal or audit UI) — not
+    a format integrity flaw, but a visual spoofing risk on a
+    log whose value relies precisely on its human readability.
     """
     return "".join(ch for ch in value if unicodedata.category(ch)[0] != "C")
 
 
 def _looks_like_text(raw: bytes, sample_size: int = 8192) -> bool:
-    """Heuristique faible mais suffisante pour écarter un binaire arbitraire
-    présenté comme un .csv : un CSV n'a pas de signature binaire propre, donc
-    contrairement au PDF/DOCX on ne peut valider que l'absence d'octets nuls
-    et un décodage texte réussi. Risque résiduel documenté : ne garantit pas
-    que le contenu est réellement tabulaire — à couvrir dans le futur audit
-    dédié (voir aussi _parse_csv_rows pour les garde-fous de volumétrie)."""
+    """Weak but sufficient heuristic to rule out an arbitrary binary
+    presented as a .csv: a CSV has no proper binary signature, so
+    unlike PDF/DOCX we can only validate the absence of null bytes
+    and a successful text decode. Documented residual risk: does not guarantee
+    that the content is actually tabular — to be covered in the future
+    dedicated audit (see also _parse_csv_rows for volume guardrails)."""
     sample = raw[:sample_size]
     if b"\x00" in sample:
         return False
@@ -456,19 +471,19 @@ def _looks_like_text(raw: bytes, sample_size: int = 8192) -> bool:
 
 def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
     """
-    Scanne le fichier brut via le moteur configuré (voir antivirus.py) avant
-    tout parsing PDF/DOCX/CSV. AV_ENGINE=none (défaut) fait de ceci un no-op
-    silencieux (verdict toujours propre). Le comportement en cas de verdict
-    défavorable dépend d'AV_ENFORCE : blocage (HTTPException) ou simple
-    journalisation d'avertissement en mode observation — jamais un échec
-    silencieux, pour que le choix de laisser passer un fichier menacé reste
-    visible dans les logs.
+    Scans the raw file via the configured engine (see antivirus.py) before
+    any PDF/DOCX/CSV parsing. AV_ENGINE=none (default) makes this a silent
+    no-op (verdict always clean). Behavior on an unfavorable verdict
+    depends on AV_ENFORCE: blocking (HTTPException) or a simple
+    warning log in observation mode — never a silent failure,
+    so that the choice to let a threatening file through stays
+    visible in the logs.
 
-    `filename` (nom brut) n'est transmis qu'au moteur de scan lui-même
-    (utile pour certains moteurs qui se basent sur l'extension) ; seul
-    `filename_hash` apparaît dans les logs, comme partout ailleurs dans le
-    projet (journal d'audit compris) — un nom de fichier peut contenir une
-    donnée patient réelle.
+    `filename` (raw name) is only passed to the scan engine itself
+    (useful for some engines that rely on the extension); only
+    `filename_hash` appears in the logs, as everywhere else in the
+    project (including the audit log) — a file name may contain
+    real patient data.
     """
     try:
         result = get_scanner().scan(raw, filename_hint=filename)
@@ -495,13 +510,13 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
         return
 
     if not result.is_clean:
-        # threat_name vient du serveur ICAP (en-tête X-Virus-ID/X-Infection-Found,
-        # voir antivirus.py) — pas directement du contenu du fichier uploadé dans
-        # un flux ICAP conforme, mais assaini par précaution avant de rejoindre le
-        # journal syslog et la réponse HTTP : même risque de spoofing visuel par
-        # caractère de formatage Unicode (RTL override...) que celui trouvé et
-        # corrigé sur le journal d'audit (3.5), pour toute source de texte externe
-        # au projet destinée à être relue par un humain.
+        # threat_name comes from the ICAP server (X-Virus-ID/X-Infection-Found
+        # header, see antivirus.py) — not directly from the uploaded file's content in
+        # a compliant ICAP flow, but sanitized as a precaution before joining the
+        # syslog log and the HTTP response: same visual spoofing risk via a
+        # Unicode formatting character (RTL override...) as the one found and
+        # fixed on the audit log (3.5), for any text source external to the
+        # project meant to be read by a human.
         threat = _strip_unicode_control_and_format_chars(result.threat_name or "menace inconnue")
         metrics.AV_SCAN_RESULT.labels(verdict="menace").inc()
         _send_alert(
@@ -533,10 +548,10 @@ JPEG_SIGNATURE = b"\xff\xd8\xff"
 
 def _detect_file_kind(raw: bytes) -> str:
     """
-    Détermine le type réel du fichier à partir de son contenu binaire, jamais
-    du Content-Type ou du nom de fichier déclarés par le client (falsifiables).
-    JPG et JPEG sont le même format (signature \\xFF\\xD8\\xFF) — traités de
-    façon identique, sans distinction.
+    Determines the actual file type from its binary content, never
+    from the Content-Type or file name declared by the client (forgeable).
+    JPG and JPEG are the same format (signature \\xFF\\xD8\\xFF) — handled
+    identically, without distinction.
     """
     if raw.startswith(b"%PDF-"):
         return "pdf"
@@ -550,9 +565,9 @@ def _detect_file_kind(raw: bytes) -> str:
 
 
 def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
-    """Décode les octets d'un CSV en essayant les encodages les plus courants
-    en pratique (UTF-8 avec BOM Excel, UTF-8 standard, puis Windows-1252
-    fréquent sur les exports Excel FR avec des accents)."""
+    """Decodes CSV bytes by trying the encodings most common in
+    practice (UTF-8 with Excel BOM, standard UTF-8, then Windows-1252
+    frequent on French Excel exports with accented characters)."""
     for encoding in ("utf-8-sig", "utf-8", "cp1252"):
         try:
             return raw.decode(encoding), encoding
@@ -562,9 +577,9 @@ def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
 
 
 def _detect_csv_delimiter(sample_text: str) -> str:
-    """Détecte le séparateur (virgule ou point-virgule). Le point-virgule est
-    très répandu en France (Excel FR utilise la virgule comme séparateur
-    décimal, donc exporte les CSV avec ';')."""
+    """Detects the delimiter (comma or semicolon). The semicolon is
+    very common in France (French Excel uses the comma as a decimal
+    separator, so it exports CSVs with ';')."""
     first_lines = "\n".join(sample_text.splitlines()[:5])
     try:
         return csv.Sniffer().sniff(first_lines, delimiters=";,\t").delimiter
@@ -587,13 +602,13 @@ _CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 def _neutralize_csv_formula(value: str) -> str:
     """
-    Protection contre l'injection de formule CSV : si une cellule du fichier
-    de sortie commence par un caractère qu'Excel/LibreOffice interprète comme
-    le début d'une formule, on la préfixe d'une apostrophe pour la neutraliser
-    à l'ouverture. S'applique à TOUTES les cellules du fichier produit (pas
-    seulement celles caviardées) — protège la personne qui ouvrira le fichier
-    anonymisé, un risque indépendant de l'anonymisation elle-même mais
-    pertinent à couvrir dès maintenant plutôt que de le laisser au futur audit.
+    Protection against CSV formula injection: if a cell of the output
+    file starts with a character that Excel/LibreOffice interprets as
+    the start of a formula, it is prefixed with an apostrophe to neutralize it
+    on opening. Applies to ALL cells of the produced file (not
+    only redacted ones) — protects the person who opens the
+    anonymized file, a risk independent of anonymization itself but
+    relevant to cover now rather than leaving it to the future audit.
     """
     if value and value[0] in _CSV_FORMULA_TRIGGERS:
         return "'" + value
@@ -602,14 +617,14 @@ def _neutralize_csv_formula(value: str) -> str:
 
 def _sweep_orphaned_files():
     """
-    Supprime tout fichier de sortie plus vieux que FILE_TTL_SECONDS.
+    Deletes any output file older than FILE_TTL_SECONDS.
 
-    Filet de sécurité pour les fichiers "orphelins" : si le conteneur
-    redémarre (ex: redéploiement) entre la création d'un fichier et
-    l'écoulement de son délai de purge individuel (_schedule_cleanup), le
-    thread en mémoire qui devait le supprimer meurt avec l'ancien process et
-    le fichier reste sur le disque indéfiniment. Ce balayage, lancé au
-    démarrage puis répété périodiquement, rattrape ces cas.
+    Safety net for "orphaned" files: if the container
+    restarts (e.g. redeployment) between a file's creation and
+    the expiry of its individual purge delay (_schedule_cleanup), the
+    in-memory thread that was supposed to delete it dies with the old process and
+    the file stays on disk indefinitely. This sweep, launched at
+    startup and then repeated periodically, catches these cases.
     """
     now = time.time()
     for path in WORKDIR.glob("*-anonymise.*"):
@@ -625,7 +640,7 @@ def _sweep_orphaned_files():
 
 
 def _sweep_stale_jobs():
-    """Supprime les jobs en révision jamais finalisés au-delà de JOB_REVIEW_TTL_SECONDS."""
+    """Deletes review jobs never finalized beyond JOB_REVIEW_TTL_SECONDS."""
     now = time.time()
     with _PENDING_JOBS_LOCK:
         stale = [
@@ -640,17 +655,17 @@ def _sweep_stale_jobs():
         log.info("Jobs en révision expirés purgés: %d", len(stale))
 
 
-# Volumes réellement montés (voir docker-compose.yml) dont l'espace disque
-# libre est surveillé. WORKDIR et AUDIT_DIR peuvent être deux points de
-# montage distincts en production (bind mounts séparés) même s'ils partagent
-# le même disque en lab.
+# Actually mounted volumes (see docker-compose.yml) whose free disk
+# space is monitored. WORKDIR and AUDIT_DIR may be two distinct
+# mount points in production (separate bind mounts) even though they share
+# the same disk in the lab.
 _MONITORED_VOLUMES = {"workdir": WORKDIR, "audit": AUDIT_DIR}
 
-# Seuils d'alerte espace disque : déclenché sur le plus restrictif des deux
-# critères (pourcentage OU valeur absolue), pour rester pertinent aussi bien
-# sur un petit volume (où 10% peut représenter plusieurs Go de marge) que sur
-# un très gros volume (où 10% peut rester énorme alors que l'espace absolu
-# restant est déjà critique).
+# Disk space alert thresholds: triggered on the more restrictive of the
+# two criteria (percentage OR absolute value), to stay relevant both
+# on a small volume (where 10% can represent several GB of margin) and on
+# a very large volume (where 10% can still be huge while the absolute
+# remaining space is already critical).
 _DISK_WARNING_PCT = 10.0
 _DISK_WARNING_MB = 500
 _DISK_CRITICAL_PCT = 5.0
@@ -690,8 +705,8 @@ def _check_disk_space(volume: str, path: Path) -> None:
 
 
 def _check_presidio_health(service: str, base_url: str) -> None:
-    """Vérification de santé légère : une simple requête HTTP suffit, pas
-    besoin de reproduire un vrai appel d'analyse/anonymisation ici."""
+    """Lightweight health check: a simple HTTP request is enough, no
+    need to reproduce a real analysis/anonymization call here."""
     try:
         resp = requests.get(f"{base_url}/health", timeout=5)
         up = resp.ok
@@ -712,13 +727,13 @@ def _check_presidio_health(service: str, base_url: str) -> None:
 def _cleanup_sweep_loop(interval_seconds: int = 60):
     while True:
         time.sleep(interval_seconds)
-        # Ce thread est la seule chose qui purge les fichiers orphelins et les
-        # jobs de révision expirés (1.11/1.14) — une exception non rattrapée
-        # ici (ex. bug dans une vérification ajoutée plus tard) tuerait le
-        # thread silencieusement et POUR TOUJOURS (pas de relance), désactivant
-        # ce nettoyage jusqu'au prochain redémarrage du conteneur sans que
-        # personne ne le remarque. `_send_alert` intercepte déjà les échecs
-        # d'alerte eux-mêmes ; ce filet couvre tout le reste par précaution.
+        # This thread is the only thing that purges orphaned files and
+        # expired review jobs (1.11/1.14) — an uncaught exception
+        # here (e.g. a bug in a check added later) would silently kill the
+        # thread FOREVER (no restart), disabling
+        # this cleanup until the next container restart without
+        # anyone noticing. `_send_alert` already catches alert
+        # failures themselves; this net covers everything else as a precaution.
         try:
             _sweep_orphaned_files()
             _sweep_stale_jobs()
@@ -732,37 +747,37 @@ def _cleanup_sweep_loop(interval_seconds: int = 60):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- Démarrage ---
-    # Valide la config antivirus dès maintenant (AV_ENGINE inconnu, ICAP_HOST
-    # manquant, ICAP_PORT/ICAP_TIMEOUT_SECONDS non numériques...) : échec
-    # rapide et explicite au démarrage plutôt qu'un 500 générique sur la
-    # première requête /api/detect venue une fois en production.
+    # --- Startup ---
+    # Validates the antivirus config right now (unknown AV_ENGINE, missing
+    # ICAP_HOST, non-numeric ICAP_PORT/ICAP_TIMEOUT_SECONDS...): fast
+    # and explicit failure at startup rather than a generic 500 on the
+    # first /api/detect request once in production.
     get_scanner()
 
-    # Idem pour la config d'alerting (ALERT_SINK) — mais contrairement à
-    # l'antivirus, une supervision mal configurée ne doit jamais empêcher le
-    # service principal (anonymisation, fonction critique) de démarrer :
-    # simple avertissement au démarrage, pas d'échec fatal. `_send_alert`
-    # retentera de toute façon la construction à la prochaine alerte
-    # (lru_cache ne mémorise pas les échecs, voir supervision.py).
+    # Same for the alerting config (ALERT_SINK) — but unlike the
+    # antivirus, a misconfigured supervision setup must never prevent the
+    # main service (anonymization, critical function) from starting:
+    # simple warning at startup, not a fatal failure. `_send_alert`
+    # will retry the construction anyway on the next alert
+    # (lru_cache does not memoize failures, see supervision.py).
     try:
         get_alert_sink()
     except Exception:
         log.error("Configuration ALERT_SINK invalide, alertes non fonctionnelles pour l'instant", exc_info=True)
 
-    # Rattrape immédiatement les fichiers laissés par un précédent process
-    # (crash, redéploiement) avant même le premier tour de boucle périodique.
+    # Immediately catches up on files left by a previous process
+    # (crash, redeployment) even before the first periodic loop pass.
     _sweep_orphaned_files()
     threading.Thread(target=_cleanup_sweep_loop, daemon=True).start()
     log.info("Balayage des fichiers orphelins démarré (contrôle toutes les 60s)")
 
-    yield  # l'application tourne ici
+    yield  # the application runs here
 
-    # --- Extinction ---
+    # --- Shutdown ---
     log.info("Arrêt de l'application")
 
 
-app = FastAPI(title="Anonymiseur de documents - PDF/DOCX/CSV", lifespan=lifespan)
+app = FastAPI(title="Obfusk8 - Anonymiseur de documents - PDF/DOCX/CSV", lifespan=lifespan)
 
 ERROR_TITLES = {
     400: "Requête invalide",
@@ -776,9 +791,9 @@ ERROR_TITLES = {
 @app.exception_handler(HTTPException)
 async def http_exception_handler(request: Request, exc: HTTPException):
     """
-    Affiche une page d'erreur lisible pour un navigateur (formulaire soumis
-    normalement), tout en gardant une réponse JSON classique pour un appel
-    scripté/API (curl, outillage) qui ne demande pas explicitement du HTML.
+    Displays a readable error page for a browser (form submitted
+    normally), while keeping a plain JSON response for a
+    scripted/API call (curl, tooling) that doesn't explicitly ask for HTML.
     """
     wants_html = "text/html" in request.headers.get("accept", "")
     if not wants_html:
@@ -790,7 +805,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content=f"""
         <!doctype html>
         <html lang="fr">
-        <head><meta charset="utf-8"><title>{title} - Anonymiseur</title></head>
+        <head><meta charset="utf-8"><title>{title} - Obfusk8</title></head>
         <body style="font-family: sans-serif; max-width: 560px; margin: 80px auto; text-align:center;">
           <div style="font-size:3em; margin-bottom:8px;">⚠️</div>
           <h1 style="margin-bottom:8px;">{html.escape(title)}</h1>
@@ -809,72 +824,72 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 # ---------------------------------------------------------------------------
-# Plafond de taille de requête HTTP, appliqué AVANT tout parsing de formulaire
+# HTTP request size ceiling, applied BEFORE any form parsing
 # ---------------------------------------------------------------------------
-# Le contrôle MAX_UPLOAD_MB de detect_document s'exécute après `await
-# file.read()`, c'est-à-dire après que Starlette a déjà reçu et stocké
-# l'intégralité du corps multipart (en mémoire jusqu'à 1 Mo, puis dans un
-# fichier temporaire sous /tmp — un tmpfs, donc de la mémoire comptée dans la
-# limite du conteneur), puis que tout a été relu en mémoire. Aucun plafond
-# n'existait en amont (ni ici, ni côté Traefik) : reproduit sur un conteneur
-# jetable identique au service (limite 1 Go, profil seccomp de blocage), un
-# SEUL upload chunké de 700 Mo tue le conteneur par OOM (exit 137) en quelques
-# secondes — et avec lui tous les jobs en attente de révision des autres
-# utilisateurs. Le rate limiting Traefik (5 req/min) ne protège pas : une
-# seule requête suffit.
+# The MAX_UPLOAD_MB check in detect_document runs after `await
+# file.read()`, i.e. after Starlette has already received and stored
+# the entire multipart body (in memory up to 1 MB, then in a
+# temp file under /tmp — a tmpfs, so memory counted in the
+# container's limit), and everything has then been re-read into memory. No ceiling
+# existed upstream (neither here nor on the Traefik side): reproduced on a
+# disposable container identical to the service (1 GB limit, blocking
+# seccomp profile), a SINGLE 700 MB chunked upload kills the container via OOM
+# (exit 137) within seconds — taking down with it every review job pending
+# for other users. Traefik rate limiting (5 req/min) does not protect
+# against this: a single request is enough.
 #
-# Deux garde-fous, dans l'ordre :
-#  - Content-Length déclaré supérieur au plafond → 413 immédiat, sans lire un
-#    seul octet du corps.
-#  - Corps chunké (sans Content-Length) ou Content-Length mensonger → chaque
-#    fragment reçu est compté ; dès que le total dépasse le plafond, la
-#    lecture est interrompue par une HTTPException 413 (sous-classe, pour que
-#    FastAPI la laisse remonter telle quelle jusqu'à http_exception_handler au
-#    lieu de la convertir en 400 générique). Rien n'a été accumulé au-delà du
-#    plafond à ce moment-là.
-# Le plafond laisse 2 Mo de marge au-dessus de MAX_UPLOAD_MB pour l'enrobage
-# multipart et les autres champs de formulaire (manual_zones, limité par
-# ailleurs à 1 Mo par Starlette). Le contrôle exact et lisible par
-# l'utilisateur ("Fichier trop volumineux (x Mo, max 25 Mo)") reste celui de
-# detect_document ; celui-ci est une barrière de ressources, pas d'ergonomie.
+# Two guardrails, in order:
+#  - Declared Content-Length above the ceiling -> immediate 413, without reading a
+#    single byte of the body.
+#  - Chunked body (no Content-Length) or lying Content-Length -> each
+#    received fragment is counted; as soon as the total exceeds the ceiling, the
+#    read is interrupted by a 413 HTTPException (subclass, so that
+#    FastAPI lets it propagate as-is up to http_exception_handler instead
+#    of converting it to a generic 400). Nothing has been accumulated beyond the
+#    ceiling at that point.
+# The ceiling leaves a 2 MB margin above MAX_UPLOAD_MB for the multipart
+# wrapping and other form fields (manual_zones, otherwise
+# limited to 1 MB by Starlette). The exact, user-readable
+# check ("File too large (x MB, max 25 MB)") remains the one in
+# detect_document; this one is a resource barrier, not a UX check.
 MAX_REQUEST_BODY_BYTES = (MAX_UPLOAD_MB + 2) * 1024 * 1024
 
 
 # ---------------------------------------------------------------------------
-# Section 3.7 : secret partagé passerelle (Traefik -> app)
+# Section 3.7: shared gateway secret (Traefik -> app)
 # ---------------------------------------------------------------------------
-# `app` faisait confiance à `X-Auth-Request-Email` (journal d'audit ET
-# contrôle de propriétaire des jobs, section 1.38) sans jamais vérifier que
-# la requête avait bien traversé Traefik -> oauth2-proxy. Un client externe
-# ne peut pas forger cet en-tête (Traefik le supprime et le remplace avant le
-# forwardAuth), MAIS un conteneur du même réseau Docker que `app`
-# (`app-internal` OU `backend` : presidio, ou un voisin compromis/malveillant)
-# peut joindre `app:8000` DIRECTEMENT, en contournant Traefik entièrement, et
-# forger l'en-tête de toutes pièces. Vérifié empiriquement : contournement
-# confirmé de bout en bout (une entrée d'audit `admin@usurpe.fr` a été écrite
-# via un conteneur voisin sans jamais passer par oauth2-proxy).
+# `app` trusted `X-Auth-Request-Email` (audit log AND job ownership
+# check, section 1.38) without ever verifying that the request had
+# actually gone through Traefik -> oauth2-proxy. An external client
+# cannot forge this header (Traefik strips it and replaces it before the
+# forwardAuth), BUT a container on the same Docker network as `app`
+# (`app-internal` OR `backend`: presidio, or a compromised/malicious neighbor)
+# can reach `app:8000` DIRECTLY, bypassing Traefik entirely, and
+# forge the header outright. Empirically verified: bypass
+# confirmed end-to-end (an audit entry `admin@usurpe.fr` was written
+# via a neighboring container without ever going through oauth2-proxy).
 #
-# Parade (même principe que les secrets déjà en place) : un secret partagé,
-# connu de Traefik seul et de `app`. Traefik l'injecte, en écrasant toute
-# valeur cliente, sur toute requête routée vers `app` ; `app` le vérifie ICI,
-# AVANT tout traitement, à temps constant (hmac.compare_digest, jamais ==).
-# Absent ou incorrect -> 401 immédiat, avant même de lire X-Auth-Request-Email.
+# Countermeasure (same principle as the secrets already in place): a shared secret,
+# known only to Traefik and `app`. Traefik injects it, overwriting any
+# client-supplied value, on every request routed to `app`; `app` verifies it HERE,
+# BEFORE any processing, in constant time (hmac.compare_digest, never ==).
+# Missing or incorrect -> immediate 401, before even reading X-Auth-Request-Email.
 #
-# Le secret est monté en Docker secret (`/run/secrets/gateway_secret`, même
-# convention que oauth2_*), jamais en clair dans docker-compose.yml. Traefik
-# l'injecte via un fichier de configuration dynamique gitignoré
-# (`traefik/dynamic/gateway-secret.yml`), rendu par generate-secrets.sh à
-# partir de la MÊME valeur.
+# The secret is mounted as a Docker secret (`/run/secrets/gateway_secret`, same
+# convention as oauth2_*), never in cleartext in docker-compose.yml. Traefik
+# injects it via a gitignored dynamic configuration file
+# (`traefik/dynamic/gateway-secret.yml`), rendered by generate-secrets.sh from
+# the SAME value.
 #
-# Désactivé (no-op) si aucun secret n'est configuré — dev/test locaux, où
-# aucun /run/secrets n'est monté. Un avertissement explicite est journalisé
-# au démarrage dans ce cas ; jamais un contournement silencieux en production.
+# Disabled (no-op) if no secret is configured — local dev/test, where
+# no /run/secrets is mounted. An explicit warning is logged
+# at startup in that case; never a silent bypass in production.
 GATEWAY_SECRET_HEADER = b"x-internal-gateway-secret"
 
 
 def _read_gateway_secret() -> str:
-    # Surcharge directe par variable d'env (tests) ; sinon lecture du Docker
-    # secret monté par Docker au démarrage. Absent -> chaîne vide -> désactivé.
+    # Direct override via env var (tests); otherwise reads the Docker
+    # secret mounted by Docker at startup. Absent -> empty string -> disabled.
     direct = os.environ.get("GATEWAY_SECRET")
     if direct is not None:
         return direct.strip()
@@ -899,12 +914,12 @@ if not GATEWAY_SECRET:
 
 
 class _GatewaySecretMiddleware:
-    """Vérifie le secret partagé injecté par Traefik (section 3.7) AVANT tout
-    traitement de requête — donc avant que le moindre endpoint ne lise
-    `X-Auth-Request-Email`. `/health` est exempté : un HEALTHCHECK Docker
-    éventuel interroge le conteneur en loopback, pas via Traefik, et ne doit
-    pas se mettre à échouer à cause de ce contrôle. Comparaison à temps
-    constant. No-op si aucun secret configuré (voir GATEWAY_SECRET)."""
+    """Checks the shared secret injected by Traefik (section 3.7) BEFORE any
+    request processing — so before any endpoint at all reads
+    `X-Auth-Request-Email`. `/health` is exempted: an optional Docker
+    HEALTHCHECK queries the container over loopback, not via Traefik, and must
+    not start failing because of this check. Constant-time
+    comparison. No-op if no secret is configured (see GATEWAY_SECRET)."""
 
     def __init__(self, asgi_app):
         self.asgi_app = asgi_app
@@ -914,7 +929,7 @@ class _GatewaySecretMiddleware:
             await self.asgi_app(scope, receive, send)
             return
 
-        secret = GATEWAY_SECRET  # lu à chaque requête (surchargeable en test)
+        secret = GATEWAY_SECRET  # read on every request (overridable in tests)
         if secret and scope.get("path") != "/health":
             provided = b""
             for name, value in scope.get("headers", []):
@@ -941,8 +956,8 @@ class RequestBodyTooLarge(HTTPException):
 
 
 class _RequestBodyLimitMiddleware:
-    """Middleware ASGI pur (pas BaseHTTPMiddleware : celui-ci consommerait le
-    corps différemment et casserait le streaming)."""
+    """Pure ASGI middleware (not BaseHTTPMiddleware: that would consume the
+    body differently and break streaming)."""
 
     def __init__(self, asgi_app):
         self.asgi_app = asgi_app
@@ -952,7 +967,7 @@ class _RequestBodyLimitMiddleware:
             await self.asgi_app(scope, receive, send)
             return
 
-        limit = MAX_REQUEST_BODY_BYTES  # lu à chaque requête (surchargeable en test)
+        limit = MAX_REQUEST_BODY_BYTES  # read on every request (overridable in tests)
 
         declared = None
         for name, value in scope.get("headers", []):
@@ -982,25 +997,25 @@ class _RequestBodyLimitMiddleware:
 
 
 # ---------------------------------------------------------------------------
-# En-têtes de sécurité HTTP, sur TOUTES les réponses (pages, aperçus, erreurs)
+# HTTP security headers, on ALL responses (pages, previews, errors)
 # ---------------------------------------------------------------------------
-# Aucun en-tête de ce type n'était posé, ni ici ni par Traefik. Le plus
-# important pour ce projet est `Cache-Control: no-store` : sans lui, les
-# aperçus de pages (/api/preview_image — rendu du document ORIGINAL, avant
-# caviardage) et les fichiers téléchargés étaient écrits dans le cache disque
-# du navigateur du poste utilisateur, où ils survivent à la fermeture de la
-# session et au TTL côté serveur. Les autres en-têtes sont la base attendue
-# d'une application web manipulant des données de santé : anti-MIME-sniffing,
-# anti-clickjacking (frame-ancestors + X-Frame-Options pour les vieux
-# navigateurs), CSP limitant chargement de scripts/images/connexions à
-# l'origine elle-même (les pages de révision utilisent des scripts et styles
-# inline et des images data: pour les aperçus DOCX, d'où 'unsafe-inline' et
-# data: — la CSP bloque surtout toute exfiltration vers un autre domaine et
-# tout script externe), pas de fuite du job_id via le Referer hors origine,
-# HSTS (ignoré par les navigateurs tant que la connexion n'est pas HTTPS, donc
-# sans effet en test direct sur le port 8000), isolation cross-origin des
-# ressources (un site tiers ne peut pas embarquer un aperçu). Un en-tête déjà
-# posé explicitement par une réponse n'est jamais écrasé.
+# No header of this kind was set, neither here nor by Traefik. The most
+# important one for this project is `Cache-Control: no-store`: without it,
+# page previews (/api/preview_image — rendering of the ORIGINAL document, before
+# redaction) and downloaded files were written to the disk cache
+# of the user's browser, where they survive session closure
+# and the server-side TTL. The other headers are the expected baseline
+# for a web application handling health data: anti-MIME-sniffing,
+# anti-clickjacking (frame-ancestors + X-Frame-Options for old
+# browsers), CSP restricting the loading of scripts/images/connections to
+# the origin itself (the review pages use inline scripts and styles
+# and data: images for DOCX previews, hence 'unsafe-inline' and
+# data: — the CSP mainly blocks any exfiltration to another domain and
+# any external script), no job_id leak via the Referer outside the origin,
+# HSTS (ignored by browsers as long as the connection isn't HTTPS, so
+# no effect when testing directly on port 8000), cross-origin isolation of
+# resources (a third-party site cannot embed a preview). A header already
+# explicitly set by a response is never overwritten.
 _SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"cache-control", b"no-store"),
     (b"x-content-type-options", b"nosniff"),
@@ -1019,15 +1034,15 @@ _SECURITY_HEADERS: tuple[tuple[bytes, bytes], ...] = (
     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
 )
 
-# /api/download sert aussi le PDF/image caviardé DANS la page "Aperçu
-# (contrôle visuel)" générée par /api/finalize (<iframe>/<img> sur la même
-# origine). frame-ancestors 'none' + X-Frame-Options: DENY, posés par défaut
-# ci-dessus sur TOUTE réponse, empêchaient alors le navigateur d'afficher
-# cette réponse dans SA PROPRE page ("Firefox ne peut ouvrir cette page"),
-# bien que la requête HTTP elle-même aboutisse (200). Seules les extensions
-# servies en inline (voir _INLINE_EXTENSIONS plus bas) ont besoin de ce
-# relâchement ciblé à 'self' — un site tiers reste bloqué comme avant ; les
-# téléchargements en pièce jointe (.docx/.csv, jamais cadrés) gardent 'none'.
+# /api/download also serves the redacted PDF/image WITHIN the "Preview
+# (visual check)" page generated by /api/finalize (<iframe>/<img> on the same
+# origin). frame-ancestors 'none' + X-Frame-Options: DENY, set by default
+# above on EVERY response, then prevented the browser from displaying
+# this response within ITS OWN page ("Firefox can't open this page"),
+# even though the HTTP request itself succeeded (200). Only the extensions
+# served inline (see _INLINE_EXTENSIONS below) need this
+# relaxation, targeted to 'self' — a third-party site remains blocked as before;
+# attachment downloads (.docx/.csv, never framed) keep 'none'.
 _INLINE_PREVIEW_HEADERS = {
     "x-frame-options": "SAMEORIGIN",
     "content-security-policy": (
@@ -1061,19 +1076,19 @@ class _SecurityHeadersMiddleware:
         await self.asgi_app(scope, receive, send_with_headers)
 
 
-# Ordre : le dernier ajouté est le plus externe. Les en-têtes doivent envelopper
-# aussi la réponse 413 émise directement par le plafond de taille ET la réponse
-# 401 de la passerelle (section 3.7). La vérification du secret passerelle
-# s'exécute AVANT le plafond de corps (inutile de tamponner le corps d'un
-# appelant non autorisé) mais SOUS les en-têtes de sécurité (qui enveloppent
-# donc aussi son 401).
+# Order: the last one added is the outermost. The headers must also wrap
+# the 413 response emitted directly by the size ceiling AND the 401
+# response from the gateway (section 3.7). The gateway secret check
+# runs BEFORE the body ceiling (no point buffering the body of an
+# unauthorized caller) but UNDER the security headers (which therefore
+# also wrap its 401).
 app.add_middleware(_RequestBodyLimitMiddleware)
 app.add_middleware(_GatewaySecretMiddleware)
 app.add_middleware(_SecurityHeadersMiddleware)
 
 
 def _schedule_cleanup(path: Path, delay: int = FILE_TTL_SECONDS):
-    """Supprime le fichier après `delay` secondes (purge automatique)."""
+    """Deletes the file after `delay` seconds (automatic purge)."""
 
     def _cleanup():
         time.sleep(delay)
@@ -1088,47 +1103,47 @@ def _schedule_cleanup(path: Path, delay: int = FILE_TTL_SECONDS):
 
 def _normalize_allcaps(text: str) -> str:
     """
-    Convertit les mots tout en majuscules (ex: "DURAND") en casse titre
-    ("Durand") pour aider le modèle NER à les reconnaître comme noms
-    propres — spaCy s'appuie beaucoup sur la casse pour cette détection.
+    Converts all-uppercase words (e.g. "SMITH") to title case
+    ("Smith") to help the NER model recognize them as proper
+    nouns — spaCy relies heavily on casing for this detection.
 
-    Important: .capitalize() ne change jamais la longueur d'un mot, donc les
-    positions (start/end) renvoyées par l'analyzer restent valides pour
-    découper le texte ORIGINAL (non normalisé) utilisé pour le caviardage.
+    Important: .capitalize() never changes a word's length, so the
+    positions (start/end) returned by the analyzer remain valid for
+    slicing the ORIGINAL (non-normalized) text used for redaction.
     """
     return re.sub(r"\b[A-ZÀ-Ý]{2,}\b", lambda m: m.group(0).capitalize(), text)
 
 
-# Variantes Unicode de tiret rencontrées dans des PDF réels (selon l'outil de
-# génération/la police utilisée) qui ne correspondent pas au trait d'union
-# ASCII standard attendu par les regex de reconnaissance de dates. Un
-# remplacement 1-pour-1 préserve la longueur du texte, donc les positions
-# (start/end) renvoyées par l'analyzer restent valides sur le texte original.
+# Unicode dash variants encountered in real PDFs (depending on the
+# generation tool/font used) that do not match the standard ASCII
+# hyphen expected by the date-recognition regexes. A
+# 1-for-1 replacement preserves the text length, so the positions
+# (start/end) returned by the analyzer remain valid on the original text.
 _DASH_VARIANTS = "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"
 
 
 def _normalize_dashes(text: str) -> str:
-    """Remplace les tirets typographiques (demi-cadratin, cadratin, signe
-    moins mathématique...) par un trait d'union ASCII standard, pour que les
-    dates au format JJ-MM-AAAA (ou similaire) soient reconnues quel que soit
-    le caractère de séparation réellement utilisé dans le PDF source."""
+    """Replaces typographic dashes (en dash, em dash, mathematical
+    minus sign...) with a standard ASCII hyphen, so that
+    dates in DD-MM-YYYY format (or similar) are recognized regardless of
+    the separator character actually used in the source PDF."""
     return text.translate({ord(c): "-" for c in _DASH_VARIANTS})
 
 
 def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
-    """Appelle presidio-analyzer sur un morceau de texte, renvoie les entités trouvées.
+    """Calls presidio-analyzer on a chunk of text, returns the entities found.
 
-    Si un thème est fourni, ses reconnaisseurs personnalisés (ad_hoc_recognizers),
-    sa liste d'exclusions (allow_list) et son seuil de sensibilité
-    (score_threshold) sont envoyés avec la requête — sans jamais toucher à
-    la config statique du conteneur presidio-analyzer.
+    If a theme is provided, its custom recognizers (ad_hoc_recognizers),
+    its exclusion list (allow_list) and its sensitivity threshold
+    (score_threshold) are sent with the request — without ever touching
+    the static config of the presidio-analyzer container.
     """
     if not text.strip():
         return []
 
     payload = {"text": text, "language": LANGUAGE}
 
-    # Les reconnaisseurs communs s'appliquent toujours, thème choisi ou non.
+    # Common recognizers always apply, whether a theme is selected or not.
     ad_hoc = list(COMMON_RECOGNIZERS)
     if theme and theme.get("ad_hoc_recognizers"):
         ad_hoc.extend(theme["ad_hoc_recognizers"])
@@ -1152,18 +1167,18 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
         log.error("Appel presidio-analyzer échoué: %s", exc)
         raise HTTPException(status_code=502, detail="Moteur d'analyse indisponible") from exc
 
-    # Revérifié côté client (pas seulement envoyé dans la requête) : selon la
-    # version de presidio-analyzer, le paramètre score_threshold n'est pas
-    # toujours honoré côté serveur pour tous les reconnaisseurs. Filet de
-    # sécurité peu coûteux, score absent traité comme maximal (1.0) pour ne
-    # jamais rejeter une entité par excès de prudence si le champ manque.
+    # Re-checked client-side (not just sent in the request): depending on the
+    # presidio-analyzer version, the score_threshold parameter is not
+    # always honored server-side for all recognizers. Cheap safety
+    # net; a missing score is treated as maximal (1.0) so as to
+    # never reject an entity out of excess caution if the field is missing.
     entities_before = entities
     entities = [e for e in entities_before if e.get("score", 1.0) >= score_threshold]
 
-    # Diagnostic : ne loggue jamais le texte détecté (voir politique
-    # d'audit), seulement type + score, pour distinguer un vrai problème de
-    # seuil NER (scores variés, proches du seuil) d'un reconnaisseur
-    # personnalisé à score fixe (souvent 1.0, qu'aucun seuil ne peut filtrer).
+    # Diagnostics: never logs the detected text (see audit
+    # policy), only type + score, to distinguish a genuine NER
+    # threshold issue (varied scores, close to the threshold) from a
+    # custom recognizer with a fixed score (often 1.0, which no threshold can filter).
     if entities_before:
         log.info(
             "Analyse: seuil=%.2f, %d entité(s) avant filtrage %s, %d après.",
@@ -1173,12 +1188,12 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
             len(entities),
         )
 
-    # Filtrage après coup plutôt qu'une liste positive de types envoyée à
-    # Presidio : on retire uniquement ce qu'on sait être du bruit (ex.
-    # ORGANIZATION sur des empans multi-lignes fusionnant des fragments sans
-    # rapport dans les formulaires médicaux denses), sans risquer d'exclure
-    # silencieusement un type légitime qu'on n'aurait pas pensé à lister
-    # (email, téléphone...).
+    # After-the-fact filtering rather than a positive list of types sent to
+    # Presidio: we only remove what we know to be noise (e.g.
+    # ORGANIZATION on multi-line spans merging unrelated
+    # fragments in dense medical forms), without risking silently
+    # excluding a legitimate type we hadn't thought to list
+    # (email, phone...).
     excluded_types = set(theme.get("excluded_entity_types", [])) if theme else set()
     if excluded_types:
         entities = [e for e in entities if e.get("entity_type") not in excluded_types]
@@ -1187,7 +1202,7 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
 
 
 def _anonymize_text(text: str, entities: list[dict]) -> str:
-    """Appelle presidio-anonymizer pour produire une version texte anonymisée (audit)."""
+    """Calls presidio-anonymizer to produce an anonymized text version (audit)."""
     if not entities:
         return text
     try:
@@ -1203,44 +1218,44 @@ def _anonymize_text(text: str, entities: list[dict]) -> str:
         return resp.json().get("text", text)
     except requests.RequestException as exc:
         log.error("Appel presidio-anonymizer échoué: %s", exc)
-        # Non bloquant : le caviardage PDF ne dépend pas de cet appel
+        # Non-blocking: PDF redaction does not depend on this call
         return text
 
 
-PREVIEW_ZOOM = 2.0  # facteur d'agrandissement pour le rendu des pages en image
+PREVIEW_ZOOM = 2.0  # magnification factor for page-to-image rendering
 
-# Défense en profondeur contre CVE-2026-3308 (MuPDF, pdf_load_image_imp) :
-# le stride d'une image est calculé en entier 32 bits côté MuPDF, ce qui
-# peut déborder sur des dimensions déclarées volontairement absurdes et
-# provoquer une écriture hors bornes lors du décodage. La version de
-# PyMuPDF utilisée ici est déjà corrigée, mais on vérifie quand même les
-# dimensions déclarées (lues depuis les métadonnées de l'objet image, sans
-# décodage) avant tout appel à get_pixmap(), en défense en profondeur.
+# Defense in depth against CVE-2026-3308 (MuPDF, pdf_load_image_imp):
+# an image's stride is computed as a 32-bit integer on the MuPDF side, which
+# can overflow with deliberately absurd declared dimensions and
+# trigger an out-of-bounds write during decoding. The
+# PyMuPDF version used here is already patched, but we still check the
+# declared dimensions (read from the image object's metadata, without
+# decoding) before any call to get_pixmap(), as defense in depth.
 #
-# Même seuil réutilisé pour les images PNG/JPEG uploadées directement (voir
-# _open_and_validate_image) : même principe de bombe de décompression,
-# même défense (dimensions déclarées lues avant tout décodage complet).
+# Same threshold reused for PNG/JPEG images uploaded directly (see
+# _open_and_validate_image): same decompression-bomb principle,
+# same defense (declared dimensions read before any full decoding).
 MAX_IMAGE_PIXELS = int(os.environ.get("MAX_IMAGE_PIXELS", "40_000_000"))
 
-# Aligne explicitement la protection anti-bombe de décompression intégrée à
-# Pillow sur notre propre seuil, plutôt que de dépendre silencieusement de sa
-# valeur par défaut (89 478 485, différente de MAX_IMAGE_PIXELS ci-dessus).
-# L'assertion vérifie que cette protection reste bien active (jamais
-# désactivée en mettant Image.MAX_IMAGE_PIXELS à None ailleurs dans le code)
-# — point de vigilance demandé explicitement : une désactivation silencieuse
-# de cette limite romprait la défense en profondeur ci-dessous sans qu'aucune
-# erreur ne le signale avant qu'une vraie bombe de décompression ne soit
-# traitée.
+# Explicitly aligns Pillow's built-in decompression-bomb protection
+# with our own threshold, rather than silently relying on its
+# default value (89,478,485, different from MAX_IMAGE_PIXELS above).
+# The assertion checks that this protection stays active (never
+# disabled by setting Image.MAX_IMAGE_PIXELS to None elsewhere in the code)
+# — an explicitly requested point of vigilance: a silent disabling
+# of this limit would break the defense in depth below without any
+# error signaling it before an actual decompression bomb is
+# processed.
 Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
 assert Image.MAX_IMAGE_PIXELS is not None, "PIL.Image.MAX_IMAGE_PIXELS ne doit jamais être désactivé (None)"
 
 
 def _check_page_images_sane(page: "fitz.Page") -> None:
     """
-    Rejette la page si une image qui y est incrustée déclare des dimensions
-    nulles/négatives ou dépassant MAX_IMAGE_PIXELS. À appeler avant tout
-    page.get_pixmap() : get_images(full=True) ne fait que lire les entrées
-    /Width et /Height de l'objet image dans le PDF, sans décoder les pixels.
+    Rejects the page if an embedded image declares zero/negative
+    dimensions or dimensions exceeding MAX_IMAGE_PIXELS. To be called before any
+    page.get_pixmap(): get_images(full=True) only reads the
+    /Width and /Height entries of the image object in the PDF, without decoding pixels.
     """
     for img in page.get_images(full=True):
         width, height = img[2], img[3]
@@ -1251,21 +1266,21 @@ def _check_page_images_sane(page: "fitz.Page") -> None:
             )
 
 
-# Types d'entités propagés sur tout le document une fois confirmés au moins
-# une fois — un nom de patient qui échappe au NER dans un contexte dense
-# (ex: page listant de nombreux biologistes) reste néanmoins une donnée
-# identifiante qui se répète tel quel ailleurs dans le document.
+# Entity types propagated across the whole document once confirmed at
+# least once — a patient name that escapes NER in a dense context
+# (e.g. a page listing many lab technicians) is nonetheless
+# identifying data that recurs verbatim elsewhere in the document.
 PROPAGATED_ENTITY_TYPES = {"PERSON", "LOCATION"}
 
 
 def _name_variants(name: str) -> set[str]:
     """
-    Génère les variantes plausibles d'un nom déjà confirmé, pour le
-    retrouver ailleurs dans le document même si sa casse ou l'ordre
-    prénom/nom diffère d'un endroit à l'autre (observé en pratique : une
-    page a \"Jean DURAND\", une autre \"DURAND JEAN\").
-    Se limite à l'inversion de deux mots — au-delà, l'ordre réel est trop
-    ambigu pour être deviné sans risque.
+    Generates plausible variants of an already-confirmed name, to
+    find it elsewhere in the document even if its case or first-name/
+    last-name order differs from one place to another (observed in
+    practice: one page has "Jean DURAND", another "DURAND JEAN").
+    Limited to swapping two words — beyond that, the actual order is too
+    ambiguous to be guessed safely.
     """
     words = name.split()
     orders = [words]
@@ -1282,16 +1297,16 @@ def _name_variants(name: str) -> set[str]:
 
 def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     """
-    Détecte les entités sensibles sans les caviarder. Pour chaque occurrence
-    visuelle trouvée, renvoie à la fois sa position réelle dans le PDF (pour
-    le caviardage final) et sa position à l'échelle de l'aperçu image (pour
-    l'affichage cliquable côté navigateur) — les deux calculées avec la même
-    matrice de zoom pour rester parfaitement alignées.
+    Detects sensitive entities without redacting them. For each
+    visual occurrence found, returns both its actual position in the PDF (for
+    the final redaction) and its position scaled to the preview image (for
+    clickable display on the browser side) — both computed with the same
+    zoom matrix to stay perfectly aligned.
 
-    Deux passes : (1) détection standard page par page via Presidio, (2)
-    propagation des noms confirmés en passe 1 vers le reste du document, là
-    où le NER a pu échapper une occurrence identique (contexte dense,
-    formulaire, page différente) — voir PROPAGATED_ENTITY_TYPES.
+    Two passes: (1) standard detection page by page via Presidio, (2)
+    propagation of names confirmed in pass 1 to the rest of the document, where
+    NER may have missed an identical occurrence (dense context,
+    form, different page) — see PROPAGATED_ENTITY_TYPES.
     """
     matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
     detections: list[dict] = []
@@ -1301,7 +1316,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     already_covered: set[tuple[int, tuple[float, float, float, float]]] = set()
     detection_start = time.time()
 
-    # --- Passe 1 : détection standard, page par page ---
+    # --- Pass 1: standard detection, page by page ---
     for page_index, page in enumerate(doc):
         _check_detection_deadline(detection_start)
         page_text = page.get_text()
@@ -1316,15 +1331,15 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                 continue
 
             entity_type = entity.get("entity_type", "UNKNOWN")
-            # Un nom de famille isolé est trop ambigu pour être propagé sans
-            # risque, mais un nom de ville isolé (ex: "Ajaccio") est un bon
-            # candidat même seul — d'où la règle différente selon le type.
-            # Seuil de 4 caractères minimum pour un mot LOCATION isolé : une
-            # abréviation courte (ex: "Enr", 3 lettres) s'est révélée capable
-            # de se propager en préfixe sur d'autres mots via la recherche
-            # insensible à la casse de PyMuPDF (search_for) — 4+ caractères
-            # laisse passer les vrais noms de ville courts (Metz, Caen, Nice,
-            # Lyon...) tout en bloquant ce type de faux positif.
+            # An isolated last name is too ambiguous to propagate without
+            # risk, but an isolated city name (e.g. "Ajaccio") is a good
+            # candidate even alone — hence the different rule per type.
+            # Minimum 4-character threshold for an isolated LOCATION word: a
+            # short abbreviation (e.g. "Enr", 3 letters) turned out to be able
+            # to propagate as a prefix onto other words via PyMuPDF's
+            # case-insensitive search (search_for) — 4+ characters
+            # lets real short city names through (Metz, Caen, Nice,
+            # Lyon...) while blocking this kind of false positive.
             is_propagatable = entity_type in PROPAGATED_ENTITY_TYPES and (
                 " " in stripped or (entity_type == "LOCATION" and len(stripped) >= 4)
             )
@@ -1346,13 +1361,13 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                     }
                 )
 
-            # Un nom propre ou une ville confirmés une fois deviennent
-            # candidats à la propagation sur le reste du document, avec le
-            # type d'entité d'origine conservé pour l'audit/le résumé.
+            # A proper name or city confirmed once becomes a
+            # candidate for propagation across the rest of the document, with the
+            # original entity type kept for audit/summary purposes.
             if is_propagatable:
                 propagate_candidates[stripped] = entity_type
 
-    # --- Passe 2 : propagation des noms/villes confirmés vers les autres pages ---
+    # --- Pass 2: propagation of confirmed names/cities to the other pages ---
     for name, propagated_entity_type in propagate_candidates.items():
         for variant in _name_variants(name):
             for page_index, page in enumerate(doc):
@@ -1380,7 +1395,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
 
 
 def _rect_iou(a: list[float], b: list[float]) -> float:
-    """Calcule l'IoU (intersection sur union) entre deux rectangles [x0, y0, x1, y1]."""
+    """Computes the IoU (intersection over union) between two rectangles [x0, y0, x1, y1]."""
     ax0, ay0, ax1, ay1 = a
     bx0, by0, bx1, by1 = b
     ix0, iy0 = max(ax0, bx0), max(ay0, by0)
@@ -1394,15 +1409,15 @@ def _rect_iou(a: list[float], b: list[float]) -> float:
 
 def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> list[dict]:
     """
-    Regroupe les détections dont les rectangles se chevauchent fortement
-    (typiquement : plusieurs recognizers différents qui détectent la même
-    portion de texte, ex. le NER générique + un pattern personnalisé sur le
-    même nom). Sans ce regroupement, deux zones invisiblement superposées
-    peuvent exister au même endroit : cliquer sur l'une pour l'exclure
-    laisse l'autre active, et la zone semble "ne pas se décaviarder".
+    Groups detections whose rectangles overlap significantly
+    (typically: several different recognizers detecting the same
+    piece of text, e.g. generic NER + a custom pattern on the
+    same name). Without this grouping, two invisibly overlapping zones
+    can exist at the same spot: clicking one to exclude it
+    leaves the other active, and the zone appears to "not un-redact".
 
-    Chaque cluster expose un seul id cliquable côté navigateur, mais garde
-    la liste de tous les ids de détection sous-jacents pour l'exclusion.
+    Each cluster exposes a single clickable id on the browser side, but keeps
+    the list of all underlying detection ids for exclusion purposes.
     """
     by_page: dict[int, list[dict]] = {}
     for d in detections:
@@ -1443,49 +1458,49 @@ def _cluster_detections(detections: list[dict], iou_threshold: float = 0.3) -> l
 
 
 # ---------------------------------------------------------------------------
-# Image (PNG/JPEG) - validation d'entrée, OCR + détection PII
+# Image (PNG/JPEG) - input validation, OCR + PII detection
 # ---------------------------------------------------------------------------
 
 OCR_LANGUAGE = "fra"
 
-# Chemin absolu plutôt qu'une simple recherche dans $PATH (comportement par
-# défaut de pytesseract, `tesseract_cmd = "tesseract"`) : défense en
-# profondeur contre un détournement de PATH, même si le système de fichiers
-# racine en lecture seule (voir docker-compose.yml, `read_only: true`) rend
-# déjà ce vecteur impraticable — aucun répertoire de PATH n'est inscriptible
-# à l'exécution. Le paquet Debian `tesseract-ocr` (voir Dockerfile) installe
-# toujours le binaire à cet emplacement.
+# Absolute path rather than a plain $PATH lookup (pytesseract's
+# default behavior, `tesseract_cmd = "tesseract"`): defense in
+# depth against a PATH hijack, even though the read-only root
+# filesystem (see docker-compose.yml, `read_only: true`) already makes
+# this vector impractical — no PATH directory is writable
+# at runtime. The Debian `tesseract-ocr` package (see Dockerfile) always
+# installs the binary at this location.
 pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 
-# Premier chemin de code de cette application à lancer un sous-processus
-# (voir seccomp/README.md) : sans borne de temps explicite, un
-# `subprocess.Popen` bloquant peut tourner indéfiniment sur une image
-# pathologique/adversariale, contournant entièrement le filet
-# `_check_detection_deadline` (qui ne s'exécute qu'APRÈS le retour de
-# l'OCR) — même défaut de conception que celui déjà corrigé pour les appels
-# Presidio (`timeout=30` explicite dans `_analyze_text`), désormais
-# appliqué symétriquement ici.
+# First code path of this application to launch a subprocess
+# (see seccomp/README.md): without an explicit time bound, a
+# blocking `subprocess.Popen` can run indefinitely on a
+# pathological/adversarial image, entirely bypassing the
+# `_check_detection_deadline` safety net (which only runs AFTER
+# OCR returns) — same design flaw as the one already fixed for
+# Presidio calls (explicit `timeout=30` in `_analyze_text`), now
+# applied symmetrically here.
 MAX_OCR_SECONDS = int(os.environ.get("MAX_OCR_SECONDS", "60"))
 
 
 def _open_and_validate_image(raw: bytes) -> "Image.Image":
     """
-    Phase 1 - validation d'entrée pour une image PNG/JPEG uploadée : même
-    exigence de sécurité que pour les images incrustées dans un PDF (voir
-    _check_page_images_sane / CVE-2026-3308) — les dimensions déclarées sont
-    lues AVANT tout décodage complet des pixels. `Image.open()` ne fait que
-    lire l'en-tête du format (bloc IHDR pour PNG, marqueur SOF pour JPEG)
-    pour déterminer `img.size` ; les données pixel compressées ne sont
-    décodées qu'au premier accès réel (`.load()`, `.getdata()`...), jamais
-    par `Image.open()` seul.
+    Phase 1 - input validation for an uploaded PNG/JPEG image: same
+    security requirement as for images embedded in a PDF (see
+    _check_page_images_sane / CVE-2026-3308) — declared dimensions are
+    read BEFORE any full pixel decoding. `Image.open()` only
+    reads the format header (IHDR block for PNG, SOF marker for JPEG)
+    to determine `img.size`; compressed pixel data is only
+    decoded on the first actual access (`.load()`, `.getdata()`...), never
+    by `Image.open()` alone.
     """
     try:
         with warnings.catch_warnings():
-            # Le DecompressionBombWarning intégré à Pillow ne couvre que la
-            # zone 1x-2x le seuil (silencieux par défaut, pas une erreur) —
-            # on impose notre propre rejet strict juste après pour ce cas
-            # intermédiaire, au lieu de le laisser passer avec un simple
-            # avertissement.
+            # Pillow's built-in DecompressionBombWarning only covers the
+            # 1x-2x threshold zone (silent by default, not an error) —
+            # we enforce our own strict rejection right after for this
+            # intermediate case, instead of letting it through with a mere
+            # warning.
             warnings.simplefilter("ignore", Image.DecompressionBombWarning)
             img = Image.open(io.BytesIO(raw))
             width, height = img.size
@@ -1504,9 +1519,9 @@ def _open_and_validate_image(raw: bytes) -> "Image.Image":
             detail=f"Cette image dépasse la limite de dimensions autorisée (max {MAX_IMAGE_PIXELS} pixels).",
         )
     if image_format not in ("PNG", "JPEG"):
-        # Ne devrait jamais arriver : _detect_file_kind a déjà validé la
-        # signature binaire — filet de sécurité si un jour un autre format
-        # partageant une signature proche était mal aiguillé vers "image".
+        # Should never happen: _detect_file_kind has already validated the
+        # binary signature — safety net in case another format
+        # sharing a close signature is ever misrouted to "image".
         raise HTTPException(status_code=400, detail="Format d'image non reconnu (seuls PNG et JPEG sont acceptés).")
 
     return img
@@ -1514,16 +1529,16 @@ def _open_and_validate_image(raw: bytes) -> "Image.Image":
 
 def _run_ocr(img: "Image.Image") -> list[dict]:
     """
-    Lance pytesseract.image_to_data (pas image_to_string) : renvoie le texte
-    ET la position (bounding box en pixels) de chaque mot reconnu, avec
-    lang="fra" — indispensable pour un texte français correctement reconnu
-    (accents), voir Dockerfile pour le paquet de données linguistiques.
-    Échec fermé : toute erreur du moteur OCR est une erreur propre (jamais
-    une trace brute), jamais un verdict "aucune détection" implicite.
-    `timeout=MAX_OCR_SECONDS` (voir plus haut) borne le sous-processus
-    `tesseract` : au-delà, pytesseract le termine proprement (SIGTERM puis
-    SIGKILL, voir sa fonction `kill()`) et lève une RuntimeError, jamais un
-    processus zombie ou une requête bloquée indéfiniment.
+    Runs pytesseract.image_to_data (not image_to_string): returns the text
+    AND the position (bounding box in pixels) of each recognized word, with
+    lang="fra" — essential for French text to be correctly recognized
+    (accents), see Dockerfile for the language data package.
+    Fails closed: any OCR engine error is a clean error (never
+    a raw traceback), never an implicit "no detection" verdict.
+    `timeout=MAX_OCR_SECONDS` (see above) bounds the `tesseract`
+    subprocess: beyond that, pytesseract terminates it cleanly (SIGTERM then
+    SIGKILL, see its `kill()` function) and raises a RuntimeError, never a
+    zombie process or a request blocked indefinitely.
     """
     try:
         data = pytesseract.image_to_data(
@@ -1536,9 +1551,9 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
         log.warning("Échec de l'OCR : %s", exc)
         raise HTTPException(status_code=400, detail="Cette image n'a pas pu être analysée par l'OCR.") from exc
     except RuntimeError as exc:
-        # pytesseract lève une RuntimeError nue (pas TesseractError, capturée
-        # ci-dessus séparément bien qu'elle en hérite) avec le message fixe
-        # "Tesseract process timeout" en cas de dépassement — voir
+        # pytesseract raises a bare RuntimeError (not TesseractError, caught
+        # separately above even though it inherits from it) with the fixed
+        # message "Tesseract process timeout" on timeout — see
         # pytesseract.timeout_manager.
         log.warning("Timeout OCR après %ss : %s", MAX_OCR_SECONDS, exc)
         raise HTTPException(
@@ -1550,9 +1565,9 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
     for i in range(len(data.get("text", []))):
         text = data["text"][i]
         if not text or not text.strip():
-            # Tesseract renvoie aussi des lignes de bounding box pour des
-            # niveaux structurels (bloc/paragraphe/ligne) sans texte propre —
-            # on ne garde que les mots effectivement reconnus.
+            # Tesseract also returns bounding-box entries for
+            # structural levels (block/paragraph/line) with no actual text —
+            # we only keep words that were actually recognized.
             continue
         words.append({
             "text": text,
@@ -1569,13 +1584,13 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
 
 def _build_ocr_text(words: list[dict]) -> tuple[str, list[tuple[int, int, dict]]]:
     """
-    Reconstruit le texte complet à partir des mots OCR (séparateur espace au
-    sein d'une même ligne, saut de ligne entre deux lignes/paragraphes/blocs
-    différents), en gardant pour chaque mot son empan de caractères (start,
-    end) dans ce texte reconstruit — permet de retrouver ensuite la ou les
-    bounding box correspondant à une entité détectée par offset de caractère
-    (voir _map_entities_to_word_boxes), même principe que le mapping
-    page/rectangle déjà fait pour le PDF.
+    Rebuilds the full text from the OCR words (space separator within
+    a single line, line break between two different lines/paragraphs/
+    blocks), keeping for each word its character span (start,
+    end) in this rebuilt text — lets us later find the
+    bounding box(es) corresponding to an entity detected by character offset
+    (see _map_entities_to_word_boxes), same principle as the
+    page/rectangle mapping already done for the PDF.
     """
     parts: list[str] = []
     spans: list[tuple[int, int, dict]] = []
@@ -1597,11 +1612,11 @@ def _build_ocr_text(words: list[dict]) -> tuple[str, list[tuple[int, int, dict]]
 
 def _map_entities_to_word_boxes(entities: list[dict], spans: list[tuple[int, int, dict]]) -> list[dict]:
     """
-    Convertit chaque entité détectée (offset de caractères dans le texte OCR
-    reconstruit) en une ou plusieurs détections en coordonnées pixels — une
-    entité peut recouvrir plusieurs mots OCR (ex: "Jean Durand"), chacun
-    produisant sa propre bounding box, regroupées ensuite par
-    _cluster_detections comme pour le PDF.
+    Converts each detected entity (character offset in the rebuilt OCR
+    text) into one or more detections in pixel coordinates — an
+    entity can span several OCR words (e.g. "Jean Durand"), each
+    producing its own bounding box, later grouped by
+    _cluster_detections just like for the PDF.
     """
     detections: list[dict] = []
     for entity in entities:
@@ -1629,13 +1644,13 @@ def _map_entities_to_word_boxes(entities: list[dict], spans: list[tuple[int, int
 
 def _detect_image(img: "Image.Image", theme: dict | None = None) -> list[dict]:
     """
-    Détecte les entités sensibles dans une image sans les caviarder : OCR
-    (voir _run_ocr) puis reconstruction du texte (_build_ocr_text) passée
-    par la fonction d'analyse EXISTANTE du projet (_analyze_text — même
-    appel Presidio, même système de thèmes, même moteur patché) avant de
-    remapper chaque entité vers sa/ses bounding box (_map_entities_to_word_boxes).
-    Ne réimplémente aucun appel Presidio séparé. Gère nativement le cas
-    "aucun texte reconnu" : renvoie simplement une liste vide, sans erreur.
+    Detects sensitive entities in an image without redacting them: OCR
+    (see _run_ocr) then text reconstruction (_build_ocr_text) passed
+    through the project's EXISTING analysis function (_analyze_text — same
+    Presidio call, same theme system, same patched engine) before
+    remapping each entity to its bounding box(es) (_map_entities_to_word_boxes).
+    Does not reimplement any separate Presidio call. Natively handles the
+    "no text recognized" case: simply returns an empty list, no error.
     """
     detection_start = time.time()
     words = _run_ocr(img)
@@ -1644,10 +1659,10 @@ def _detect_image(img: "Image.Image", theme: dict | None = None) -> list[dict]:
     _check_detection_deadline(detection_start)
 
     text, spans = _build_ocr_text(words)
-    # Mêmes normalisations que pour le PDF (aide le NER sur les mots tout en
-    # majuscules et les tirets typographiques) — préservent la longueur du
-    # texte caractère pour caractère, donc les offsets restent valides pour
-    # remapper vers les spans calculés sur le texte original.
+    # Same normalizations as for the PDF (helps NER on all-uppercase
+    # words and typographic dashes) — preserve the text's length
+    # character for character, so the offsets remain valid for
+    # remapping onto the spans computed on the original text.
     normalized_text = _normalize_dashes(_normalize_allcaps(text))
     entities = _analyze_text(normalized_text, theme=theme)
     return _map_entities_to_word_boxes(entities, spans)
@@ -1672,17 +1687,17 @@ IMAGE_RELTYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relations
 
 def _flatten_revisions_in(root) -> int:
     """
-    "Accepte" toutes les révisions de suivi des modifications dans un
-    élément racine XML donné : les insertions (w:ins) sont dépaquetées (le
-    texte inséré devient un run normal), les suppressions (w:del) et
-    déplacements sources (w:moveFrom) sont retirés entièrement.
+    "Accepts" all tracked-changes revisions in a given XML root
+    element: insertions (w:ins) are unwrapped (the
+    inserted text becomes a normal run), deletions (w:del) and
+    source moves (w:moveFrom) are removed entirely.
 
-    Nécessaire car python-docx n'expose aucune API haut niveau pour ça —
-    et surtout parce que le texte d'une suppression trackée reste sinon
-    présent indéfiniment dans le XML, invisible à `paragraph.runs` et donc
-    à tout le reste du pipeline de détection (fuite confirmée par test lors
-    de l'audit de sécurité : un nom et une date supprimés en mode suivi
-    survivaient intégralement jusqu'au fichier "anonymisé" final).
+    Necessary because python-docx exposes no high-level API for this —
+    and especially because the text of a tracked deletion otherwise
+    remains present indefinitely in the XML, invisible to `paragraph.runs` and
+    therefore to the rest of the detection pipeline (leak confirmed by testing
+    during the security audit: a name and a date deleted in tracked-changes
+    mode survived intact all the way through to the final "anonymized" file).
     """
     count = 0
     for del_elem in list(root.iter(qn("w:del"))):
@@ -1720,14 +1735,14 @@ def _flatten_revisions_in(root) -> int:
 
 def _unwrap_hyperlinks_in(root, part) -> tuple[int, int]:
     """
-    Déplie tous les <w:hyperlink> d'un élément racine XML donné : le texte
-    affiché redevient un run normal (donc analysé par le pipeline de
-    détection comme n'importe quel texte, `paragraph.runs` ne descendant
-    pas dans un <w:hyperlink> — fuite confirmée par test), et la relation
-    vers la cible (URL/mailto, potentiellement porteuse d'une donnée
-    identifiante) est supprimée — pas seulement débranchée du corps du
-    texte : la cible restait sinon présente et extractible dans les
-    relations du fichier même après suppression du lien visible.
+    Unwraps all <w:hyperlink> elements in a given XML root element: the
+    displayed text becomes a normal run again (so it's analyzed by the
+    detection pipeline like any other text, since `paragraph.runs` doesn't
+    descend into a <w:hyperlink> — leak confirmed by testing), and the relation
+    to the target (URL/mailto, potentially carrying identifying
+    data) is removed — not just detached from the body of the
+    text: the target otherwise remained present and extractable in the
+    file's relations even after the visible link was removed.
     """
     unwrapped = 0
     dropped_rels = 0
@@ -1747,20 +1762,20 @@ def _unwrap_hyperlinks_in(root, part) -> tuple[int, int]:
                 part.drop_rel(rid)
                 dropped_rels += 1
             except KeyError:
-                pass  # relation déjà absente/partagée, rien à faire
+                pass  # relation already absent/shared, nothing to do
     return unwrapped, dropped_rels
 
 
 def _wipe_comments(document: WordDocument) -> int:
     """
-    Retire tous les commentaires d'un document : les marqueurs dans le
-    corps (w:commentRangeStart/End, le run contenant w:commentReference) et
-    la ou les parties de commentaires elles-mêmes. Aucune API de
-    suppression n'existe dans python-docx (seulement add_comment) — retrait
-    entier plutôt que caviardage du contenu : même un commentaire
-    partiellement masqué révèlerait qu'une discussion interne visait une
-    personne précise, une fuite partielle de la forme de l'échange même
-    sans le nom.
+    Removes all comments from a document: the markers in the
+    body (w:commentRangeStart/End, the run containing w:commentReference) and
+    the comment part(s) themselves. No removal API
+    exists in python-docx (only add_comment) — full removal
+    rather than redacting the content: even a partially masked comment
+    would reveal that an internal discussion was about a specific
+    person, a partial leak of the shape of the exchange even
+    without the name.
     """
     count = 0
     root = document.element
@@ -1784,21 +1799,21 @@ def _wipe_comments(document: WordDocument) -> int:
 
 def _wipe_docx_thumbnail(document: WordDocument) -> int:
     """
-    Retire la miniature de document (docProps/thumbnail.jpeg), jamais
-    analysée par le pipeline (texte uniquement) : un .docx réellement
-    enregistré par Word (contrairement à un fixture généré par
-    python-docx) peut y embarquer un rendu réel de la première page en
-    pixels, si l'option "Enregistrer la vignette" a été active à un
-    moment — potentiellement du texte identifiant visible en image, jamais
-    lu ni caviardé par ailleurs. La relation vers cette partie est stockée
-    au niveau racine du paquet (_rels/.rels, reltype "metadata/thumbnail"),
-    pas dans word/_rels/document.xml.rels comme les relations habituelles
-    du corps — d'où l'accès via document.part.package.rels plutôt que
-    document.part.rels. Retrait entier (même logique que _wipe_comments) :
-    ce n'est pas du texte analysable, la seule protection sûre est de ne
-    pas transporter cette partie dans le fichier de sortie. Vérifié que la
-    partie disparaît bien du zip de sortie et que le document reste
-    ouvrable.
+    Removes the document thumbnail (docProps/thumbnail.jpeg), never
+    analyzed by the pipeline (text only): a .docx actually
+    saved by Word (unlike a fixture generated by
+    python-docx) can embed an actual rendering of the first page in
+    pixels, if the "Save thumbnail" option was ever enabled at some
+    point — potentially identifying text visible in image form, never
+    otherwise read or redacted. The relation to this part is stored
+    at the package root level (_rels/.rels, reltype "metadata/thumbnail"),
+    not in word/_rels/document.xml.rels like the usual body
+    relations — hence access via document.part.package.rels rather than
+    document.part.rels. Full removal (same logic as _wipe_comments):
+    this is not analyzable text, the only safe protection is to not
+    carry this part over into the output file. Verified that the
+    part does indeed disappear from the output zip and that the document
+    remains openable.
     """
     package = document.part.package
     to_drop = [rid for rid, rel in list(package.rels.items()) if rel.reltype == THUMBNAIL_RELTYPE]
@@ -1809,11 +1824,11 @@ def _wipe_docx_thumbnail(document: WordDocument) -> int:
 
 def _wipe_core_properties(document: WordDocument) -> int:
     """
-    Vide les champs de métadonnées susceptibles de porter une identité
-    (auteur, dernier modificateur, commentaire/sujet/mots-clés/catégorie du
-    document). Contrairement au corps du texte, ce sont des champs
-    structurés dont la nature est connue par convention — inutile de les
-    faire passer par le NER, on sait déjà que "auteur" est toujours un nom.
+    Clears metadata fields likely to carry an identity
+    (author, last modified by, comment/subject/keywords/category of the
+    document). Unlike the body text, these are structured fields
+    whose nature is known by convention — no need to run them
+    through NER, we already know that "author" is always a name.
     """
     props = document.core_properties
     count = 0
@@ -1826,11 +1841,11 @@ def _wipe_core_properties(document: WordDocument) -> int:
 
 def _get_note_part(document: WordDocument, note_kind: str):
     """
-    Renvoie (part, root) pour la partie notes de bas de page/de fin, ou
-    (None, None) si absente. `root` est un arbre lxml fraîchement analysé
-    depuis part.blob — cette partie n'est pas un XmlPart standard (pas
-    d'attribut .element, pas de vue live), donc toute modification doit
-    être réécrite explicitement dans part._blob avant la sauvegarde, voir
+    Returns (part, root) for the footnotes/endnotes part, or
+    (None, None) if absent. `root` is an lxml tree freshly parsed
+    from part.blob — this part is not a standard XmlPart (no
+    .element attribute, no live view), so any modification must
+    be explicitly written back into part._blob before saving, see
     _save_note_parts.
     """
     reltype = NOTE_RELTYPES[note_kind]
@@ -1843,21 +1858,21 @@ def _get_note_part(document: WordDocument, note_kind: str):
 
 def _collect_docx_image_parts(document: WordDocument) -> list:
     """
-    Renvoie la liste des parties image distinctes référencées depuis le
-    corps, les en-têtes/pieds de page et les notes de bas de page/de fin —
-    mêmes parties déjà traversées pour le texte, voir _iter_docx_paragraphs.
-    Couvre aussi bien les images "inline" (wp:inline) que flottantes
-    (wp:anchor) : la recherche se fait au niveau des relations OPC
-    (reltype image), pas via document.inline_shapes qui n'expose que le
-    premier cas.
+    Returns the list of distinct image parts referenced from the
+    body, headers/footers, and footnotes/endnotes —
+    the same parts already traversed for text, see _iter_docx_paragraphs.
+    Covers both "inline" (wp:inline) and floating
+    (wp:anchor) images: the search happens at the OPC relations
+    level (image reltype), not via document.inline_shapes which only exposes the
+    first case.
 
-    Dédoublonné par partname (`/word/media/imageN.ext`) : une même image
-    référencée deux fois (même relation réutilisée à deux endroits, ou deux
-    relations distinctes pointant vers un objet identique après
-    déduplication déjà faite par Word) n'apparaît qu'une fois côté révision.
-    Conséquence assumée : cocher une telle image en caviarde bien toutes les
-    occurrences en une fois (comportement sûr — sur-caviarder n'est jamais
-    le problème, contrairement à l'inverse).
+    Deduplicated by partname (`/word/media/imageN.ext`): the same image
+    referenced twice (the same relation reused in two places, or two
+    distinct relations pointing to an identical object after
+    deduplication already done by Word) appears only once on the review side.
+    Accepted consequence: checking such an image does redact all
+    occurrences at once (safe behavior — over-redacting is never
+    the problem, unlike the reverse).
     """
     parts_to_scan = [document.part]
     seen_part_ids = {id(document.part)}
@@ -1884,19 +1899,19 @@ _DOCX_IMAGE_PLACEHOLDER_FORMATS = {"image/png": "png", "image/jpeg": "jpg", "ima
 
 def _black_placeholder_image_bytes(content_type: str) -> bytes:
     """
-    Image 64x64 unie noire, générée à la volée avec PyMuPDF (déjà une
-    dépendance du projet — pas besoin de Pillow). Word redimensionne
-    l'affichage selon les dimensions déclarées dans le XML du document
-    (<a:ext cx=".." cy="..">), la taille en pixels du fichier de
-    remplacement n'a donc pas besoin de correspondre à l'original.
+    Solid black 64x64 image, generated on the fly with PyMuPDF (already a
+    project dependency — no need for Pillow). Word resizes the
+    display according to the dimensions declared in the document's XML
+    (<a:ext cx=".." cy="..">), so the replacement file's pixel
+    size does not need to match the original.
 
-    Réencodée dans le même format que l'original pour png/jpeg (l'immense
-    majorité des captures d'écran/photos collées). Pour tout autre format
-    (gif/bmp/tiff/wmf/emf...), un PNG est utilisé malgré tout, SANS changer
-    la déclaration de type de la partie — mismatch assumé, documenté : rare
-    en pratique pour ce cas d'usage, et la garantie de sécurité (octets
-    d'origine non récupérables) tient dans tous les cas ; seule la fidélité
-    de rendu dans Word peut en pâtir pour ces formats exotiques.
+    Re-encoded in the same format as the original for png/jpeg (the vast
+    majority of pasted screenshots/photos). For any other format
+    (gif/bmp/tiff/wmf/emf...), a PNG is used anyway, WITHOUT changing
+    the part's declared type — accepted, documented mismatch: rare
+    in practice for this use case, and the security guarantee (original
+    bytes unrecoverable) holds in all cases; only Word's rendering
+    fidelity can suffer for these exotic formats.
     """
     pix = fitz.Pixmap(fitz.csRGB, fitz.IRect(0, 0, 64, 64))
     pix.set_rect(pix.irect, (0, 0, 0))
@@ -1906,19 +1921,19 @@ def _black_placeholder_image_bytes(content_type: str) -> bytes:
 
 def _apply_docx_image_redactions(document: WordDocument, redacted_partnames: set) -> int:
     """
-    Remplace le contenu binaire de chaque image sélectionnée par un carré
-    noir uni — même garantie que le caviardage manuel PDF
-    (_apply_manual_redactions) : l'octet d'origine ne doit survivre nulle
-    part dans le fichier de sortie. Contrairement au PDF (sauvegarde
-    incrémentale par défaut, nécessitant garbage=4/clean=True pour purger
-    les objets pré-caviardage), l'écriture DOCX/OPC réécrit chaque partie
-    une seule fois à partir de son blob courant (OpcPackage.save via
-    iter_parts, dérivé du graphe de relations vivant) — aucune purge
-    additionnelle nécessaire ici.
+    Replaces the binary content of each selected image with a solid
+    black square — same guarantee as manual PDF redaction
+    (_apply_manual_redactions): the original byte must not survive anywhere
+    in the output file. Unlike PDF (incremental save by
+    default, requiring garbage=4/clean=True to purge
+    pre-redaction objects), DOCX/OPC writing rewrites each part
+    exactly once from its current blob (OpcPackage.save via
+    iter_parts, derived from the live relationship graph) — no
+    additional purge needed here.
 
-    Granularité IMAGE ENTIÈRE, pas une zone pixel précise comme pour le PDF
-    : DOCX n'expose pas de mise en page fixe en coordonnées sans un moteur
-    de rendu complet, tracer un rectangle précis n'est pas possible ici.
+    WHOLE-IMAGE granularity, not a precise pixel area like for PDF:
+    DOCX exposes no fixed layout in coordinates without a full
+    rendering engine, so drawing a precise rectangle isn't possible here.
     """
     if not redacted_partnames:
         return 0
@@ -1932,11 +1947,11 @@ def _apply_docx_image_redactions(document: WordDocument, redacted_partnames: set
 
 def _build_docx_images_review_section(document: WordDocument) -> str:
     """
-    Construit la section "images du document" de l'écran de révision DOCX :
-    une case à cocher par image distincte, DÉCOCHÉE par défaut — mécanisme
-    manuel et opt-in, même logique que les zones manuelles PDF (rien n'est
-    caviardé sans action explicite de l'utilisateur, puisque ces images ne
-    sont pas analysées par le NER, voir avertissement affiché juste avant).
+    Builds the "document images" section of the DOCX review screen:
+    one checkbox per distinct image, UNCHECKED by default — a
+    manual, opt-in mechanism, same logic as manual PDF zones (nothing is
+    redacted without explicit user action, since these images are
+    not analyzed by NER, see the warning displayed just before).
     """
     parts = _collect_docx_image_parts(document)[:MAX_DOCX_IMAGES]
     if not parts:
@@ -1981,41 +1996,41 @@ def _build_docx_images_review_section(document: WordDocument) -> str:
 
 
 def _save_note_parts(note_parts: dict) -> None:
-    """Réécrit le blob des parties notes de bas de page/de fin après
-    modification de leurs paragraphes — nécessaire avant document.save(),
-    voir _get_note_part."""
+    """Rewrites the blob of footnote/endnote parts after
+    their paragraphs are modified — necessary before document.save(),
+    see _get_note_part."""
     for part, root in note_parts.values():
         part._blob = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
 
 
 def _iter_docx_paragraphs(document: WordDocument):
     """
-    Parcourt tous les paragraphes d'un document dans un ordre déterministe
-    et STABLE entre deux ouvertures successives du même fichier
-    (indispensable pour retrouver les mêmes indices de bloc entre la
-    détection et la finalisation).
+    Walks all paragraphs of a document in a deterministic order
+    that is STABLE across two successive openings of the same file
+    (essential for matching the same block indices between
+    detection and finalization).
 
-    Couvre : corps, cellules de tableaux (récursif), en-têtes et pieds de
-    page de chaque section, notes de bas de page et de fin. Sur CHAQUE
-    partie traversée (corps, en-têtes/pieds de page, notes), le suivi des
-    modifications est aplati et les hyperliens sont dépliés AVANT
-    extraction des paragraphes — voir _flatten_revisions_in /
-    _unwrap_hyperlinks_in pour le pourquoi (fuites confirmées par
-    l'audit de sécurité, invisibles à `paragraph.runs` sinon).
+    Covers: body, table cells (recursive), headers and footers
+    of each section, footnotes and endnotes. On EVERY
+    part traversed (body, headers/footers, notes), tracked
+    changes are flattened and hyperlinks are unwrapped BEFORE
+    paragraph extraction — see _flatten_revisions_in /
+    _unwrap_hyperlinks_in for why (leaks confirmed by
+    the security audit, otherwise invisible to `paragraph.runs`).
 
-    Renvoie (blocks, note_parts) :
-      - blocks : liste [(label, paragraph, table_ref), ...].
-      - note_parts : dict {"footnote"|"endnote": (part, root)} pour les
-        parties dont le contenu a été inclus — À REPASSER À
-        _save_note_parts après édition des runs, avant document.save().
+    Returns (blocks, note_parts):
+      - blocks: list of [(label, paragraph, table_ref), ...].
+      - note_parts: dict {"footnote"|"endnote": (part, root)} for the
+        parts whose content was included — MUST BE PASSED BACK TO
+        _save_note_parts after editing the runs, before document.save().
 
-    LIMITATION CONNUE : n'inclut pas le texte des zones de texte, formes,
-    SmartArt ou objets OLE incrustés, ni les images incrustées dans le
-    corps (`<w:drawing>`) — python-docx ne l'expose pas / ce n'est pas du
-    texte analysable par le NER. Les commentaires, métadonnées et la
-    miniature de document ne sont pas caviardés mais entièrement retirés
-    en amont côté finalisation (_wipe_comments / _wipe_core_properties /
-    _wipe_docx_thumbnail), donc jamais présentés en révision non plus.
+    KNOWN LIMITATION: does not include the text of text boxes, shapes,
+    SmartArt, or embedded OLE objects, nor images embedded in the
+    body (`<w:drawing>`) — python-docx doesn't expose it / it isn't
+    text analyzable by NER. Comments, metadata, and the
+    document thumbnail are not redacted but entirely removed
+    upstream during finalization (_wipe_comments / _wipe_core_properties /
+    _wipe_docx_thumbnail), so they're never presented for review either.
     """
     blocks = []
 
@@ -2069,10 +2084,10 @@ def _iter_docx_paragraphs(document: WordDocument):
 
 def _cluster_text_detections(detections: list[dict]) -> list[dict]:
     """
-    Regroupe les détections dont les plages de caractères se chevauchent, au
-    sein d'un même bloc — équivalent 1D du regroupement par IoU utilisé pour
-    le PDF (_cluster_detections), pour la même raison : éviter qu'une zone
-    cliquable en cache une autre invisible au même endroit.
+    Groups detections whose character ranges overlap, within
+    the same block — 1D equivalent of the IoU-based grouping used for
+    the PDF (_cluster_detections), for the same reason: prevent one
+    clickable zone from hiding another one invisibly at the same spot.
     """
     by_block: dict = {}
     for d in detections:
@@ -2110,30 +2125,30 @@ def _cluster_text_detections(detections: list[dict]) -> list[dict]:
     return clusters
 
 
-# Un fragment isolé (une cellule de tableau, un en-tête de colonne, une
-# ligne "Nom : Dupont" sans le reste de la phrase) prive le modèle NER du
-# contexte qui l'aide à trancher entre "nom propre" et "mot ordinaire
-# capitalisé" — c'est ce qui cause à la fois des faux négatifs (un nom
-# réellement présent mais non détecté, faute de contexte) et des faux
-# positifs (un mot ordinaire en début de cellule, capitalisé par
-# _normalize_allcaps, pris pour un nom). On regroupe donc plusieurs blocs
-# contigus dans un même appel à Presidio plutôt que de les analyser un par
-# un, pour reconstituer un effet "page complète" comparable à ce qui
-# fonctionne bien pour le PDF.
+# An isolated fragment (a table cell, a column header, a
+# "Name: Smith" line without the rest of the sentence) deprives the NER model of the
+# context that helps it decide between "proper noun" and "ordinary
+# capitalized word" — this is what causes both false negatives (a name
+# actually present but not detected, for lack of context) and false
+# positives (an ordinary word at the start of a cell, capitalized by
+# _normalize_allcaps, mistaken for a name). We therefore group several
+# contiguous blocks into a single Presidio call instead of analyzing them one
+# by one, to recreate a "full page" effect comparable to what
+# works well for PDF.
 TEXT_CHUNK_MAX_CHARS = 8000
 TEXT_CHUNK_MAX_BLOCKS = 200
 
 
-# Mots-clés d'en-tête de colonne (première ligne d'un tableau DOCX ou d'un
-# CSV) associés directement à un type d'entité : une correspondance ici
-# déclenche le caviardage de TOUTE la colonne par règle structurelle, sans
-# dépendre du NER. Nécessaire car une cellule isolée ("Jean Durand"
-# seul, sans phrase autour) n'offre aucun contexte grammatical au modèle
-# NER pour la reconnaître comme un nom — la structure du tableau (l'en-tête
-# de colonne) est ici un signal bien plus fiable que le NER générique.
-# Personnalisable/étendu par document sans toucher au code : ajouter une clé
-# "column_entity_keywords" (dict mot-clé -> type d'entité) dans common.json
-# ou dans un thème spécifique (le thème a priorité sur les valeurs communes).
+# Column header keywords (first row of a DOCX or CSV table)
+# directly associated with an entity type: a match here
+# triggers redaction of the ENTIRE column via a structural rule, without
+# relying on NER. Necessary because an isolated cell ("Jean Durand"
+# alone, without a surrounding sentence) offers no grammatical context to the
+# NER model to recognize it as a name — the table structure (the column
+# header) is a much more reliable signal here than generic NER.
+# Customizable/extendable per document without touching the code: add a
+# "column_entity_keywords" key (dict keyword -> entity type) in common.json
+# or in a specific theme (the theme takes priority over the common values).
 DEFAULT_COLUMN_ENTITY_KEYWORDS = {
     "nom": "PERSON",
     "prénom": "PERSON",
@@ -2165,9 +2180,9 @@ DEFAULT_COLUMN_ENTITY_KEYWORDS = {
 
 
 def _load_column_keywords() -> dict[str, str]:
-    """Charge les mots-clés de colonne par défaut, complétés/écrasés par une
-    éventuelle clé "column_entity_keywords" dans common.json (mêmes
-    conventions que _load_common_recognizers)."""
+    """Loads the default column keywords, augmented/overridden by an
+    optional "column_entity_keywords" key in common.json (same
+    conventions as _load_common_recognizers)."""
     keywords = dict(DEFAULT_COLUMN_ENTITY_KEYWORDS)
     path = THEMES_DIR / COMMON_RECOGNIZERS_FILENAME
     if path.exists():
@@ -2184,34 +2199,34 @@ COLUMN_ENTITY_KEYWORDS = _load_column_keywords()
 
 
 def _resolve_column_keywords(theme: dict | None) -> dict[str, str]:
-    """Mots-clés de colonne effectifs pour un thème donné : les valeurs
-    communes, éventuellement complétées/écrasées par celles du thème."""
+    """Effective column keywords for a given theme: the common
+    values, optionally augmented/overridden by the theme's own."""
     keywords = dict(COLUMN_ENTITY_KEYWORDS)
     if theme and theme.get("column_entity_keywords"):
         keywords.update({k.lower(): v for k, v in theme["column_entity_keywords"].items()})
     return keywords
 
 
-MAX_LABEL_CHARS = 40  # une vraie étiquette de champ ("Nom", "Date de naissance") est courte ;
-                       # un long paragraphe de description n'en est jamais une, même s'il
-                       # contient par hasard une sous-chaîne d'un mot-clé (ex: "nom" dans
-                       # "dénomination" ou "installation").
+MAX_LABEL_CHARS = 40  # a real field label ("Name", "Date of birth") is short;
+                       # a long description paragraph is never one, even if it
+                       # happens to contain a keyword substring (e.g. "nom" in
+                       # "dénomination" or "installation").
 
 
 def _match_column_keyword(text: str, column_keywords: dict[str, str]) -> str | None:
     """
-    Vérifie si `text` correspond à un mot-clé de colonne connu, en exigeant :
-      1. Une correspondance sur un MOT ENTIER (limites \\b), jamais une simple
-         sous-chaîne — "nom" ne doit PAS matcher à l'intérieur de
-         "dénomination", "installation" ou "anonyme".
-      2. Un texte candidat suffisamment court (MAX_LABEL_CHARS) pour être
-         plausiblement une étiquette de champ, pas un paragraphe de
-         description qui contiendrait le mot par hasard.
-    Corrige un bug réel observé en production : sans ces deux garde-fous, un
-    tableau dont la première cellule d'une ligne est une longue description
-    (au lieu d'une étiquette) pouvait faire caviarder à tort toute la ligne
-    (dates, cases à cocher...) dès qu'elle contenait la séquence de lettres
-    d'un mot-clé n'importe où dans le texte.
+    Checks whether `text` matches a known column keyword, requiring:
+      1. A WHOLE-WORD match (\\b boundaries), never a plain
+         substring — "nom" must NOT match inside
+         "dénomination", "installation" or "anonyme".
+      2. A candidate text short enough (MAX_LABEL_CHARS) to be
+         plausibly a field label, not a description paragraph
+         that happens to contain the word.
+    Fixes a real bug observed in production: without these two guardrails, a
+    table whose first cell in a row is a long description
+    (instead of a label) could wrongly redact the whole row
+    (dates, checkboxes...) as soon as it contained the letter sequence
+    of a keyword anywhere in the text.
     """
     stripped = text.strip()
     if not stripped or len(stripped) > MAX_LABEL_CHARS:
@@ -2225,25 +2240,25 @@ def _match_column_keyword(text: str, column_keywords: dict[str, str]) -> str | N
 
 def _docx_table_structural_entities(blocks: list, block_texts: list[str], column_keywords: dict[str, str]) -> list[dict]:
     """
-    Détection structurelle par tableau, indépendante du NER, avec deux
-    motifs reconnus (un tableau ne relève que d'un seul des deux) :
+    Per-table structural detection, independent of NER, with two
+    recognized patterns (a table falls under only one of the two):
 
-      1. EN-TÊTE DE COLONNES : la ligne 0 a au moins 2 colonnes dont
-         l'intitulé correspond à un mot-clé connu (ex: "Nom | Prénom | Ville"
-         en ligne 0, suivi de plusieurs lignes de données) -> toute la
-         colonne est caviardée sur les lignes suivantes.
-      2. ÉTIQUETTE : VALEUR PAR LIGNE : chaque ligne porte sa propre
-         étiquette en première cellule non vide (ex: une ligne "Nom" -> une
-         valeur, une autre ligne "Prénom" -> une autre valeur) — motif très
-         courant dans les formulaires/certificats, une information par
-         ligne plutôt qu'un tableau de plusieurs enregistrements. Les
-         cellules suivantes de CETTE ligne sont alors caviardées.
+      1. COLUMN HEADER: row 0 has at least 2 columns whose
+         heading matches a known keyword (e.g. "Name | First name | City"
+         on row 0, followed by several data rows) -> the whole
+         column is redacted on the following rows.
+      2. LABEL: VALUE PER ROW: each row carries its own
+         label in the first non-empty cell (e.g. one row "Name" -> a
+         value, another row "First name" -> another value) — a very
+         common pattern in forms/certificates, one piece of information per
+         row rather than a table of several records. The
+         following cells of THAT row are then redacted.
 
-    Le motif 1 est tenté en premier ; le motif 2 ne s'applique qu'aux
-    tableaux qui n'ont pas été reconnus comme "en-tête de colonnes", pour
-    qu'une vraie ligne d'en-tête ne soit jamais interprétée comme une
-    étiquette (qui caviarderait alors les autres en-têtes de la même ligne).
-    Voir _match_column_keyword pour les garde-fous anti-faux-positifs.
+    Pattern 1 is tried first; pattern 2 only applies to
+    tables that were not recognized as "column header", so that
+    a real header row is never interpreted as a label
+    (which would then redact the other headers on the same row).
+    See _match_column_keyword for the anti-false-positive guardrails.
     """
     if not column_keywords:
         return []
@@ -2287,20 +2302,20 @@ def _docx_table_structural_entities(blocks: list, block_texts: list[str], column
     detections: list[dict] = []
 
     for table_id, rows in rows_by_table.items():
-        # --- Motif 1 : en-tête de colonnes sur la ligne 0 ---
+        # --- Pattern 1: column header on row 0 ---
         header_matches: dict[int, str] = {}
         for col_idx, block_ids in rows.get(0, {}).items():
             entity_type = match_keyword(cell_text(block_ids))
             if entity_type:
                 header_matches[col_idx] = entity_type
 
-        # Un en-tête sans aucune ligne de données en dessous n'est pas un
-        # vrai tableau "en-tête + enregistrements" — c'est très probablement
-        # une ligne unique étiquette:valeur (motif 2) où 2 colonnes matchent
-        # un mot-clé par coïncidence (ex: "Nom" et "Date" sur la même ligne).
-        # Sans ce garde-fou, motif 1 s'attribuerait le tableau à tort et ne
-        # produirait aucune détection utile (rien à faire sur les lignes
-        # suivantes puisqu'il n'y en a pas).
+        # A header with no data row below it isn't a
+        # real "header + records" table — it's very probably
+        # a single label:value row (pattern 2) where 2 columns match
+        # a keyword by coincidence (e.g. "Name" and "Date" on the same row).
+        # Without this guardrail, pattern 1 would wrongly claim the table and
+        # would produce no useful detection (nothing to do on the following
+        # rows since there aren't any).
         if len(header_matches) >= 2 and len(rows) >= 2:
             for row_idx, cols in rows.items():
                 if row_idx == 0:
@@ -2310,15 +2325,15 @@ def _docx_table_structural_entities(blocks: list, block_texts: list[str], column
                     if entity_type:
                         for block_id in block_ids:
                             add_detection(detections, block_id, entity_type)
-            continue  # tableau déjà traité par le motif 1
+            continue  # table already handled by pattern 1
 
-        # --- Motif 2 : étiquette : valeur, une OU PLUSIEURS paires par ligne ---
-        # Une ligne peut contenir plusieurs champs côte à côte (ex: "Nom: X
-        # Date: Y" dans une seule ligne de tableau) — on balaye la ligne dans
-        # l'ordre des colonnes et on change d'étiquette dès qu'une nouvelle
-        # cellule correspond à un mot-clé, plutôt que de supposer une seule
-        # étiquette pour toute la ligne (bug réel observé : "Date" et sa
-        # valeur se faisaient absorber à tort dans la détection de "Nom").
+        # --- Pattern 2: label: value, ONE OR SEVERAL pairs per row ---
+        # A row can contain several fields side by side (e.g. "Name: X
+        # Date: Y" in a single table row) — we scan the row in
+        # column order and switch labels as soon as a new
+        # cell matches a keyword, rather than assuming a single
+        # label for the whole row (real bug observed: "Date" and its
+        # value were wrongly absorbed into the "Name" detection).
         for row_idx, cols in rows.items():
             sorted_cols = sorted(cols.items())
             current_entity_type: str | None = None
@@ -2328,7 +2343,7 @@ def _docx_table_structural_entities(blocks: list, block_texts: list[str], column
                     matched = match_keyword(text)
                     if matched:
                         current_entity_type = matched
-                        continue  # cette cellule EST l'étiquette, pas une valeur
+                        continue  # this cell IS the label, not a value
                 if current_entity_type:
                     for block_id in block_ids:
                         add_detection(detections, block_id, current_entity_type)
@@ -2337,9 +2352,9 @@ def _docx_table_structural_entities(blocks: list, block_texts: list[str], column
 
 
 def _csv_structural_entities(rows: list[list[str]], column_keywords: dict[str, str]) -> list[dict]:
-    """Équivalent CSV de _docx_table_structural_entities, mêmes deux motifs
-    (en-tête de colonnes multiples en ligne 0, ou étiquette:valeur par ligne
-    avec une seule colonne reconnue en première position)."""
+    """CSV equivalent of _docx_table_structural_entities, same two patterns
+    (multiple column headers on row 0, or label:value per row
+    with a single recognized column in the first position)."""
     if not rows or not column_keywords:
         return []
 
@@ -2398,12 +2413,12 @@ def _csv_structural_entities(rows: list[list[str]], column_keywords: dict[str, s
 
 def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_detections: list[dict] | None = None) -> list[dict]:
     """
-    Détection générique sur une liste de blocs de texte indexés (paragraphes
-    DOCX ou cellules CSV) — même logique à deux passes que _detect_pdf
-    (détection standard par lots, puis propagation des noms/villes confirmés
-    vers le reste du document), mais en 1D (offsets caractère) plutôt qu'en
-    rectangles PDF. Voir TEXT_CHUNK_MAX_CHARS ci-dessus pour le pourquoi du
-    regroupement en lots.
+    Generic detection over a list of indexed text blocks (DOCX
+    paragraphs or CSV cells) — same two-pass logic as _detect_pdf
+    (standard batch detection, then propagation of confirmed names/cities
+    to the rest of the document), but in 1D (character offsets) rather than
+    PDF rectangles. See TEXT_CHUNK_MAX_CHARS above for why we
+    group into batches.
     """
     detections: list[dict] = list(extra_detections or [])
     already_covered: set[tuple] = {(d["block_id"], d["start"], d["end"]) for d in detections}
@@ -2421,7 +2436,7 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
         for block_id, text in items:
             offsets.append((block_id, pos, len(text)))
             combined_parts.append(text)
-            pos += len(text) + 1  # +1 pour le séparateur "\n" inséré ci-dessous
+            pos += len(text) + 1  # +1 for the "\n" separator inserted below
 
         combined_text = "\n".join(combined_parts)
         normalized = _normalize_dashes(_normalize_allcaps(combined_text))
@@ -2459,7 +2474,7 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
                 )
                 if is_propagatable:
                     propagate_candidates[stripped] = entity_type
-                break  # un intervalle appartient à un seul bloc, inutile de continuer
+                break  # an interval belongs to a single block, no need to continue
 
     detection_start = time.time()
     chunk: list[tuple] = []
@@ -2501,11 +2516,11 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
 
 def _apply_text_redactions(non_excluded_detections: list[dict]) -> tuple[dict, dict[str, int]]:
     """
-    Regroupe les détections confirmées (non exclues) par bloc en intervalles
-    fusionnés — nécessaire pour éditer le texte sans chevauchement — tout en
-    conservant le compte par type d'entité pour le résumé (une même zone
-    détectée par deux reconnaisseurs différents compte deux fois, comme pour
-    le PDF).
+    Groups confirmed (non-excluded) detections by block into merged
+    intervals — needed to edit the text without overlap — while
+    keeping the count per entity type for the summary (the same zone
+    detected by two different recognizers counts twice, as for
+    the PDF).
     """
     summary: dict[str, int] = {}
     by_block: dict = {}
@@ -2529,19 +2544,19 @@ def _apply_text_redactions(non_excluded_detections: list[dict]) -> tuple[dict, d
 
 def _apply_docx_paragraph_redactions(paragraph, intervals: list[tuple[int, int]]) -> None:
     """
-    Remplace réellement le texte des runs couverts par `intervals` (offsets
-    dans le texte concaténé du paragraphe) par REDACTION_MARKER — modifie le
-    XML sous-jacent (run.text), pas un habillage visuel.
+    Actually replaces the text of the runs covered by `intervals` (offsets
+    into the paragraph's concatenated text) with REDACTION_MARKER — modifies the
+    underlying XML (run.text), not just a visual wrapper.
 
-    Une même entité logique peut être partagée entre plusieurs runs (mise en
-    forme mixte au milieu d'un mot, fréquent avec les vérificateurs
-    orthographiques ou après un copier-coller) : dans ce cas, UN SEUL
-    REDACTION_MARKER est inséré, dans le premier run touché — les runs
-    suivants touchés par la MÊME entité ont leur portion simplement
-    supprimée (chaîne vide), jamais un second marqueur. Sans cette règle, une
-    entité étalée sur 2 runs produirait deux marqueurs concaténés
-    ("[MASQUÉ][MASQUÉ]") au lieu d'un seul — bug corrigé après observation
-    en usage réel (artefacts "[MASQUÉ]]]" causés par des runs mal découpés).
+    The same logical entity can be split across several runs (mixed
+    formatting in the middle of a word, common with spell
+    checkers or after a copy-paste): in that case, only ONE
+    REDACTION_MARKER is inserted, in the first affected run — the
+    following runs affected by the SAME entity simply have their
+    portion removed (empty string), never a second marker. Without this rule, an
+    entity spanning 2 runs would produce two concatenated markers
+    ("[MASQUÉ][MASQUÉ]") instead of one — bug fixed after observing it
+    in real usage (artifacts like "[MASQUÉ]]]" caused by badly split runs).
     """
     if not intervals:
         return
@@ -2554,9 +2569,9 @@ def _apply_docx_paragraph_redactions(paragraph, intervals: list[tuple[int, int]]
         run_spans.append((i, pos, pos + length))
         pos += length
 
-    # ops[i] : liste de (local_start, local_end, remplacement) pour le run i.
-    # `remplacement` vaut REDACTION_MARKER sur le premier run touché par un
-    # intervalle donné, "" pour les runs suivants du même intervalle.
+    # ops[i]: list of (local_start, local_end, replacement) for run i.
+    # `replacement` is REDACTION_MARKER for the first run touched by a
+    # given interval, "" for the following runs of the same interval.
     ops: dict[int, list[tuple[int, int, str]]] = {i: [] for i in range(len(runs))}
     for g_start, g_end in intervals:
         marker_placed = False
@@ -2577,9 +2592,9 @@ def _apply_docx_paragraph_redactions(paragraph, intervals: list[tuple[int, int]]
 
 
 def _render_highlighted_text(text: str, block_clusters: list[dict]) -> str:
-    """Découpe `text` en segments et insère un <span> cliquable pour chaque
-    cluster (zone détectée), dans l'ordre, sans chevauchement (garanti par
-    _cluster_text_detections). Le texte est échappé HTML avant insertion."""
+    """Splits `text` into segments and inserts a clickable <span> for each
+    cluster (detected zone), in order, without overlap (guaranteed by
+    _cluster_text_detections). The text is HTML-escaped before insertion."""
     block_clusters = sorted(block_clusters, key=lambda c: c["start"])
     pieces = []
     pos = 0
@@ -2601,17 +2616,17 @@ def _render_highlighted_text(text: str, block_clusters: list[dict]) -> str:
 def _build_text_review_page(
     job_id: str, total_detections: int, blocks_html: str, extra_note: str = "", images_html: str = ""
 ) -> HTMLResponse:
-    """Gabarit de révision commun DOCX/CSV : surlignage inline plutôt que
-    rendu image, pas de tracé manuel de zone pixel-précise comme pour le PDF
-    (voir limitation documentée) — `images_html` (DOCX uniquement) permet en
-    revanche de caviarder une image incrustée entière, voir
+    """Common DOCX/CSV review template: inline highlighting rather than
+    image rendering, no manual pixel-precise zone drawing like for PDF
+    (see documented limitation) — `images_html` (DOCX only) does,
+    however, allow redacting a whole embedded image, see
     _build_docx_images_review_section."""
     return HTMLResponse(f"""
     <!doctype html>
     <html lang="fr">
     <head>
       <meta charset="utf-8">
-      <title>Révision - Anonymiseur</title>
+      <title>Révision - Obfusk8</title>
       <style>
         .text-detection {{
           background: rgba(220, 40, 40, 0.25);
@@ -2692,11 +2707,11 @@ def health():
 @app.get("/metrics")
 def metrics_endpoint():
     """
-    Exposition Prometheus (voir metrics.py). Ne passe PAS par
-    l'authentification oauth2-proxy — un scraper Prometheus ne fait pas de
-    dance OAuth — mais reste protégé par ipallowlist (voir le router
-    Traefik dédié `app-metrics` dans docker-compose.yml, restreint par
-    défaut à 127.0.0.1) plutôt que laissé ouvert à tout Internet.
+    Prometheus exposition endpoint (see metrics.py). Does NOT go through
+    oauth2-proxy authentication — a Prometheus scraper doesn't do an
+    OAuth dance — but remains protected by ipallowlist (see the
+    dedicated `app-metrics` Traefik router in docker-compose.yml, restricted by
+    default to 127.0.0.1) rather than left open to the whole Internet.
     """
     body, content_type = metrics.metrics_response()
     return Response(content=body, media_type=content_type)
@@ -2710,9 +2725,9 @@ def upload_form():
 
     return f"""
     <!doctype html>
-    <html lang="fr"><head><meta charset="utf-8"><title>Anonymiseur de documents</title></head>
+    <html lang="fr"><head><meta charset="utf-8"><title>Obfusk8 - Anonymiseur de documents</title></head>
     <body style="font-family: sans-serif; max-width: 600px; margin: 40px auto;">
-      <h1>Anonymiseur de documents (PDF, DOCX, CSV, image)</h1>
+      <h1>Obfusk8 - Anonymiseur de documents (PDF, DOCX, CSV, image)</h1>
       <p>Déposez un document. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.</p>
       <form action="/api/detect" method="post" enctype="multipart/form-data">
         <p>
@@ -2734,13 +2749,13 @@ async def detect_document(
     theme: str = Form(default=""),
 ):
     """
-    Phase 1 du flux avec révision, commune aux quatre formats acceptés
-    (PDF/DOCX/CSV/image) : détecte les entités sans les caviarder, stocke le
-    job en mémoire, renvoie une page de révision (rendu image + zones
-    cliquables en pixels pour le PDF et l'image ; surlignage inline pour
-    DOCX/CSV — voir _build_text_review_page). Le type réel du fichier est
-    déterminé à partir de son contenu binaire (_detect_file_kind), jamais du
-    Content-Type déclaré par le client, qui est falsifiable.
+    Phase 1 of the review flow, common to the four accepted formats
+    (PDF/DOCX/CSV/image): detects entities without redacting them, stores the
+    job in memory, returns a review page (image rendering + pixel
+    clickable zones for PDF and image; inline highlighting for
+    DOCX/CSV — see _build_text_review_page). The file's actual type is
+    determined from its binary content (_detect_file_kind), never from the
+    Content-Type declared by the client, which is forgeable.
     """
     raw = await file.read()
 
@@ -2757,10 +2772,10 @@ async def detect_document(
 
     kind = _detect_file_kind(raw)
 
-    # Quota global de jobs en attente de révision (indépendant du débit
-    # limité par Traefik) : empêche l'accumulation de documents bruts en
-    # mémoire au-delà d'un seuil sûr, même en restant sous la limite de
-    # débit par IP.
+    # Global quota of jobs pending review (independent of the rate
+    # limited by Traefik): prevents raw documents from accumulating in
+    # memory beyond a safe threshold, even while staying under the
+    # per-IP rate limit.
     with _PENDING_JOBS_LOCK:
         if len(PENDING_JOBS) >= MAX_PENDING_JOBS:
             raise HTTPException(
@@ -2768,18 +2783,18 @@ async def detect_document(
                 detail="Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
             )
 
-    # Le champ `theme` est un champ de formulaire librement contrôlé par le
-    # client (falsifiable, non borné, non contraint à un thème connu). Il
-    # rejoint ensuite le journal d'audit (`_record_audit_event(theme=...)`)
-    # ET le nom du fichier de sortie (`theme_slug`). Sans traitement ici :
-    #  - un caractère de formatage Unicode (RTL override U+202E, catégorie
-    #    Cf) y passe intact et permet le même spoofing visuel du journal que
-    #    celui déjà neutralisé sur `X-Auth-Request-Email` (audit section 3.5) ;
-    #  - une valeur très longue produit un `theme_slug` dépassant la limite
-    #    de longueur de nom de fichier du système (Errno 36), faisant échouer
-    #    la finalisation avec un message trompeur ("fichier corrompu").
-    # Assaini une fois, à la source, exactement comme `user_email` ci-dessous,
-    # puis borné en longueur (un vrai thème est court : medical/it/compta).
+    # The `theme` field is a form field freely controlled by the
+    # client (forgeable, unbounded, not constrained to a known theme). It
+    # later joins the audit log (`_record_audit_event(theme=...)`)
+    # AND the output file name (`theme_slug`). Without handling here:
+    #  - a Unicode formatting character (RTL override U+202E, category
+    #    Cf) passes through intact and enables the same visual log spoofing
+    #    already neutralized on `X-Auth-Request-Email` (audit section 3.5);
+    #  - a very long value produces a `theme_slug` exceeding the
+    #    system's filename length limit (Errno 36), causing
+    #    finalization to fail with a misleading message ("corrupted file").
+    # Sanitized once, at the source, exactly like `user_email` below,
+    # then length-bounded (a real theme is short: medical/it/accounting).
     theme = _strip_unicode_control_and_format_chars(theme)[:MAX_THEME_CHARS]
 
     selected_theme = THEMES.get(theme) if theme else None
@@ -2801,8 +2816,8 @@ async def detect_document(
 
 
 def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
-    """Logique de détection PDF — inchangée par rapport à la version PDF-only,
-    seulement extraite dans sa propre fonction pour permettre le dispatch."""
+    """PDF detection logic — unchanged from the PDF-only version,
+    only extracted into its own function to allow dispatching."""
     try:
         doc = fitz.open(stream=raw, filetype="pdf")
     except Exception as exc:
@@ -2836,14 +2851,14 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
     except HTTPException:
         raise
     except Exception as exc:
-        # PyMuPDF peut réussir à ouvrir un PDF (fitz.open ne lève rien) mais
-        # échouer plus tard, en cours de traitement, sur une structure
-        # invalide découverte tardivement (ex. cycle dans les ressources
-        # d'un objet). Sans ce filet, l'exception brute remonte jusqu'à
-        # Starlette et affiche sa page d'erreur générique non stylée — pas
-        # dangereux en soi, mais une fuite d'information inutile (chemins
-        # internes, nom de bibliothèque) pour un rejet qui reste, au fond,
-        # un simple "PDF invalide".
+        # PyMuPDF can succeed at opening a PDF (fitz.open raises nothing) but
+        # fail later, during processing, on an invalid structure
+        # discovered late (e.g. a cycle in an object's resources).
+        # Without this safety net, the raw exception would propagate up to
+        # Starlette and display its generic, unstyled error page — not
+        # dangerous in itself, but an unnecessary information leak (internal
+        # paths, library name) for a rejection that is, fundamentally,
+        # just an "invalid PDF".
         log.warning("Échec du traitement PDF après ouverture réussie : %s", exc)
         raise HTTPException(
             status_code=400,
@@ -2876,10 +2891,10 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
 
 
 def _build_page_containers_html(job_id: str, page_sizes: list[tuple[int, int]], clusters: list[dict]) -> str:
-    """Construit le HTML des pages avec overlays cliquables (un par cluster,
-    pas par détection brute — voir _cluster_detections pour le pourquoi).
-    Commun au PDF (plusieurs pages) et à l'image (une seule "page" = l'image
-    entière) — voir _build_pixel_review_page pour le gabarit englobant."""
+    """Builds the pages' HTML with clickable overlays (one per cluster,
+    not per raw detection — see _cluster_detections for why).
+    Common to PDF (several pages) and image (a single "page" = the
+    entire image) — see _build_pixel_review_page for the enclosing template."""
     pages_html = []
     for page_index, (width, height) in enumerate(page_sizes):
         overlays = "".join(
@@ -2902,16 +2917,16 @@ def _build_page_containers_html(job_id: str, page_sizes: list[tuple[int, int]], 
 
 
 def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str) -> HTMLResponse:
-    """Gabarit de révision commun PDF/image : rendu image + zones cliquables
-    en pixels pour exclure une détection, ET tracé manuel d'une nouvelle zone
-    (manual_zones) — contrairement au gabarit texte DOCX/CSV
-    (_build_text_review_page), qui n'offre pas cette possibilité."""
+    """Common PDF/image review template: image rendering + pixel
+    clickable zones to exclude a detection, AND manual drawing of a new zone
+    (manual_zones) — unlike the DOCX/CSV text template
+    (_build_text_review_page), which does not offer this possibility."""
     return HTMLResponse(f"""
     <!doctype html>
     <html lang="fr">
     <head>
       <meta charset="utf-8">
-      <title>Révision - Anonymiseur</title>
+      <title>Révision - Obfusk8</title>
       <style>
         .detection {{
           position: absolute;
@@ -3046,10 +3061,10 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
           el.classList.toggle('excluded');
           const group = el.dataset.group;
           if (!group) return;
-          // Une même personne peut être détectée plusieurs fois dans le
-          // document (voir propagation côté serveur) — exclure une
-          // occurrence exclut toutes les autres du même groupe, pour éviter
-          // de devoir cliquer chaque occurrence individuellement.
+          // The same person may be detected several times in the
+          // document (see server-side propagation) — excluding one
+          // occurrence excludes all others in the same group, to avoid
+          // having to click every occurrence individually.
           const state = el.classList.contains('excluded');
           document.querySelectorAll(`.detection[data-group="${{group}}"]`).forEach(sibling => {{
             sibling.classList.toggle('excluded', state);
@@ -3073,10 +3088,10 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
 
 def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
     """
-    Détection image : validation d'entrée (_open_and_validate_image), OCR +
-    détection PII (_detect_image), puis même écran de révision pixel que le
-    PDF (_build_pixel_review_page/_build_page_containers_html), adapté à une
-    image unique plutôt qu'à des pages multiples (une seule "page", index 0).
+    Image detection: input validation (_open_and_validate_image), OCR +
+    PII detection (_detect_image), then the same pixel review screen as
+    the PDF (_build_pixel_review_page/_build_page_containers_html), adapted to a
+    single image rather than multiple pages (a single "page", index 0).
     """
     img = _open_and_validate_image(raw)
     try:
@@ -3301,28 +3316,28 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
 
 
 def _request_user(request: Request) -> str:
-    """Identité de l'appelant telle que garantie par oauth2-proxy via Traefik
-    (`X-Auth-Request-Email`, remplacé — jamais transmis tel quel — par le
-    forwardAuth). Même assainissement qu'à la création du job, pour que la
-    comparaison soit exacte."""
+    """Caller identity as guaranteed by oauth2-proxy via Traefik
+    (`X-Auth-Request-Email`, replaced — never passed through as-is — by the
+    forwardAuth). Same sanitization as at job creation, so that the
+    comparison is exact."""
     return _strip_unicode_control_and_format_chars(
         request.headers.get("x-auth-request-email", "inconnu")
     )
 
 
 def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> dict:
-    """Retrouve un job en attente de révision **appartenant à l'appelant**.
+    """Finds a job pending review **belonging to the caller**.
 
-    Jusqu'ici, connaître un `job_id` (uuid4, imprévisible, mais présent dans
-    les logs d'accès Traefik et l'historique du navigateur) suffisait pour
-    voir l'aperçu du document ORIGINAL (avant caviardage) de n'importe quel
-    autre utilisateur et finaliser son job à sa place. La décision 1.18 de
-    l'audit (pas de contrôle de propriétaire au téléchargement) reposait sur
-    « fichier déjà caviardé » — argument sans objet ici. Un job d'un autre
-    utilisateur est traité exactement comme un job inexistant (404), sans
-    révéler son existence, et surtout sans le retirer de la file (`pop`
-    seulement une fois la propriété confirmée) — sinon un tiers pourrait
-    détruire le job en cours de révision d'un autre par simple tentative."""
+    Until now, knowing a `job_id` (uuid4, unpredictable, but present in
+    Traefik's access logs and the browser's history) was enough to
+    see the ORIGINAL document preview (before redaction) of any
+    other user and finalize their job in their place. Audit decision 1.18
+    (no ownership check on download) relied on
+    "file already redacted" — an argument that doesn't apply here. A job belonging to another
+    user is treated exactly like a non-existent job (404), without
+    revealing its existence, and above all without removing it from the queue (`pop`
+    only once ownership is confirmed) — otherwise a third party could
+    destroy another user's job under review just by attempting this."""
     user = _request_user(request)
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
@@ -3336,17 +3351,17 @@ def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> di
 
 @app.get("/api/preview_image/{job_id}/{page_index}")
 def preview_image(job_id: str, page_index: int, request: Request):
-    """Rend une page du PDF (ou l'image entière, pour un job image) en
-    attente de révision — uniquement pour le propriétaire du job (aperçu du
-    document ORIGINAL, voir _get_pending_job_for)."""
+    """Renders a page of the PDF (or the whole image, for an image job) that is
+    pending review — only for the job's owner (preview of the
+    ORIGINAL document, see _get_pending_job_for)."""
     job = _get_pending_job_for(job_id, request)
 
     if job.get("kind") == "image":
         if page_index != 0:
             raise HTTPException(status_code=404, detail="Page introuvable")
-        # Octets bruts d'origine (déjà validés en Phase 1 à la détection) :
-        # ceci est l'APERÇU pré-caviardage, exactement comme pour le PDF —
-        # le caviardage réel n'a lieu qu'à la finalisation.
+        # Original raw bytes (already validated in Phase 1 at detection
+        # time): this is the pre-redaction PREVIEW, exactly like for PDF —
+        # the actual redaction only happens at finalization.
         media_type = "image/png" if job["image_format"] == "PNG" else "image/jpeg"
         return Response(content=job["raw_image"], media_type=media_type)
 
@@ -3380,8 +3395,8 @@ def preview_image(job_id: str, page_index: int, request: Request):
 
 def _apply_selected_redactions(doc: fitz.Document, detections: list[dict], excluded_ids: set) -> dict:
     """
-    Applique le caviardage uniquement pour les détections dont l'id n'est
-    PAS dans excluded_ids (celles que l'utilisateur a décochées en révision).
+    Applies redaction only for detections whose id is
+    NOT in excluded_ids (those the user unchecked during review).
     """
     summary: dict[str, int] = {}
     by_page: dict[int, list[dict]] = {}
@@ -3401,14 +3416,14 @@ def _apply_selected_redactions(doc: fitz.Document, detections: list[dict], exclu
 
 def _apply_manual_redactions(doc: fitz.Document, manual_zones: list[dict]) -> int:
     """
-    Applique un caviardage sur des zones tracées manuellement par l'utilisateur
-    (faux négatifs corrigés à la main). Les coordonnées reçues sont en pixels
-    d'aperçu (display_rect), reconverties en coordonnées PDF via PREVIEW_ZOOM,
-    exactement comme pour les détections automatiques.
+    Applies redaction on zones manually drawn by the user
+    (false negatives fixed by hand). The received coordinates are in preview
+    pixels (display_rect), converted back to PDF coordinates via PREVIEW_ZOOM,
+    exactly like for automatic detections.
     """
     count = 0
     by_page: dict[int, list] = {}
-    for zone in manual_zones[:200]:  # garde-fou anti-abus
+    for zone in manual_zones[:200]:  # anti-abuse guardrail
         page_index = zone.get("page")
         rect = zone.get("rect")
         if not isinstance(page_index, int) or not rect or len(rect) != 4:
@@ -3437,13 +3452,13 @@ def _apply_manual_redactions(doc: fitz.Document, manual_zones: list[dict]) -> in
 
 def _wipe_pdf_metadata(doc: fitz.Document) -> None:
     """
-    Vide les métadonnées susceptibles de porter une identité (auteur,
-    créateur/producteur, dates de création/modification, titre, sujet,
-    mots-clés) et le paquet XMP associé. `apply_redactions()` ne touche
-    qu'au contenu visible des pages ; sans ce nettoyage, le document
-    "anonymisé" reste daté et attribué comme l'original — même constat de
-    fond que pour DOCX (_wipe_core_properties), un champ structuré dont la
-    nature est connue par convention, inutile de le faire passer par le NER.
+    Clears metadata likely to carry an identity (author,
+    creator/producer, creation/modification dates, title, subject,
+    keywords) and the associated XMP packet. `apply_redactions()` only
+    touches the visible content of pages; without this cleanup, the
+    "anonymized" document remains dated and attributed like the original — same
+    underlying point as for DOCX (_wipe_core_properties): a structured field whose
+    nature is known by convention, no need to run it through NER.
     """
     doc.set_metadata({})
     if doc.xref_xml_metadata():
@@ -3451,7 +3466,7 @@ def _wipe_pdf_metadata(doc: fitz.Document) -> None:
 
 
 def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_data: list) -> tuple[dict, Path, int]:
-    """Logique de finalisation PDF."""
+    """PDF finalization logic."""
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
     try:
         summary = _apply_selected_redactions(doc, job["detections"], excluded_set)
@@ -3464,13 +3479,13 @@ def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_da
         theme = job["theme"]
         theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
         output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.pdf"
-        # garbage=4 + clean=True : purge les objets devenus orphelins après
-        # apply_redactions() (l'ancien contenu de page pré-caviardage n'est
-        # jamais supprimé du fichier par défaut, seulement déréférencé —
-        # voir constat de session vérifié sur caviar_test.pdf, texte original
-        # en clair récupérable dans le fichier "anonymisé" avec n'importe
-        # quel outil qui parcourt tous les objets du PDF au lieu de suivre
-        # uniquement l'arbre de pages courant).
+        # garbage=4 + clean=True: purges objects that became orphaned after
+        # apply_redactions() (the old pre-redaction page content is
+        # never removed from the file by default, only dereferenced —
+        # see the session finding verified on caviar_test.pdf: original
+        # text recoverable in cleartext in the "anonymized" file with any
+        # tool that walks all PDF objects instead of following
+        # only the current page tree).
         doc.save(output_path, garbage=4, clean=True, deflate=True)
     except HTTPException:
         raise
@@ -3490,11 +3505,11 @@ _IMAGE_MODES_KEPT_AS_IS = ("RGB", "RGBA", "L", "LA")
 
 def _normalize_image_mode_for_editing(img: "Image.Image") -> "Image.Image":
     """
-    Convertit vers un mode directement dessinable/encodable avant caviardage
-    (ex: palette indexée "P", CMYK...) — la couleur de remplissage du
-    rectangle de caviardage dépend du mode (voir _black_fill_for_mode), donc
-    on normalise d'abord vers un petit ensemble de modes connus plutôt que
-    de gérer tous les modes Pillow possibles.
+    Converts to a mode that is directly drawable/encodable before redaction
+    (e.g. indexed palette "P", CMYK...) — the redaction rectangle's
+    fill color depends on the mode (see _black_fill_for_mode), so
+    we first normalize to a small set of known modes rather than
+    handling every possible Pillow mode.
     """
     if img.mode == "P":
         return img.convert("RGBA" if "transparency" in img.info else "RGB")
@@ -3510,16 +3525,16 @@ def _black_fill_for_mode(mode: str):
         return (0, 0)
     if mode == "L":
         return 0
-    return (0, 0, 0)  # RGB et tout mode déjà normalisé vers RGB
+    return (0, 0, 0)  # RGB and any mode already normalized to RGB
 
 
 def _apply_selected_image_redactions(
     draw: "ImageDraw.ImageDraw", mode: str, detections: list[dict], excluded_ids: set
 ) -> dict:
-    """Dessine un rectangle plein opaque directement dans les pixels pour
-    chaque détection non exclue — mêmes garanties que le caviardage PDF
-    (redact_annot) : les pixels d'origine sous le rectangle sont écrasés,
-    pas seulement recouverts par un calque."""
+    """Draws an opaque solid rectangle directly into the pixels for
+    each non-excluded detection — same guarantees as PDF redaction
+    (redact_annot): the original pixels under the rectangle are overwritten,
+    not merely covered by a layer."""
     summary: dict[str, int] = {}
     fill = _black_fill_for_mode(mode)
     for d in detections:
@@ -3534,10 +3549,10 @@ def _apply_selected_image_redactions(
 def _apply_manual_image_redactions(
     draw: "ImageDraw.ImageDraw", mode: str, size: tuple[int, int], manual_zones: list[dict]
 ) -> int:
-    """Applique un caviardage sur des zones tracées manuellement par
-    l'utilisateur (faux négatifs corrigés à la main) — mêmes coordonnées
-    pixels que l'aperçu (pas de zoom appliqué pour l'image, contrairement au
-    PDF), même garde-fou anti-abus MAX_MANUAL_ZONES que pour le PDF."""
+    """Applies redaction on zones manually drawn by
+    the user (false negatives fixed by hand) — same pixel
+    coordinates as the preview (no zoom applied for image, unlike
+    PDF), same MAX_MANUAL_ZONES anti-abuse guardrail as for PDF."""
     count = 0
     fill = _black_fill_for_mode(mode)
     width, height = size
@@ -3559,19 +3574,19 @@ def _apply_manual_image_redactions(
 
 def _strip_image_metadata_and_encode(img: "Image.Image", output_format: str) -> bytes:
     """
-    Dépouille ENTIÈREMENT les métadonnées avant sauvegarde : EXIF complet (y
-    compris coordonnées GPS et miniature EXIF intégrée), chunks de texte PNG
-    (tEXt/zTXt/iTXt) et profil ICC.
+    ENTIRELY strips metadata before saving: full EXIF (including
+    GPS coordinates and embedded EXIF thumbnail), PNG text chunks
+    (tEXt/zTXt/iTXt), and ICC profile.
 
-    Approche volontairement radicale plutôt qu'un retrait champ par champ
-    (EXIF, puis GPS, puis miniature, puis tEXt, puis ICC...) : reconstruire
-    une image neuve à partir des seuls octets de pixels bruts
-    (Image.frombytes) produit un objet dont le dictionnaire `.info` est vide
-    par construction — aucun risque d'oublier un champ de métadonnées
-    existant ou introduit par une future version de Pillow, y compris la
-    miniature EXIF intégrée (embarquée dans les octets `exif` de `.info`,
-    jamais recopiée ici). `.save()` n'ajoute par défaut ni exif, ni
-    icc_profile, ni pnginfo/comment si on ne les passe pas explicitement.
+    Deliberately radical approach rather than field-by-field removal
+    (EXIF, then GPS, then thumbnail, then tEXt, then ICC...): rebuilding
+    a brand-new image from the raw pixel bytes alone
+    (Image.frombytes) produces an object whose `.info` dictionary is empty
+    by construction — no risk of forgetting an existing metadata
+    field, or one introduced by a future Pillow version, including the
+    embedded EXIF thumbnail (carried in the `exif` bytes of `.info`,
+    never copied here). `.save()` adds neither exif, nor
+    icc_profile, nor pnginfo/comment by default unless explicitly passed.
     """
     clean = Image.frombytes(img.mode, img.size, img.tobytes())
     buffer = io.BytesIO()
@@ -3585,10 +3600,10 @@ def _strip_image_metadata_and_encode(img: "Image.Image", output_format: str) -> 
 
 
 def _finalize_image_job(job: dict, job_id: str, excluded_set: set, manual_zones_data: list) -> tuple[dict, Path, int]:
-    """Logique de finalisation image : réouverture depuis les octets bruts
-    stockés dans le job (jamais l'objet Pillow de la phase de détection),
-    caviardage réel par rectangles pleins dans les pixels, puis dépouillement
-    complet des métadonnées avant écriture du fichier de sortie."""
+    """Image finalization logic: reopens from the raw bytes
+    stored in the job (never the Pillow object from the detection phase),
+    actual redaction via solid rectangles in the pixels, then a full
+    metadata strip before writing the output file."""
     try:
         img = Image.open(io.BytesIO(job["raw_image"]))
         img.load()
@@ -3640,10 +3655,10 @@ def _finalize_docx_job(job: dict, job_id: str, excluded_set: set, redacted_image
                 _, paragraph, _ = blocks[block_id]
                 _apply_docx_paragraph_redactions(paragraph, intervals)
 
-        # Zones structurelles retirées entièrement plutôt que caviardées
-        # (voir _wipe_comments/_wipe_core_properties) : uniquement à la
-        # finalisation, puisqu'elles ne sont ni analysées ni présentées à
-        # l'écran de révision.
+        # Structural zones removed entirely rather than redacted
+        # (see _wipe_comments/_wipe_core_properties): only at
+        # finalization, since they are neither analyzed nor presented on
+        # the review screen.
         _wipe_comments(document)
         _wipe_core_properties(document)
         _wipe_docx_thumbnail(document)
@@ -3685,8 +3700,8 @@ def _finalize_csv_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict, 
         theme = job["theme"]
         theme_slug = re.sub(r"[^a-zA-Z0-9_-]", "_", theme) if theme else "document"
         output_path = WORKDIR / f"{job_id}-{theme_slug}-anonymise.csv"
-        # utf-8-sig (BOM) : Excel FR affiche correctement les accents sans
-        # que l'utilisateur ait à choisir manuellement l'encodage à l'import.
+        # utf-8-sig (BOM): French Excel correctly displays accented
+        # characters without the user having to manually pick the encoding on import.
         with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f, delimiter=job["csv_delimiter"])
             for row in rows:
@@ -3712,26 +3727,26 @@ async def finalize_document(
     response_format: str = Form(default="json", alias="format"),
 ):
     """
-    Phase 2 du flux avec révision, commune aux trois formats : applique le
-    caviardage uniquement sur les détections que l'utilisateur n'a pas
-    exclues (plus les zones manuelles pour le PDF et les images entières
-    sélectionnées pour le DOCX — voir _apply_manual_redactions /
-    _apply_docx_image_redactions, non proposé pour le CSV, format texte pur
-    sans conteneur d'image), produit le fichier final dans son format
-    d'origine.
+    Phase 2 of the review flow, common to all three formats: applies
+    redaction only to the detections the user has not
+    excluded (plus manual zones for PDF and whole images
+    selected for DOCX — see _apply_manual_redactions /
+    _apply_docx_image_redactions, not offered for CSV, a pure text format
+    with no image container), produces the final file in its
+    original format.
     """
-    # Propriété vérifiée AVANT de retirer le job de la file (voir
-    # _get_pending_job_for) : un tiers ne peut ni finaliser ni détruire le
-    # job en cours de révision d'un autre utilisateur.
+    # Ownership checked BEFORE removing the job from the queue (see
+    # _get_pending_job_for): a third party can neither finalize nor destroy
+    # another user's job under review.
     job = _get_pending_job_for(job_id, request, pop=True)
 
     excluded_cluster_ids = {i for i in excluded_ids.split(",") if i}
 
-    # excluded_ids reçus du navigateur sont des ids de CLUSTER (une zone
-    # visible peut regrouper plusieurs détections superposées) — il faut les
-    # étendre vers tous les ids de détection sous-jacents avant d'appliquer
-    # le caviardage, sinon une détection invisible restée "cachée derrière"
-    # une autre au même endroit continuerait d'être caviardée malgré le clic.
+    # excluded_ids received from the browser are CLUSTER ids (a
+    # visible zone can group several overlapping detections) — they must be
+    # expanded to all underlying detection ids before applying
+    # redaction, otherwise an invisible detection left "hidden behind"
+    # another one at the same spot would keep being redacted despite the click.
     excluded_set = set()
     for cluster_id in excluded_cluster_ids:
         excluded_set.update(job["clusters"].get(cluster_id, []))
@@ -3743,19 +3758,19 @@ async def finalize_document(
         if not isinstance(manual_zones_data, list):
             manual_zones_data = []
     except (json.JSONDecodeError, TypeError, ValueError, RecursionError):
-        # RecursionError : un tableau JSON profondément imbriqué ("[[[[...")
-        # d'à peine ~200 Ko (donc SOUS la limite de taille de partie
-        # multipart de Starlette, 1 Mo) fait dépasser la profondeur de
-        # récursion du décodeur `json`. Non couverte par JSONDecodeError,
-        # elle remontait jusqu'à un 500 générique non maîtrisé (fuite d'une
-        # trace Starlette). Traitée comme une entrée malformée ordinaire :
-        # aucune zone manuelle, le reste de la finalisation se poursuit.
+        # RecursionError: a deeply nested JSON array ("[[[[...")
+        # of barely ~200 KB (so UNDER Starlette's multipart part size
+        # limit, 1 MB) exceeds the `json` decoder's recursion
+        # depth. Not covered by JSONDecodeError, it used to propagate
+        # up to an uncontrolled generic 500 (leaking a Starlette
+        # traceback). Treated as an ordinary malformed input:
+        # no manual zone, the rest of finalization proceeds.
         manual_zones_data = []
 
-    # Ces champs de formulaire ne passent pas par le contrôle MAX_UPLOAD_MB
-    # (qui ne s'applique qu'au fichier d'origine) — on plafonne explicitement
-    # leur taille pour éviter qu'un client buggé ou malveillant fasse
-    # consommer du CPU/mémoire disproportionné au parsing/à l'application.
+    # These form fields do not go through the MAX_UPLOAD_MB check
+    # (which only applies to the original file) — we explicitly cap
+    # their size to prevent a buggy or malicious client from causing
+    # disproportionate CPU/memory consumption during parsing/application.
     if len(manual_zones_data) > MAX_MANUAL_ZONES:
         raise HTTPException(
             status_code=400,
@@ -3782,7 +3797,7 @@ async def finalize_document(
         summary, output_path, manual_count = _finalize_csv_job(job, job_id, excluded_set)
     elif kind == "image":
         summary, output_path, manual_count = _finalize_image_job(job, job_id, excluded_set, manual_zones_data)
-    else:  # pragma: no cover - défensif, ne devrait jamais arriver
+    else:  # pragma: no cover - defensive, should never happen
         raise HTTPException(status_code=400, detail="Type de document inconnu")
 
     total = sum(summary.values())
@@ -3826,10 +3841,10 @@ async def finalize_document(
             if excluded_count else ""
         )
 
-        # L'aperçu inline ne fonctionne que pour le PDF (rendu natif du
-        # navigateur via iframe) et l'image (balise <img> classique) — un
-        # .docx/.csv ne s'affiche pas correctement inline, on propose
-        # uniquement le téléchargement pour ces deux formats.
+        # Inline preview only works for PDF (native browser
+        # rendering via iframe) and image (plain <img> tag) — a
+        # .docx/.csv does not display correctly inline, so only
+        # download is offered for these two formats.
         if kind == "pdf":
             preview_html = (
                 f'<h2>Aperçu (contrôle visuel)</h2>'
@@ -3846,7 +3861,7 @@ async def finalize_document(
         return HTMLResponse(f"""
         <!doctype html>
         <html lang="fr">
-        <head><meta charset="utf-8"><title>Résultat - Anonymiseur</title></head>
+        <head><meta charset="utf-8"><title>Résultat - Obfusk8</title></head>
         <body style="font-family: sans-serif; max-width: 900px; margin: 40px auto;">
           <p><a href="/">&larr; Anonymiser un autre document</a></p>
           <h1>Document anonymisé</h1>
@@ -3906,8 +3921,8 @@ _INLINE_EXTENSIONS = {".pdf", ".png", ".jpg"}
 
 @app.get("/api/download/{job_id}")
 def download(job_id: str):
-    # job_id est un uuid4().hex (caractères hexadécimaux uniquement), donc
-    # sûr à utiliser dans un motif glob sans risque d'injection de chemin.
+    # job_id is a uuid4().hex (hexadecimal characters only), so
+    # safe to use in a glob pattern without risk of path injection.
     if not re.fullmatch(r"[0-9a-f]{32}", job_id):
         raise HTTPException(status_code=400, detail="Identifiant de job invalide")
 
@@ -3918,11 +3933,11 @@ def download(job_id: str):
 
     extension = path.suffix.lower()
     media_type = _DOWNLOAD_MEDIA_TYPES.get(extension)
-    if media_type is None:  # pragma: no cover - défensif, extension toujours connue en pratique
+    if media_type is None:  # pragma: no cover - defensive, extension is always known in practice
         raise HTTPException(status_code=500, detail="Format de fichier de sortie non reconnu")
 
-    # Reconstruit un nom de téléchargement explicite (type de document +
-    # référence courte) sans jamais exposer le nom du fichier original.
+    # Rebuilds an explicit download name (document type +
+    # short reference) without ever exposing the original file name.
     theme_slug = path.name[len(job_id) + 1 : -len(f"-anonymise{extension}")]
     public_filename = f"caviarde_{theme_slug}_{job_id[:8]}{extension}"
 
@@ -3939,11 +3954,11 @@ def download(job_id: str):
 @app.get("/api/audit")
 def read_audit_log(n: int = 50):
     """
-    Consultation du journal d'audit (les n dernières entrées, 50 par défaut).
-    Ne contient jamais de contenu de document ni de nom de fichier en clair —
-    uniquement qui, quand, quel thème, combien d'éléments caviardés.
+    Audit log consultation (the last n entries, 50 by default).
+    Never contains document content or a cleartext file name —
+    only who, when, which theme, how many elements redacted.
     """
-    n = max(1, min(n, 500))  # évite les valeurs négatives (slice incohérent) et les demandes excessives
+    n = max(1, min(n, 500))  # avoids negative values (inconsistent slice) and excessive requests
 
     log_path = AUDIT_DIR / "audit.log"
     if not log_path.exists():
@@ -3955,6 +3970,7 @@ def read_audit_log(n: int = 50):
     except OSError as exc:
         log.error("Lecture du journal d'audit impossible : %s", exc)
         raise HTTPException(status_code=500, detail="Journal d'audit temporairement indisponible") from exc
+
 
     entries = []
     for line in lines:
