@@ -4,21 +4,6 @@
 
 Ce guide explique comment utiliser l'application d'anonymisation de documents, du dépôt du fichier jusqu'au téléchargement de la version anonymisée.
 
-## Captures d'écran à réaliser
-
-L'application traite plusieurs formats (PDF, Word .docx, CSV, images PNG/JPEG) — prévoyez si possible une capture pour chaque format que vos utilisateurs utilisent réellement.
-
-| N° | Écran | Ce qu'il faut montrer |
-| --- | --- | --- |
-| 1 | Connexion | Page de connexion (SSO/identifiants), avant saisie |
-| 2 | Import du document | Écran d'accueil avec le bouton ou la zone de dépôt du fichier, avant tout envoi (PDF, DOCX, CSV ou image) |
-| 3 | Détection des données | Aperçu avec les zones détectées surlignées en rouge (PDF/image) — pour un DOCX/CSV, les éléments détectés mis en évidence dans le texte ou les cellules |
-| 4 | Exclusion d'une zone | Une zone détectée cliquée, affichée comme exclue (grisée) |
-| 5 | Ajout manuel (PDF et images uniquement) | Le mode « ajout manuel » activé, avec une zone dessinée à la main |
-| 6 | Validation de la révision humaine | L'écran de confirmation explicite de la révision, obligatoire avant génération |
-| 7 | Téléchargement | Écran de téléchargement avec le message de disponibilité limitée dans le temps |
-| 8 (optionnel) | Message d'erreur | Message affiché pour un fichier non pris en charge (ex. mauvais format) |
-
 ## Vue d'ensemble
 
 L'application détecte et masque automatiquement les informations personnelles ou sensibles dans un document — au format PDF, Word (.docx), CSV ou image (PNG/JPEG) — avec une étape de révision humaine **obligatoire** avant la génération du fichier final : aucun document ne peut être téléchargé sans validation explicite d'un utilisateur.
