@@ -59,7 +59,7 @@ jobs:
       - name: Build et push (presidio-analyzer)
         uses: docker/build-push-action@v5
         with:
-          context: ./presidio/analyzer-build   # ⚠️ à corriger si le chemin réel diffère
+          context: ./presidio/analyzer-build
           push: true
           tags: ${{ steps.meta-presidio.outputs.tags }}
           labels: ${{ steps.meta-presidio.outputs.labels }}
