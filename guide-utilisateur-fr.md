@@ -1,5 +1,7 @@
 # Guide utilisateur — Anonymiseur de documents
 
+🇫🇷 Français | 🇬🇧 [English](./user-guide-en.md)
+
 Ce guide explique comment utiliser l'application d'anonymisation de documents, du dépôt du fichier jusqu'au téléchargement de la version anonymisée.
 
 ## Vue d'ensemble
