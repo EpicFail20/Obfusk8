@@ -1,4 +1,4 @@
-name: Publish Docker image
+name: Publish Docker images
 
 on:
   push:
@@ -6,15 +6,13 @@ on:
     tags: ['v*']
 
 jobs:
-  build-and-push:
+  build-app:
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
-
     steps:
-      - name: Checkout du code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Connexion à GHCR
         uses: docker/login-action@v3
@@ -23,16 +21,45 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extraire les métadonnées (tags, labels)
-        id: meta
+      - name: Métadonnées (app)
+        id: meta-app
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/${{ github.repository }}-app
 
-      - name: Build et push
+      - name: Build et push (app)
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: ./app
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta-app.outputs.tags }}
+          labels: ${{ steps.meta-app.outputs.labels }}
+
+  build-presidio-analyzer:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Connexion à GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Métadonnées (presidio-analyzer)
+        id: meta-presidio
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}-presidio-analyzer
+
+      - name: Build et push (presidio-analyzer)
+        uses: docker/build-push-action@v5
+        with:
+          context: ./presidio/analyzer-build   # ⚠️ à corriger si le chemin réel diffère
+          push: true
+          tags: ${{ steps.meta-presidio.outputs.tags }}
+          labels: ${{ steps.meta-presidio.outputs.labels }}
