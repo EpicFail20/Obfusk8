@@ -1,5 +1,7 @@
 # User Guide — Document Anonymizer
 
+🇬🇧 English | 🇫🇷 [Français](./guide-utilisateur-fr.md)
+
 *Guide last updated: September 20, 2026*
 
 This guide explains how to use the document anonymization application, from uploading a file to downloading the anonymized version.
