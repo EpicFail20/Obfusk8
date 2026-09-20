@@ -1,5 +1,7 @@
 # Obfusk8 — anonymisation automatique de documents
 
+🇫🇷 Français | 🇬🇧 [English](./README.en.md)
+
 Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-hébergé, conçu pour tourner entièrement en local — aucune donnée n'est envoyée à un service tiers. Détecte et caviarde les informations personnelles (noms, dates, identifiants, adresses...) via [Presidio](https://github.com/microsoft/presidio), avec une étape de révision humaine avant validation finale.
 
 > ⚠️ **Avant de déployer cet outil sur des documents réels contenant des données sensibles**, lisez impérativement [`SECURITE.md`](./SECURITE.md) — il détaille les protections en place, les limites connues et les points qui restent sous votre responsabilité (certificat TLS, pentest, supervision).
