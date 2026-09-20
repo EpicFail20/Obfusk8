@@ -20,7 +20,7 @@ Ici c'est keycloak qui est utilisé comme gestionnaire d'identité:
 
 Sur l'écran d'accueil, cliquez sur « Choisir un fichier » ou glissez-déposez votre document dans la zone prévue. Les formats acceptés sont : PDF, Word (.docx), CSV et image (PNG/JPEG/JPG). 
 
-![start](https://github.com/EpicFail20/Obfusk8/blob/ffd04d00392b793f9106e4a9d12bf47154243a6e/Screens/start.png)
+![start](Screens/start.png)
 
 ## 3. Vérifier et valider les zones détectées (révision humaine obligatoire)
 
