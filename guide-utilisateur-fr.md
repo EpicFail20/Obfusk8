@@ -38,10 +38,12 @@ Pour les documents PDF et image, si une information sensible n'a pas été déte
 
 ## 5. Générer et télécharger le document anonymisé
 
-Une fois la révision terminée, cliquez sur « Valider » pour confirmer explicitement le contenu et générer le document final. Le fichier anonymisé est disponible au téléchargement pendant une durée limitée (quelques minutes) — pensez à le télécharger sans attendre. **\[Captures d'écran 6 et 7\]**
+Une fois la révision terminée, cliquez sur « Valider » pour confirmer explicitement le contenu et générer le document final. Le fichier anonymisé est disponible au téléchargement pendant une durée limitée (quelques minutes) — pensez à le télécharger sans attendre. 
+
+![results](Screens/result2.png)
 
 ## Messages d'erreur courants
 
 - Fichier refusé : seuls les formats PDF, DOCX, CSV, PNG et JPEG sont acceptés.
 - Trop de tentatives : un délai s'applique si plusieurs documents sont envoyés très rapidement.
-- Fichier expiré : si le téléchargement n'a pas été fait à temps, il faut relancer le traitement depuis le début. **\[Capture d'écran 8\]**
+- Fichier expiré : si le téléchargement n'a pas été fait à temps, il faut relancer le traitement depuis le début.
