@@ -1,5 +1,5 @@
-# Configuration de l'engine NLP de Presidio Analyzer
-# Déclare le modèle spaCy français pour que l'analyzer accepte language="fr"
+# Presidio Analyzer NLP engine configuration
+# Declares the French spaCy model so the analyzer accepts language="fr"
 
 nlp_engine_name: spacy
 models:

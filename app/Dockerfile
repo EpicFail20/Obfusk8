@@ -2,28 +2,28 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# libgl1 requis par certaines dépendances PyMuPDF selon la distro de base
+# libgl1 required by some PyMuPDF dependencies depending on the base distro
 #
-# tesseract-ocr + tesseract-ocr-fra : moteur OCR pour le support image
-# (PNG/JPEG) et ses données linguistiques françaises — indispensable, ce
-# projet traite du français ; sans ce paquet de données, l'OCR utiliserait
-# l'anglais par défaut et produirait un texte dégradé sur les accents,
-# donc une détection PII dégradée.
+# tesseract-ocr + tesseract-ocr-fra: OCR engine for image support
+# (PNG/JPEG) and its French language data — essential, this
+# project handles French; without this data package, OCR would default
+# to English and produce degraded text on accented characters,
+# hence degraded PII detection.
 #
-# ATTENTION - risque résiduel documenté (même esprit que la remarque sur
-# python-icap "Alpha" dans antivirus.py) : la version packagée par Debian
-# trixie au moment de l'écriture (5.5.0-1+b1) a plusieurs CVE connues et
-# encore ouvertes en amont au moment de l'écriture (CVE-2026-73066,
-# CVE-2026-73067 - corrigées en 5.5.3 mais pas encore republiées par Debian -
-# et CVE-2026-88047 à CVE-2026-88054, sans correctif amont disponible à ce
-# jour). Toutes nécessitent un fichier .traineddata (modèle de langue)
-# forgé pour être exploitées ; l'application ne charge QUE les paquets de
-# données linguistiques installés ici par apt (fra/eng), jamais un fichier
-# fourni par l'utilisateur — l'image PNG/JPEG uploadée n'est jamais
-# interprétée comme un .traineddata. Le vecteur d'exploitation documenté par
-# ces CVE ne s'applique donc pas au flux d'upload de ce projet. À réévaluer
-# si Debian publie un correctif, ou si un jour une source de .traineddata
-# externe/utilisateur était introduite.
+# WARNING - documented residual risk (same spirit as the note on
+# python-icap "Alpha" in antivirus.py): the version packaged by Debian
+# trixie at time of writing (5.5.0-1+b1) has several known CVEs
+# still open upstream at time of writing (CVE-2026-73066,
+# CVE-2026-73067 - fixed in 5.5.3 but not yet republished by Debian -
+# and CVE-2026-88047 to CVE-2026-88054, with no upstream fix available at this
+# time). All require a forged .traineddata (language model)
+# file to be exploited; the application ONLY loads the
+# language data packages installed here via apt (fra/eng), never a file
+# supplied by the user — the uploaded PNG/JPEG image is never
+# interpreted as a .traineddata. The exploitation vector documented by
+# these CVEs therefore does not apply to this project's upload flow. To be reassessed
+# if Debian publishes a fix, or if a user/external source of .traineddata
+# were ever introduced.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     tesseract-ocr \
@@ -40,13 +40,13 @@ COPY supervision.py .
 COPY themes/ ./themes/
 COPY tests/ ./tests/
 
-# Le cache pytest doit écrire ailleurs que la racine /app en lecture seule
-# (voir read_only: true dans docker-compose.yml) — /tmp est monté en tmpfs
-# donc writable.
+# The pytest cache must write somewhere other than the read-only /app root
+# (see read_only: true in docker-compose.yml) — /tmp is mounted as tmpfs
+# so it's writable.
 RUN printf '[pytest]\ncache_dir = /tmp/.pytest_cache\n' > pytest.ini
 
-# Utilisateur non-root dédié (UID/GID fixes pour pouvoir aligner les
-# permissions des volumes bind-mount côté hôte — voir déploiement).
+# Dedicated non-root user (fixed UID/GID so host-side bind-mount volume
+# permissions can be aligned — see deployment).
 RUN mkdir -p /data/tmp /data/audit && \
     groupadd -g 1000 appuser && \
     useradd -u 1000 -g appuser -s /usr/sbin/nologin -M appuser && \
@@ -54,8 +54,8 @@ RUN mkdir -p /data/tmp /data/audit && \
 
 USER appuser
 
-# Évite les écritures de bytecode .pyc, inutiles ici et incompatibles avec
-# un système de fichiers racine en lecture seule (voir docker-compose.yml).
+# Avoids .pyc bytecode writes, useless here and incompatible with
+# a read-only root filesystem (see docker-compose.yml).
 ENV PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
