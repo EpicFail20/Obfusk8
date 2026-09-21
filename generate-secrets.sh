@@ -7,8 +7,22 @@
 # - avoids the generated values ending up in the shell history (~/.bash_history)
 # - guarantees restrictive permissions from the moment of creation (no window
 #   where the file is world-readable before a corrective chmod)
+#
+# Usage: ./generate-secrets.sh [--force]
+#   --force  regenerate every secret, overwriting any existing file.
 # -----------------------------------------------------------------------------
 set -euo pipefail
+
+FORCE=0
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=1 ;;
+        *)
+            echo "Argument inconnu : $arg (seul --force est supporté)" >&2
+            exit 1
+            ;;
+    esac
+done
 
 SECRETS_DIR="./secrets"
 mkdir -p "$SECRETS_DIR"
@@ -16,23 +30,33 @@ chmod 700 "$SECRETS_DIR"
 
 generate_random_secret() {
     local target_file="$1"
-    if [ -f "$target_file" ]; then
-        echo "  -> $target_file existe déjà, on ne l'écrase pas (utilise --force pour régénérer)."
+    if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
+        echo "  -> $target_file existe déjà, on ne l'écrase pas (relance avec --force pour régénérer)."
         return
     fi
-    # 32 raw random bytes -> exactly the size expected by oauth2-proxy
-    # (16, 24, or 32 bytes after decoding) for cookie_secret.
+    # 16 random bytes hex-encoded = exactly 32 ASCII characters = 32 bytes
+    # once read as a literal string. oauth2-proxy accepts a cookie_secret
+    # directly as raw bytes of length 16/24/32 *without* needing any
+    # base64 decoding step, which sidesteps a real bug this script used
+    # to have: `openssl rand -base64 32` uses the STANDARD base64 alphabet
+    # (+, /, padding =), while oauth2-proxy decodes with the URL-safe
+    # alphabet (-, _, no padding). Any +, / or = in the value makes that
+    # decode fail silently, and oauth2-proxy then falls back to the raw
+    # string length instead — which is almost never 16/24/32, hence the
+    # "cookie_secret must be 16, 24, or 32 bytes... but is N bytes" error.
+    # Hex encoding has no such ambiguity: what you generate is exactly
+    # what gets used, byte for byte.
     umask 077
-    openssl rand -base64 32 | tr -d '\n' > "$target_file"
+    openssl rand -hex 16 | tr -d '\n' > "$target_file"
     chmod 600 "$target_file"
-    echo "  -> $target_file généré (600)."
+    echo "  -> $target_file généré (600, 32 octets hex)."
 }
 
 prompt_secret() {
     local label="$1"
     local target_file="$2"
-    if [ -f "$target_file" ]; then
-        echo "  -> $target_file existe déjà, on ne l'écrase pas (utilise --force pour ressaisir)."
+    if [ -f "$target_file" ] && [ "$FORCE" -ne 1 ]; then
+        echo "  -> $target_file existe déjà, on ne l'écrase pas (relance avec --force pour ressaisir)."
         return
     fi
     umask 077
@@ -79,6 +103,11 @@ EOF
     chmod 600 "$GATEWAY_DYNAMIC_FILE"
     echo "  -> $GATEWAY_DYNAMIC_FILE rendu (600) à partir de $secret_file."
 }
+
+if [ "$FORCE" -eq 1 ]; then
+    echo "⚠️  --force : les secrets existants seront régénérés et écrasés."
+    echo
+fi
 
 echo "== Secrets générés automatiquement =="
 generate_random_secret "$SECRETS_DIR/oauth2_cookie_secret.txt"
