@@ -55,7 +55,10 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository }}-presidio-analyzer
-
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+            type=semver,pattern={{version}}
       - name: Build et push (presidio-analyzer)
         uses: docker/build-push-action@v5
         with:
