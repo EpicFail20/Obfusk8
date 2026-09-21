@@ -38,6 +38,7 @@ COPY antivirus.py .
 COPY metrics.py .
 COPY supervision.py .
 COPY themes/ ./themes/
+COPY i18n/ ./i18n/
 COPY tests/ ./tests/
 
 # The pytest cache must write somewhere other than the read-only /app root

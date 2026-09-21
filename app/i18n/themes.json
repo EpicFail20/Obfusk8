@@ -1,0 +1,14 @@
+{
+  "compta": {
+    "fr": "Comptabilité",
+    "en": "Accounting"
+  },
+  "it": {
+    "fr": "IT / Infrastructure",
+    "en": "IT / Infrastructure"
+  },
+  "medical": {
+    "fr": "Médical",
+    "en": "Medical"
+  }
+}

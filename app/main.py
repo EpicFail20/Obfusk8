@@ -228,7 +228,7 @@ def _check_detection_deadline(start_time: float) -> None:
         _reject(
             "trop_volumineux",
             400,
-            f"Ce document est trop volumineux pour être analysé dans le temps imparti (max {MAX_DETECTION_SECONDS}s) — réduisez sa taille ou contactez l'administrateur.",
+            STRINGS["detection_timeout"].format(max_seconds=MAX_DETECTION_SECONDS),
         )
 
 # Replacement marker for text redaction (DOCX/CSV): a fixed value
@@ -330,6 +330,89 @@ for _theme_key, _theme_data in THEMES.items():
 log.info("Reconnaisseurs communs chargés: %d", len(COMMON_RECOGNIZERS))
 
 
+# ---------------------------------------------------------------------------
+# UI translations (app/i18n/*.json)
+# ---------------------------------------------------------------------------
+I18N_DIR = Path(__file__).parent / "i18n"
+UI_LANG = os.environ.get("UI_LANG", "fr")
+
+
+def _load_json_file(path: Path) -> dict | None:
+    try:
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        log.error("Fichier de traduction illisible, ignoré: %s (%s)", path.name, exc)
+        return None
+
+
+def _load_strings() -> dict[str, str]:
+    """
+    Loads the UI strings for UI_LANG (env var, default "fr"), with the
+    French file (app/i18n/fr.json) as the mandatory fallback base: a key
+    missing in the target language falls back silently to French (never a
+    raw key or empty text shown to the user), with a warning logged once
+    per missing key — this function only runs once, at import time (see
+    STRINGS below), never per request.
+
+    If UI_LANG points to a language with no JSON file at all, falls back
+    entirely to French, with a clear warning at startup — same fail-safe
+    logic as the rest of the project: a minor configuration issue must
+    never crash the application.
+    """
+    fr_strings = _load_json_file(I18N_DIR / "fr.json") or {}
+
+    if UI_LANG == "fr":
+        return fr_strings
+
+    lang_path = I18N_DIR / f"{UI_LANG}.json"
+    if not lang_path.exists():
+        log.warning(
+            "UI_LANG=%s : fichier de traduction introuvable (%s), repli intégral sur le français.",
+            UI_LANG, lang_path.name,
+        )
+        return fr_strings
+
+    lang_strings = _load_json_file(lang_path)
+    if lang_strings is None:
+        log.warning("UI_LANG=%s : repli intégral sur le français suite à l'erreur ci-dessus.", UI_LANG)
+        return fr_strings
+
+    for key in sorted(fr_strings.keys() - lang_strings.keys()):
+        log.warning(
+            "UI_LANG=%s : clé de traduction manquante '%s', repli sur le français pour cette clé.", UI_LANG, key
+        )
+
+    return {**fr_strings, **lang_strings}
+
+
+def _load_theme_labels() -> dict[str, str]:
+    """Loads app/i18n/themes.json (theme key -> {lang: label}) for the
+    theme dropdown on the upload form — kept separate from app/themes/*.json
+    itself (see docs/traduire-interface.md) so that adding a new language
+    never requires touching the theme/recognizer files."""
+    data = _load_json_file(I18N_DIR / "themes.json") or {}
+    labels = {}
+    for theme_key, per_lang in data.items():
+        if UI_LANG not in per_lang:
+            log.warning(
+                "UI_LANG=%s : libellé de thème manquant pour '%s', repli sur le français.", UI_LANG, theme_key
+            )
+        labels[theme_key] = per_lang.get(UI_LANG) or per_lang.get("fr") or theme_key
+    return labels
+
+
+# Loaded here at module level (like THEMES/COMMON_RECOGNIZERS above), not
+# inside lifespan() like get_scanner()/get_alert_sink(): STRINGS must
+# already be ready before `app = FastAPI(title=STRINGS["api_title"], ...)`
+# below is even constructed, which runs before lifespan ever starts. Still
+# loaded exactly once, never re-read per request — same guarantee as
+# get_scanner(), just triggered at a different point.
+STRINGS = _load_strings()
+THEME_LABELS = _load_theme_labels()
+log.info("Langue de l'interface : UI_LANG=%s (%d chaîne(s) chargée(s))", UI_LANG, len(STRINGS))
+
+
 def _peek_zip_entry_count(raw: bytes) -> int | None:
     """
     Reads the entry count declared in a ZIP's end-of-central-directory
@@ -389,7 +472,7 @@ def _validate_docx_zip(raw: bytes) -> str:
         _reject(
             "structure_invalide",
             400,
-            f"Structure d'archive suspecte détectée (protection anti zip-bomb, {entry_count} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+            STRINGS["docx_zip_bomb_entries"].format(count=entry_count, max_entries=MAX_DOCX_ZIP_ENTRIES),
         )
 
     try:
@@ -397,12 +480,12 @@ def _validate_docx_zip(raw: bytes) -> str:
         names = zf.namelist()
     except zipfile.BadZipFile as exc:
         metrics.DOCUMENTS_REJECTED.labels(reason="format_invalide").inc()
-        raise HTTPException(status_code=400, detail="Fichier ZIP/DOCX invalide ou corrompu") from exc
+        raise HTTPException(status_code=400, detail=STRINGS["docx_invalid_corrupt"]) from exc
 
     if "word/document.xml" not in names:
-        _reject("format_invalide", 400, "Ce fichier n'est pas un document Word (.docx) valide.")
+        _reject("format_invalide", 400, STRINGS["docx_not_a_word_doc"])
     if "word/vbaProject.bin" in names:
-        _reject("format_invalide", 400, "Les documents avec macros (.docm) ne sont pas acceptés.")
+        _reject("format_invalide", 400, STRINGS["docx_macro_rejected"])
     if len(names) > MAX_DOCX_ZIP_ENTRIES:
         # Safety net if the EOCD could not be read upstream (e.g.
         # malformed ZIP comment): costs the full read we're
@@ -412,7 +495,7 @@ def _validate_docx_zip(raw: bytes) -> str:
         _reject(
             "structure_invalide",
             400,
-            f"Structure d'archive suspecte détectée (protection anti zip-bomb, {len(names)} entrées, max {MAX_DOCX_ZIP_ENTRIES}).",
+            STRINGS["docx_zip_bomb_entries"].format(count=len(names), max_entries=MAX_DOCX_ZIP_ENTRIES),
         )
 
     total_uncompressed = sum(info.file_size for info in zf.infolist())
@@ -420,11 +503,11 @@ def _validate_docx_zip(raw: bytes) -> str:
         _reject(
             "trop_volumineux",
             400,
-            f"Document trop volumineux une fois décompressé (protection anti zip-bomb, max {MAX_DOCX_UNCOMPRESSED_MB} Mo).",
+            STRINGS["docx_zip_bomb_uncompressed"].format(max_mb=MAX_DOCX_UNCOMPRESSED_MB),
         )
     for info in zf.infolist():
         if info.compress_size > 0 and (info.file_size / info.compress_size) > MAX_DOCX_ZIP_RATIO:
-            _reject("structure_invalide", 400, "Structure d'archive suspecte détectée (protection anti zip-bomb).")
+            _reject("structure_invalide", 400, STRINGS["docx_zip_bomb_generic"])
 
     return "docx"
 
@@ -501,7 +584,7 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
             metrics.DOCUMENTS_REJECTED.labels(reason="antivirus_indisponible").inc()
             raise HTTPException(
                 status_code=503,
-                detail="Le service d'analyse antivirus est indisponible, veuillez réessayer plus tard.",
+                detail=STRINGS["av_service_unavailable"],
             ) from exc
         log.warning(
             "AV_ENFORCE=false : scan antivirus indisponible pour fichier %s, fichier traité quand même (%s)",
@@ -517,7 +600,7 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
         # Unicode formatting character (RTL override...) as the one found and
         # fixed on the audit log (3.5), for any text source external to the
         # project meant to be read by a human.
-        threat = _strip_unicode_control_and_format_chars(result.threat_name or "menace inconnue")
+        threat = _strip_unicode_control_and_format_chars(result.threat_name or STRINGS["av_unknown_threat"])
         metrics.AV_SCAN_RESULT.labels(verdict="menace").inc()
         _send_alert(
             Alert(
@@ -531,7 +614,7 @@ def _run_antivirus_scan(raw: bytes, filename: str, filename_hash: str) -> None:
             metrics.DOCUMENTS_REJECTED.labels(reason="menace_antivirus").inc()
             raise HTTPException(
                 status_code=400,
-                detail=f"Menace détectée par l'antivirus ({threat}) — fichier rejeté.",
+                detail=STRINGS["av_threat_detected"].format(threat=threat),
             )
         log.warning(
             "AV_ENFORCE=false : menace détectée (%s) pour fichier %s, fichier traité quand même",
@@ -561,7 +644,7 @@ def _detect_file_kind(raw: bytes) -> str:
         return "image"
     if _looks_like_text(raw):
         return "csv"
-    _reject("format_invalide", 400, "Format de fichier non reconnu (seuls PDF, DOCX, CSV, PNG et JPEG sont acceptés).")
+    _reject("format_invalide", 400, STRINGS["unknown_file_format"])
 
 
 def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
@@ -573,7 +656,7 @@ def _decode_csv_bytes(raw: bytes) -> tuple[str, str]:
             return raw.decode(encoding), encoding
         except UnicodeDecodeError:
             continue
-    _reject("format_invalide", 400, "Encodage de fichier CSV non reconnu (UTF-8 ou Windows-1252 attendu).")
+    _reject("format_invalide", 400, STRINGS["csv_encoding_unrecognized"])
 
 
 def _detect_csv_delimiter(sample_text: str) -> str:
@@ -593,7 +676,10 @@ def _parse_csv_rows(text: str, delimiter: str) -> list[list[str]]:
     for row in reader:
         rows.append(row)
         if len(rows) > MAX_CSV_ROWS:
-            _reject("trop_volumineux", 400, f"Fichier CSV trop volumineux ({len(rows)}+ lignes, max {MAX_CSV_ROWS})")
+            _reject(
+                "trop_volumineux", 400,
+                STRINGS["csv_too_many_rows"].format(count=len(rows), max_rows=MAX_CSV_ROWS),
+            )
     return rows
 
 
@@ -777,14 +863,14 @@ async def lifespan(app: FastAPI):
     log.info("Arrêt de l'application")
 
 
-app = FastAPI(title="Obfusk8 - Anonymiseur de documents - PDF/DOCX/CSV", lifespan=lifespan)
+app = FastAPI(title=STRINGS["api_title"], lifespan=lifespan)
 
 ERROR_TITLES = {
-    400: "Requête invalide",
-    404: "Introuvable",
-    413: "Fichier trop volumineux",
-    422: "Formulaire incomplet",
-    502: "Service indisponible",
+    400: STRINGS["error_400_title"],
+    404: STRINGS["error_404_title"],
+    413: STRINGS["error_413_title"],
+    422: STRINGS["error_422_title"],
+    502: STRINGS["error_502_title"],
 }
 
 
@@ -799,12 +885,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     if not wants_html:
         return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
-    title = ERROR_TITLES.get(exc.status_code, "Une erreur est survenue")
+    title = ERROR_TITLES.get(exc.status_code, STRINGS["error_generic_title"])
     return HTMLResponse(
         status_code=exc.status_code,
         content=f"""
         <!doctype html>
-        <html lang="fr">
+        <html lang="{UI_LANG}">
         <head><meta charset="utf-8"><title>{title} - Obfusk8</title></head>
         <body style="font-family: sans-serif; max-width: 560px; margin: 80px auto; text-align:center;">
           <div style="font-size:3em; margin-bottom:8px;">⚠️</div>
@@ -814,7 +900,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
             <a href="/" style="
                 display:inline-block; padding:10px 24px; background:#0d6efd;
                 color:white; text-decoration:none; border-radius:4px;">
-              &larr; Retour à l'accueil
+              &larr; {STRINGS["back_to_home_link"]}
             </a>
           </p>
         </body>
@@ -939,7 +1025,7 @@ class _GatewaySecretMiddleware:
             if not hmac.compare_digest(provided, secret.encode("utf-8")):
                 response = await http_exception_handler(
                     Request(scope),
-                    HTTPException(status_code=401, detail="Requête non autorisée"),
+                    HTTPException(status_code=401, detail=STRINGS["unauthorized_request"]),
                 )
                 await response(scope, receive, send)
                 return
@@ -951,7 +1037,7 @@ class RequestBodyTooLarge(HTTPException):
     def __init__(self):
         super().__init__(
             status_code=413,
-            detail=f"Requête trop volumineuse (fichier limité à {MAX_UPLOAD_MB} Mo)",
+            detail=STRINGS["request_body_too_large"].format(max_mb=MAX_UPLOAD_MB),
         )
 
 
@@ -1262,7 +1348,7 @@ def _check_page_images_sane(page: "fitz.Page") -> None:
         if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
             raise HTTPException(
                 status_code=400,
-                detail="Cette page contient une image aux dimensions invalides.",
+                detail=STRINGS["page_invalid_image_dimensions"],
             )
 
 
@@ -1508,21 +1594,21 @@ def _open_and_validate_image(raw: bytes) -> "Image.Image":
     except Image.DecompressionBombError as exc:
         raise HTTPException(
             status_code=400,
-            detail="Cette image dépasse la limite de dimensions autorisée (protection anti-bombe de décompression).",
+            detail=STRINGS["image_dimension_limit_bomb"],
         ) from exc
     except (PILUnidentifiedImageError, OSError, ValueError, SyntaxError) as exc:
-        raise HTTPException(status_code=400, detail="Image illisible ou corrompue.") from exc
+        raise HTTPException(status_code=400, detail=STRINGS["image_unreadable"]) from exc
 
     if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
         raise HTTPException(
             status_code=400,
-            detail=f"Cette image dépasse la limite de dimensions autorisée (max {MAX_IMAGE_PIXELS} pixels).",
+            detail=STRINGS["image_dimension_limit_pixels"].format(max_pixels=MAX_IMAGE_PIXELS),
         )
     if image_format not in ("PNG", "JPEG"):
         # Should never happen: _detect_file_kind has already validated the
         # binary signature — safety net in case another format
         # sharing a close signature is ever misrouted to "image".
-        raise HTTPException(status_code=400, detail="Format d'image non reconnu (seuls PNG et JPEG sont acceptés).")
+        raise HTTPException(status_code=400, detail=STRINGS["image_format_unrecognized"])
 
     return img
 
@@ -1546,10 +1632,10 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
         )
     except pytesseract.TesseractNotFoundError as exc:
         log.error("Binaire tesseract introuvable : %s", exc)
-        raise HTTPException(status_code=503, detail="Le moteur OCR est indisponible, veuillez réessayer plus tard.") from exc
+        raise HTTPException(status_code=503, detail=STRINGS["ocr_engine_unavailable"]) from exc
     except pytesseract.TesseractError as exc:
         log.warning("Échec de l'OCR : %s", exc)
-        raise HTTPException(status_code=400, detail="Cette image n'a pas pu être analysée par l'OCR.") from exc
+        raise HTTPException(status_code=400, detail=STRINGS["ocr_analysis_failed"]) from exc
     except RuntimeError as exc:
         # pytesseract raises a bare RuntimeError (not TesseractError, caught
         # separately above even though it inherits from it) with the fixed
@@ -1558,7 +1644,7 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
         log.warning("Timeout OCR après %ss : %s", MAX_OCR_SECONDS, exc)
         raise HTTPException(
             status_code=400,
-            detail=f"Cette image est trop complexe pour être analysée par l'OCR dans le temps imparti (max {MAX_OCR_SECONDS}s).",
+            detail=STRINGS["ocr_timeout"].format(max_seconds=MAX_OCR_SECONDS),
         ) from exc
 
     words: list[dict] = []
@@ -1973,23 +2059,22 @@ def _build_docx_images_review_section(document: WordDocument) -> str:
             preview = (
                 '<div style="width:180px; height:100px; display:flex; align-items:center; '
                 'justify-content:center; border:1px dashed #999; color:#666; font-size:0.8em; '
-                f'text-align:center;">Aperçu indisponible<br>({size_kb:.0f} Ko)</div>'
+                f'text-align:center;">{STRINGS["docx_image_preview_unavailable"].format(size_kb=f"{size_kb:.0f}")}</div>'
             )
+        size_suffix = STRINGS["docx_image_size_suffix"].format(content_type=html.escape(content_type), size_kb=f"{size_kb:.0f}")
         cards.append(f"""
         <label style="display:inline-block; margin:8px 12px 8px 0; text-align:center; cursor:pointer; vertical-align:top;">
           {preview}
           <div style="margin-top:4px; font-size:0.85em;">
             <input type="checkbox" class="docx-image-checkbox" data-image-id="{image_id}">
-            Caviarder <span style="color:#888;">({html.escape(content_type)}, {size_kb:.0f} Ko)</span>
+            {STRINGS["docx_image_redact_label"]} <span style="color:#888;">{size_suffix}</span>
           </div>
         </label>
         """)
 
     return f"""
     <div style="margin: 0 0 16px 0; padding:12px; background:#f8f8f8; border-radius:4px;">
-      <p style="margin-top:0;"><strong>{len(parts)}</strong> image(s) incrustée(s) trouvée(s) dans ce document
-      (corps, en-têtes/pieds de page, notes) — non analysées automatiquement (voir avertissement ci-dessus).
-      Cochez celles à remplacer par un carré noir avant de valider.</p>
+      <p style="margin-top:0;">{STRINGS["docx_images_found_intro"].format(count=len(parts))}</p>
       {"".join(cards)}
     </div>
     """
@@ -2037,35 +2122,39 @@ def _iter_docx_paragraphs(document: WordDocument):
     _flatten_revisions_in(document.element)
     _unwrap_hyperlinks_in(document.element, document.part)
 
+    # `label` is a language-neutral internal identifier, not display text:
+    # it is translated only at render time via STRINGS["docx_block_label_*"]
+    # (see _handle_detect_docx) — "body" is the one exception, never
+    # displayed (see the `label != "body"` check there).
     for p in document.paragraphs:
-        blocks.append(("corps", p, None))
+        blocks.append(("body", p, None))
 
     for table in document.tables:
         table_id = id(table)
         for row_idx, row in enumerate(table.rows):
             for col_idx, cell in enumerate(row.cells):
                 for p in cell.paragraphs:
-                    blocks.append(("tableau", p, (table_id, row_idx, col_idx)))
+                    blocks.append(("table", p, (table_id, row_idx, col_idx)))
                 for nested_table in cell.tables:
                     for nested_row in nested_table.rows:
                         for nested_cell in nested_row.cells:
                             for p in nested_cell.paragraphs:
-                                blocks.append(("tableau", p, None))
+                                blocks.append(("table", p, None))
 
     for section in document.sections:
         if section.header is not None:
             _flatten_revisions_in(section.header.part.element)
             _unwrap_hyperlinks_in(section.header.part.element, section.header.part)
             for p in section.header.paragraphs:
-                blocks.append(("en-tête", p, None))
+                blocks.append(("header", p, None))
         if section.footer is not None:
             _flatten_revisions_in(section.footer.part.element)
             _unwrap_hyperlinks_in(section.footer.part.element, section.footer.part)
             for p in section.footer.paragraphs:
-                blocks.append(("pied de page", p, None))
+                blocks.append(("footer", p, None))
 
     note_parts = {}
-    note_labels = {"footnote": "note de bas de page", "endnote": "note de fin"}
+    note_labels = {"footnote": "footnote", "endnote": "endnote"}
     for note_kind, label in note_labels.items():
         part, root = _get_note_part(document, note_kind)
         if root is None:
@@ -2265,7 +2354,7 @@ def _docx_table_structural_entities(blocks: list, block_texts: list[str], column
 
     cells: dict[tuple, list[int]] = {}
     for block_id, (label, _, table_ref) in enumerate(blocks):
-        if label == "tableau" and table_ref is not None:
+        if label == "table" and table_ref is not None:
             cells.setdefault(table_ref, []).append(block_id)
 
     def cell_text(block_ids: list[int]) -> str:
@@ -2623,10 +2712,10 @@ def _build_text_review_page(
     _build_docx_images_review_section."""
     return HTMLResponse(f"""
     <!doctype html>
-    <html lang="fr">
+    <html lang="{UI_LANG}">
     <head>
       <meta charset="utf-8">
-      <title>Révision - Obfusk8</title>
+      <title>{STRINGS["review_page_title"]}</title>
       <style>
         .text-detection {{
           background: rgba(220, 40, 40, 0.25);
@@ -2650,11 +2739,9 @@ def _build_text_review_page(
     </head>
     <body style="font-family: sans-serif; max-width: 900px; margin: 0 auto; padding: 0 20px;">
       <div class="toolbar">
-        <p><a href="/">&larr; Recommencer</a></p>
+        <p><a href="/">&larr; {STRINGS["restart_link"]}</a></p>
         <p>
-          <strong>{total_detections}</strong> zone(s) détectée(s), surlignées en rouge.
-          Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé) —
-          si la même personne apparaît ailleurs dans le document, toutes ses occurrences seront exclues en même temps.
+          {STRINGS["review_zone_count_text"].format(count=total_detections)}
         </p>
         {extra_note}
         <form id="finalize-form" action="/api/finalize" method="post">
@@ -2665,7 +2752,7 @@ def _build_text_review_page(
           <button type="button" onclick="submitTextFinalize()" style="
               padding:10px 20px; background:#0d6efd; color:white; border:none;
               border-radius:4px; cursor:pointer; font-size:1em;">
-            Valider et caviarder
+            {STRINGS["confirm_and_redact_button"]}
           </button>
         </form>
       </div>
@@ -2719,23 +2806,23 @@ def metrics_endpoint():
 
 @app.get("/", response_class=HTMLResponse)
 def upload_form():
-    options = '<option value="">Aucun (détection générique uniquement)</option>'
+    options = f'<option value="">{STRINGS["theme_none_option"]}</option>'
     for key, theme in THEMES.items():
-        options += f'<option value="{key}">{theme.get("label", key)}</option>'
+        options += f'<option value="{key}">{THEME_LABELS.get(key, key)}</option>'
 
     return f"""
     <!doctype html>
-    <html lang="fr"><head><meta charset="utf-8"><title>Obfusk8 - Anonymiseur de documents</title></head>
+    <html lang="{UI_LANG}"><head><meta charset="utf-8"><title>{STRINGS["home_page_title"]}</title></head>
     <body style="font-family: sans-serif; max-width: 600px; margin: 40px auto;">
-      <h1>Obfusk8 - Anonymiseur de documents (PDF, DOCX, CSV, image)</h1>
-      <p>Déposez un document. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.</p>
+      <h1>{STRINGS["home_page_heading"]}</h1>
+      <p>{STRINGS["home_page_intro"]}</p>
       <form action="/api/detect" method="post" enctype="multipart/form-data">
         <p>
-          <label for="theme">Type de document :</label><br>
+          <label for="theme">{STRINGS["theme_select_label"]}</label><br>
           <select name="theme" id="theme">{options}</select>
         </p>
         <input type="file" name="file" accept=".pdf,.docx,.csv,.png,.jpg,.jpeg" required>
-        <button type="submit">Analyser</button>
+        <button type="submit">{STRINGS["analyze_button"]}</button>
       </form>
     </body>
     </html>
@@ -2763,7 +2850,7 @@ async def detect_document(
     if size_mb > MAX_UPLOAD_MB:
         raise HTTPException(
             status_code=413,
-            detail=f"Fichier trop volumineux ({size_mb:.1f} Mo, max {MAX_UPLOAD_MB} Mo)",
+            detail=STRINGS["upload_too_large"].format(size_mb=f"{size_mb:.1f}", max_mb=MAX_UPLOAD_MB),
         )
 
     filename_hash = hashlib.sha256((file.filename or "").encode()).hexdigest()[:12]
@@ -2780,7 +2867,7 @@ async def detect_document(
         if len(PENDING_JOBS) >= MAX_PENDING_JOBS:
             raise HTTPException(
                 status_code=503,
-                detail="Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
+                detail=STRINGS["too_many_pending_jobs"],
             )
 
     # The `theme` field is a form field freely controlled by the
@@ -2821,13 +2908,13 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
     try:
         doc = fitz.open(stream=raw, filetype="pdf")
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="PDF illisible ou corrompu") from exc
+        raise HTTPException(status_code=400, detail=STRINGS["pdf_unreadable"]) from exc
 
     if doc.needs_pass:
         doc.close()
         raise HTTPException(
             status_code=400,
-            detail="Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
+            detail=STRINGS["pdf_password_protected"],
         )
 
     if len(doc) > MAX_PDF_PAGES:
@@ -2835,8 +2922,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         doc.close()
         raise HTTPException(
             status_code=400,
-            detail=f"Ce PDF contient trop de pages ({page_count}, max {MAX_PDF_PAGES}) — "
-            "une taille de fichier faible ne garantit pas un nombre de pages raisonnable.",
+            detail=STRINGS["pdf_too_many_pages"].format(page_count=page_count, max_pages=MAX_PDF_PAGES),
         )
 
     try:
@@ -2862,7 +2948,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         log.warning("Échec du traitement PDF après ouverture réussie : %s", exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce PDF est corrompu ou contient une structure invalide qui empêche son traitement.",
+            detail=STRINGS["pdf_corrupt_structure"],
         ) from exc
     finally:
         doc.close()
@@ -2923,10 +3009,10 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
     (_build_text_review_page), which does not offer this possibility."""
     return HTMLResponse(f"""
     <!doctype html>
-    <html lang="fr">
+    <html lang="{UI_LANG}">
     <head>
       <meta charset="utf-8">
-      <title>Révision - Obfusk8</title>
+      <title>{STRINGS["review_page_title"]}</title>
       <style>
         .detection {{
           position: absolute;
@@ -2959,16 +3045,14 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
     </head>
     <body style="font-family: sans-serif; max-width: 1000px; margin: 0 auto; padding: 0 20px;">
       <div class="toolbar">
-        <p><a href="/">&larr; Recommencer</a></p>
+        <p><a href="/">&larr; {STRINGS["restart_link"]}</a></p>
         <p>
-          <strong>{total_detections}</strong> zone(s) détectée(s), surlignées en rouge.
-          Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé) —
-          si la même personne apparaît ailleurs dans le document, toutes ses occurrences seront exclues en même temps.
+          {STRINGS["review_zone_count_text"].format(count=total_detections)}
         </p>
         <button type="button" id="manual-mode-btn" onclick="toggleManualMode()" style="
             padding:8px 16px; background:#e9ecef; border:1px solid #ccc;
             border-radius:4px; cursor:pointer; margin-bottom:8px;">
-          ✏️ Ajouter une zone à masquer
+          {STRINGS["add_manual_zone_button"]}
         </button>
         <form id="finalize-form" action="/api/finalize" method="post">
           <input type="hidden" name="job_id" value="{job_id}">
@@ -2978,7 +3062,7 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
           <button type="button" onclick="submitFinalize()" style="
               padding:10px 20px; background:#0d6efd; color:white; border:none;
               border-radius:4px; cursor:pointer; font-size:1em;">
-            Valider et caviarder
+            {STRINGS["confirm_and_redact_button"]}
           </button>
         </form>
       </div>
@@ -2995,8 +3079,8 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
           document.querySelectorAll('.page-container').forEach(el =>
             el.classList.toggle('manual-mode', manualModeActive));
           document.getElementById('manual-mode-btn').textContent = manualModeActive
-            ? '✅ Mode ajout actif (clique-glisse sur le document)'
-            : '✏️ Ajouter une zone à masquer';
+            ? {json.dumps(STRINGS["manual_mode_active_button"])}
+            : {json.dumps(STRINGS["add_manual_zone_button"])};
         }}
 
         document.querySelectorAll('.page-container').forEach(container => {{
@@ -3041,7 +3125,7 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
               const zoneEl = document.createElement('div');
               zoneEl.className = 'manual-zone';
               zoneEl.dataset.id = id;
-              zoneEl.title = 'Zone manuelle - cliquez pour supprimer';
+              zoneEl.title = {json.dumps(STRINGS["manual_zone_tooltip"])};
               Object.assign(zoneEl.style, {{
                 left: x0 + 'px', top: y0 + 'px',
                 width: (x1 - x0) + 'px', height: (y1 - y0) + 'px',
@@ -3099,7 +3183,7 @@ def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user
     except Exception as exc:
         raise HTTPException(
             status_code=400,
-            detail="Image corrompue ou tronquée, impossible de la décoder entièrement.",
+            detail=STRINGS["image_corrupt_truncated"],
         ) from exc
 
     width, height = img.size
@@ -3115,7 +3199,7 @@ def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user
         log.warning("Échec du traitement image après ouverture réussie : %s", exc)
         raise HTTPException(
             status_code=400,
-            detail="Cette image contient une structure invalide qui empêche son traitement.",
+            detail=STRINGS["image_invalid_structure"],
         ) from exc
 
     with _PENDING_JOBS_LOCK:
@@ -3146,14 +3230,14 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
     try:
         document = WordDocument(io.BytesIO(raw))
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Document Word illisible ou corrompu") from exc
+        raise HTTPException(status_code=400, detail=STRINGS["docx_unreadable"]) from exc
 
     try:
         blocks, _note_parts = _iter_docx_paragraphs(document)
         if len(blocks) > MAX_DOCX_PARAGRAPHS:
             raise HTTPException(
                 status_code=400,
-                detail=f"Document trop volumineux ({len(blocks)} paragraphes, max {MAX_DOCX_PARAGRAPHS})",
+                detail=STRINGS["docx_too_many_paragraphs"].format(count=len(blocks), max_paragraphs=MAX_DOCX_PARAGRAPHS),
             )
         block_texts = ["".join(run.text for run in p.runs) for _, p, _ in blocks]
         indexed_texts = list(enumerate(block_texts))
@@ -3167,7 +3251,7 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
         log.warning("Échec du traitement DOCX après ouverture réussie : %s", exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce document Word est corrompu ou contient une structure invalide qui empêche son traitement.",
+            detail=STRINGS["docx_corrupt_structure"],
         ) from exc
 
     with _PENDING_JOBS_LOCK:
@@ -3204,25 +3288,19 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
             truncated = True
             break
         rendered = _render_highlighted_text(text, clusters_by_block.get(block_id, []))
-        label_html = f'<span class="doc-block-label">{html.escape(label)}</span>' if label != "corps" else ""
+        label_text = STRINGS.get(f"docx_block_label_{label}", label)
+        label_html = f'<span class="doc-block-label">{html.escape(label_text)}</span>' if label != "body" else ""
         blocks_html_parts.append(f'<div class="doc-block">{label_html}{rendered}</div>')
         rendered_count += 1
 
     limitation_note = (
         '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
-        'border-radius:4px;">⚠️ Les zones de texte, formes, objets incrustés et SmartArt de ce '
-        "document ne sont pas analysés par ce moteur (limite technique connue de python-docx) — "
-        "à vérifier manuellement si le document en contient. Les images incrustées ne sont pas "
-        "analysées non plus (aucune détection automatique de texte dans l'image), mais peuvent "
-        "être remplacées entièrement par un carré noir ci-dessous si nécessaire — contrairement "
-        "au PDF, il n'existe pas d'outil pour ne caviarder qu'une partie d'une image.</p>"
+        f'border-radius:4px;">{STRINGS["docx_limitation_warning"]}</p>'
     )
     if truncated:
         limitation_note += (
-            f'<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
-            f'border-radius:4px;">⚠️ Aperçu limité aux {MAX_REVIEW_ROWS} premiers paragraphes non '
-            f"vides — les suivants seront quand même entièrement analysés et caviardés à la "
-            f"finalisation, ils ne sont simplement pas affichés ici.</p>"
+            '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
+            f'border-radius:4px;">{STRINGS["docx_truncated_note"].format(max_rows=MAX_REVIEW_ROWS)}</p>'
         )
 
     images_html = _build_docx_images_review_section(document)
@@ -3245,7 +3323,7 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
     if total_cells > MAX_CSV_CELLS:
         raise HTTPException(
             status_code=400,
-            detail=f"Fichier CSV trop volumineux ({total_cells} cellules, max {MAX_CSV_CELLS})",
+            detail=STRINGS["csv_too_many_cells"].format(count=total_cells, max_cells=MAX_CSV_CELLS),
         )
 
     try:
@@ -3260,7 +3338,7 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
         log.warning("Échec du traitement CSV après lecture réussie : %s", exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce fichier CSV contient une structure invalide qui empêche son traitement.",
+            detail=STRINGS["csv_corrupt_structure"],
         ) from exc
 
     with _PENDING_JOBS_LOCK:
@@ -3299,11 +3377,10 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
     table_html = f'<table style="border-collapse:collapse; width:100%; font-size:0.9em;">{"".join(table_rows_html)}</table>'
 
     truncation_note = (
-        f'<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
-        f'border-radius:4px;">⚠️ Aperçu limité aux {MAX_REVIEW_ROWS} premières lignes sur '
-        f'{len(rows)} — les lignes au-delà de cet aperçu seront quand même entièrement '
-        f'analysées et caviardées à la finalisation, elles ne sont simplement pas affichées '
-        f"ici pour ne pas surcharger la page.</p>"
+        (
+            '<p style="color:#a15c00; font-size:0.85em; background:#fff8e6; padding:8px 12px; '
+            f'border-radius:4px;">{STRINGS["csv_truncated_note"].format(max_rows=MAX_REVIEW_ROWS, total_rows=len(rows))}</p>'
+        )
         if truncated else ""
     )
 
@@ -3342,7 +3419,7 @@ def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> di
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
         if job is None or job.get("user_email") != user:
-            raise HTTPException(status_code=404, detail="Job introuvable ou expiré")
+            raise HTTPException(status_code=404, detail=STRINGS["job_not_found_expired"])
         if pop:
             PENDING_JOBS.pop(job_id, None)
             metrics.PENDING_JOBS.set(len(PENDING_JOBS))
@@ -3358,7 +3435,7 @@ def preview_image(job_id: str, page_index: int, request: Request):
 
     if job.get("kind") == "image":
         if page_index != 0:
-            raise HTTPException(status_code=404, detail="Page introuvable")
+            raise HTTPException(status_code=404, detail=STRINGS["page_not_found"])
         # Original raw bytes (already validated in Phase 1 at detection
         # time): this is the pre-redaction PREVIEW, exactly like for PDF —
         # the actual redaction only happens at finalization.
@@ -3366,12 +3443,12 @@ def preview_image(job_id: str, page_index: int, request: Request):
         return Response(content=job["raw_image"], media_type=media_type)
 
     if job.get("kind") != "pdf":
-        raise HTTPException(status_code=400, detail="Aperçu image disponible uniquement pour les jobs PDF/image")
+        raise HTTPException(status_code=400, detail=STRINGS["image_preview_pdf_image_only"])
 
     doc = fitz.open(stream=job["raw_pdf"], filetype="pdf")
     try:
         if page_index < 0 or page_index >= len(doc):
-            raise HTTPException(status_code=404, detail="Page introuvable")
+            raise HTTPException(status_code=404, detail=STRINGS["page_not_found"])
 
         page = doc[page_index]
         _check_page_images_sane(page)
@@ -3385,7 +3462,7 @@ def preview_image(job_id: str, page_index: int, request: Request):
         log.warning("Échec du rendu de la page %s (job %s) : %s", page_index, job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Cette page contient une structure invalide qui empêche son aperçu.",
+            detail=STRINGS["page_preview_invalid_structure"],
         ) from exc
     finally:
         doc.close()
@@ -3493,7 +3570,7 @@ def _finalize_pdf_job(job: dict, job_id: str, excluded_set: set, manual_zones_da
         log.warning("Échec de la finalisation PDF (job %s) : %s", job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce PDF est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+            detail=STRINGS["pdf_finalize_corrupt"],
         ) from exc
     finally:
         doc.close()
@@ -3611,7 +3688,7 @@ def _finalize_image_job(job: dict, job_id: str, excluded_set: set, manual_zones_
         log.warning("Échec de la finalisation image (job %s) : %s", job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Cette image est corrompue ou contient une structure invalide qui empêche sa finalisation.",
+            detail=STRINGS["image_finalize_corrupt"],
         ) from exc
 
     img = _normalize_image_mode_for_editing(img)
@@ -3637,7 +3714,7 @@ def _finalize_image_job(job: dict, job_id: str, excluded_set: set, manual_zones_
         log.warning("Échec de la finalisation image (job %s) : %s", job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Cette image est corrompue ou contient une structure invalide qui empêche sa finalisation.",
+            detail=STRINGS["image_finalize_corrupt"],
         ) from exc
 
     return summary, output_path, manual_count
@@ -3678,7 +3755,7 @@ def _finalize_docx_job(job: dict, job_id: str, excluded_set: set, redacted_image
         log.warning("Échec de la finalisation DOCX (job %s) : %s", job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce document Word est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+            detail=STRINGS["docx_finalize_corrupt"],
         ) from exc
     return summary, output_path, image_count
 
@@ -3712,7 +3789,7 @@ def _finalize_csv_job(job: dict, job_id: str, excluded_set: set) -> tuple[dict, 
         log.warning("Échec de la finalisation CSV (job %s) : %s", job_id, exc)
         raise HTTPException(
             status_code=400,
-            detail="Ce fichier CSV est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+            detail=STRINGS["csv_finalize_corrupt"],
         ) from exc
     return summary, output_path, 0
 
@@ -3774,17 +3851,17 @@ async def finalize_document(
     if len(manual_zones_data) > MAX_MANUAL_ZONES:
         raise HTTPException(
             status_code=400,
-            detail=f"Trop de zones manuelles ({len(manual_zones_data)}, max {MAX_MANUAL_ZONES})",
+            detail=STRINGS["too_many_manual_zones"].format(count=len(manual_zones_data), max_zones=MAX_MANUAL_ZONES),
         )
     if len(excluded_cluster_ids) > MAX_EXCLUDED_IDS:
         raise HTTPException(
             status_code=400,
-            detail=f"Trop de zones exclues ({len(excluded_cluster_ids)}, max {MAX_EXCLUDED_IDS})",
+            detail=STRINGS["too_many_excluded_zones"].format(count=len(excluded_cluster_ids), max_ids=MAX_EXCLUDED_IDS),
         )
     if len(redacted_image_id_set) > MAX_DOCX_IMAGES:
         raise HTTPException(
             status_code=400,
-            detail=f"Trop d'images sélectionnées ({len(redacted_image_id_set)}, max {MAX_DOCX_IMAGES})",
+            detail=STRINGS["too_many_selected_images"].format(count=len(redacted_image_id_set), max_images=MAX_DOCX_IMAGES),
         )
 
     kind = job.get("kind", "pdf")
@@ -3798,7 +3875,7 @@ async def finalize_document(
     elif kind == "image":
         summary, output_path, manual_count = _finalize_image_job(job, job_id, excluded_set, manual_zones_data)
     else:  # pragma: no cover - defensive, should never happen
-        raise HTTPException(status_code=400, detail="Type de document inconnu")
+        raise HTTPException(status_code=400, detail=STRINGS["unknown_document_type"])
 
     total = sum(summary.values())
     excluded_count = len(excluded_cluster_ids)
@@ -3833,11 +3910,11 @@ async def finalize_document(
         rows = "".join(
             f"<tr><td>{entity_type}</td><td style='text-align:right'>{count}</td></tr>"
             for entity_type, count in sorted(summary.items())
-        ) or "<tr><td colspan='2'>Aucune entité caviardée</td></tr>"
+        ) or f"<tr><td colspan='2'>{STRINGS['no_entity_redacted']}</td></tr>"
 
         ttl_minutes = FILE_TTL_SECONDS // 60
         excluded_note = (
-            f"<p style='color:#555;'>{excluded_count} zone(s) exclue(s) manuellement lors de la révision.</p>"
+            f"<p style='color:#555;'>{STRINGS['excluded_zones_note'].format(count=excluded_count)}</p>"
             if excluded_count else ""
         )
 
@@ -3847,12 +3924,12 @@ async def finalize_document(
         # download is offered for these two formats.
         if kind == "pdf":
             preview_html = (
-                f'<h2>Aperçu (contrôle visuel)</h2>'
+                f'<h2>{STRINGS["preview_visual_check_heading"]}</h2>'
                 f'<iframe src="{download_url}" style="width:100%; height:900px; border:1px solid #ccc;"></iframe>'
             )
         elif kind == "image":
             preview_html = (
-                f'<h2>Aperçu (contrôle visuel)</h2>'
+                f'<h2>{STRINGS["preview_visual_check_heading"]}</h2>'
                 f'<img src="{download_url}" style="max-width:100%; border:1px solid #ccc;">'
             )
         else:
@@ -3860,19 +3937,19 @@ async def finalize_document(
 
         return HTMLResponse(f"""
         <!doctype html>
-        <html lang="fr">
-        <head><meta charset="utf-8"><title>Résultat - Obfusk8</title></head>
+        <html lang="{UI_LANG}">
+        <head><meta charset="utf-8"><title>{STRINGS["result_page_title"]}</title></head>
         <body style="font-family: sans-serif; max-width: 900px; margin: 40px auto;">
-          <p><a href="/">&larr; Anonymiser un autre document</a></p>
-          <h1>Document anonymisé</h1>
+          <p><a href="/">&larr; {STRINGS["anonymize_another_doc_link"]}</a></p>
+          <h1>{STRINGS["anonymized_document_heading"]}</h1>
 
           <p>
-            <strong>{total}</strong> élément(s) caviardé(s) au total.
+            {STRINGS["total_redacted_elements_text"].format(count=total)}
             <a href="{download_url}" download style="
                 display:inline-block; margin-left:1em; padding:8px 16px;
                 background:#0d6efd; color:white; text-decoration:none;
                 border-radius:4px;">
-              Télécharger le document anonymisé
+              {STRINGS["download_anonymized_button"]}
             </a>
           </p>
           {excluded_note}
@@ -3880,15 +3957,15 @@ async def finalize_document(
           <table style="border-collapse: collapse; margin-bottom: 24px;">
             <thead>
               <tr>
-                <th style="text-align:left; border-bottom:1px solid #ccc; padding:4px 12px 4px 0;">Type de donnée</th>
-                <th style="text-align:right; border-bottom:1px solid #ccc; padding:4px 0 4px 12px;">Occurrences</th>
+                <th style="text-align:left; border-bottom:1px solid #ccc; padding:4px 12px 4px 0;">{STRINGS["table_header_data_type"]}</th>
+                <th style="text-align:right; border-bottom:1px solid #ccc; padding:4px 0 4px 12px;">{STRINGS["table_header_occurrences"]}</th>
               </tr>
             </thead>
             <tbody>{rows}</tbody>
           </table>
 
           <p style="color:#555; font-size:0.9em;">
-            Le fichier sera automatiquement supprimé du serveur dans {ttl_minutes} minutes.
+            {STRINGS["file_auto_deleted_note"].format(minutes=ttl_minutes)}
           </p>
           {preview_html}
         </body>
@@ -3924,17 +4001,17 @@ def download(job_id: str):
     # job_id is a uuid4().hex (hexadecimal characters only), so
     # safe to use in a glob pattern without risk of path injection.
     if not re.fullmatch(r"[0-9a-f]{32}", job_id):
-        raise HTTPException(status_code=400, detail="Identifiant de job invalide")
+        raise HTTPException(status_code=400, detail=STRINGS["invalid_job_id"])
 
     matches = list(WORKDIR.glob(f"{job_id}-*-anonymise.*"))
     if not matches:
-        raise HTTPException(status_code=404, detail="Fichier introuvable ou déjà purgé")
+        raise HTTPException(status_code=404, detail=STRINGS["file_not_found_purged"])
     path = matches[0]
 
     extension = path.suffix.lower()
     media_type = _DOWNLOAD_MEDIA_TYPES.get(extension)
     if media_type is None:  # pragma: no cover - defensive, extension is always known in practice
-        raise HTTPException(status_code=500, detail="Format de fichier de sortie non reconnu")
+        raise HTTPException(status_code=500, detail=STRINGS["output_format_unrecognized"])
 
     # Rebuilds an explicit download name (document type +
     # short reference) without ever exposing the original file name.
@@ -3969,7 +4046,7 @@ def read_audit_log(n: int = 50):
             lines = f.readlines()[-n:]
     except OSError as exc:
         log.error("Lecture du journal d'audit impossible : %s", exc)
-        raise HTTPException(status_code=500, detail="Journal d'audit temporairement indisponible") from exc
+        raise HTTPException(status_code=500, detail=STRINGS["audit_log_unavailable"]) from exc
 
 
     entries = []
