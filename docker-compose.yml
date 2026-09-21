@@ -281,6 +281,10 @@ services:
     environment:
       - PRESIDIO_ANALYZER_URL=http://presidio-analyzer:3000
       - PRESIDIO_ANONYMIZER_URL=http://presidio-anonymizer:3000
+      # UI_LANG: interface language, must match one of the files present
+      # in app/i18n/ (currently "fr", "en") — see docs/traduire-interface.md.
+      # Falls back to French if the file is missing or unreadable.
+      - UI_LANG=fr
       - MAX_UPLOAD_MB=25
       - FILE_TTL_SECONDS=180
       - JOB_REVIEW_TTL_SECONDS=600

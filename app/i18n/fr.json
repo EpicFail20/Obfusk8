@@ -1,0 +1,118 @@
+{
+  "api_title": "Obfusk8 - Anonymiseur de documents - PDF/DOCX/CSV",
+
+  "error_400_title": "Requête invalide",
+  "error_404_title": "Introuvable",
+  "error_413_title": "Fichier trop volumineux",
+  "error_422_title": "Formulaire incomplet",
+  "error_502_title": "Service indisponible",
+  "error_generic_title": "Une erreur est survenue",
+  "back_to_home_link": "Retour à l'accueil",
+
+  "unauthorized_request": "Requête non autorisée",
+  "request_body_too_large": "Requête trop volumineuse (fichier limité à {max_mb} Mo)",
+  "detection_timeout": "Ce document est trop volumineux pour être analysé dans le temps imparti (max {max_seconds}s) — réduisez sa taille ou contactez l'administrateur.",
+
+  "docx_zip_bomb_entries": "Structure d'archive suspecte détectée (protection anti zip-bomb, {count} entrées, max {max_entries}).",
+  "docx_invalid_corrupt": "Fichier ZIP/DOCX invalide ou corrompu",
+  "docx_not_a_word_doc": "Ce fichier n'est pas un document Word (.docx) valide.",
+  "docx_macro_rejected": "Les documents avec macros (.docm) ne sont pas acceptés.",
+  "docx_zip_bomb_uncompressed": "Document trop volumineux une fois décompressé (protection anti zip-bomb, max {max_mb} Mo).",
+  "docx_zip_bomb_generic": "Structure d'archive suspecte détectée (protection anti zip-bomb).",
+
+  "unknown_file_format": "Format de fichier non reconnu (seuls PDF, DOCX, CSV, PNG et JPEG sont acceptés).",
+  "csv_encoding_unrecognized": "Encodage de fichier CSV non reconnu (UTF-8 ou Windows-1252 attendu).",
+  "csv_too_many_rows": "Fichier CSV trop volumineux ({count}+ lignes, max {max_rows})",
+
+  "av_service_unavailable": "Le service d'analyse antivirus est indisponible, veuillez réessayer plus tard.",
+  "av_threat_detected": "Menace détectée par l'antivirus ({threat}) — fichier rejeté.",
+  "av_unknown_threat": "menace inconnue",
+
+  "page_invalid_image_dimensions": "Cette page contient une image aux dimensions invalides.",
+  "image_dimension_limit_bomb": "Cette image dépasse la limite de dimensions autorisée (protection anti-bombe de décompression).",
+  "image_unreadable": "Image illisible ou corrompue.",
+  "image_dimension_limit_pixels": "Cette image dépasse la limite de dimensions autorisée (max {max_pixels} pixels).",
+  "image_format_unrecognized": "Format d'image non reconnu (seuls PNG et JPEG sont acceptés).",
+  "ocr_engine_unavailable": "Le moteur OCR est indisponible, veuillez réessayer plus tard.",
+  "ocr_analysis_failed": "Cette image n'a pas pu être analysée par l'OCR.",
+  "ocr_timeout": "Cette image est trop complexe pour être analysée par l'OCR dans le temps imparti (max {max_seconds}s).",
+
+  "docx_block_label_table": "tableau",
+  "docx_block_label_header": "en-tête",
+  "docx_block_label_footer": "pied de page",
+  "docx_block_label_footnote": "note de bas de page",
+  "docx_block_label_endnote": "note de fin",
+
+  "docx_image_preview_unavailable": "Aperçu indisponible<br>({size_kb} Ko)",
+  "docx_image_redact_label": "Caviarder",
+  "docx_image_size_suffix": "({content_type}, {size_kb} Ko)",
+  "docx_images_found_intro": "<strong>{count}</strong> image(s) incrustée(s) trouvée(s) dans ce document (corps, en-têtes/pieds de page, notes) — non analysées automatiquement (voir avertissement ci-dessus). Cochez celles à remplacer par un carré noir avant de valider.",
+
+  "review_page_title": "Révision - Obfusk8",
+  "restart_link": "Recommencer",
+  "review_zone_count_text": "<strong>{count}</strong> zone(s) détectée(s), surlignées en rouge. Cliquez sur une zone pour <strong>l'exclure</strong> du caviardage (elle passera en vert pointillé) — si la même personne apparaît ailleurs dans le document, toutes ses occurrences seront exclues en même temps.",
+  "confirm_and_redact_button": "Valider et caviarder",
+
+  "add_manual_zone_button": "✏️ Ajouter une zone à masquer",
+  "manual_mode_active_button": "✅ Mode ajout actif (clique-glisse sur le document)",
+  "manual_zone_tooltip": "Zone manuelle - cliquez pour supprimer",
+
+  "upload_too_large": "Fichier trop volumineux ({size_mb} Mo, max {max_mb} Mo)",
+  "too_many_pending_jobs": "Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
+  "pdf_unreadable": "PDF illisible ou corrompu",
+  "pdf_password_protected": "Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
+  "pdf_too_many_pages": "Ce PDF contient trop de pages ({page_count}, max {max_pages}) — une taille de fichier faible ne garantit pas un nombre de pages raisonnable.",
+  "pdf_corrupt_structure": "Ce PDF est corrompu ou contient une structure invalide qui empêche son traitement.",
+
+  "image_corrupt_truncated": "Image corrompue ou tronquée, impossible de la décoder entièrement.",
+  "image_invalid_structure": "Cette image contient une structure invalide qui empêche son traitement.",
+
+  "docx_unreadable": "Document Word illisible ou corrompu",
+  "docx_too_many_paragraphs": "Document trop volumineux ({count} paragraphes, max {max_paragraphs})",
+  "docx_corrupt_structure": "Ce document Word est corrompu ou contient une structure invalide qui empêche son traitement.",
+  "docx_limitation_warning": "⚠️ Les zones de texte, formes, objets incrustés et SmartArt de ce document ne sont pas analysés par ce moteur (limite technique connue de python-docx) — à vérifier manuellement si le document en contient. Les images incrustées ne sont pas analysées non plus (aucune détection automatique de texte dans l'image), mais peuvent être remplacées entièrement par un carré noir ci-dessous si nécessaire — contrairement au PDF, il n'existe pas d'outil pour ne caviarder qu'une partie d'une image.",
+  "docx_truncated_note": "⚠️ Aperçu limité aux {max_rows} premiers paragraphes non vides — les suivants seront quand même entièrement analysés et caviardés à la finalisation, ils ne sont simplement pas affichés ici.",
+
+  "csv_too_many_cells": "Fichier CSV trop volumineux ({count} cellules, max {max_cells})",
+  "csv_corrupt_structure": "Ce fichier CSV contient une structure invalide qui empêche son traitement.",
+  "csv_truncated_note": "⚠️ Aperçu limité aux {max_rows} premières lignes sur {total_rows} — les lignes au-delà de cet aperçu seront quand même entièrement analysées et caviardées à la finalisation, elles ne sont simplement pas affichées ici pour ne pas surcharger la page.",
+
+  "job_not_found_expired": "Job introuvable ou expiré",
+  "page_not_found": "Page introuvable",
+  "image_preview_pdf_image_only": "Aperçu image disponible uniquement pour les jobs PDF/image",
+  "page_preview_invalid_structure": "Cette page contient une structure invalide qui empêche son aperçu.",
+
+  "pdf_finalize_corrupt": "Ce PDF est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+  "image_finalize_corrupt": "Cette image est corrompue ou contient une structure invalide qui empêche sa finalisation.",
+  "docx_finalize_corrupt": "Ce document Word est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+  "csv_finalize_corrupt": "Ce fichier CSV est corrompu ou contient une structure invalide qui empêche sa finalisation.",
+
+  "too_many_manual_zones": "Trop de zones manuelles ({count}, max {max_zones})",
+  "too_many_excluded_zones": "Trop de zones exclues ({count}, max {max_ids})",
+  "too_many_selected_images": "Trop d'images sélectionnées ({count}, max {max_images})",
+  "unknown_document_type": "Type de document inconnu",
+
+  "no_entity_redacted": "Aucune entité caviardée",
+  "excluded_zones_note": "{count} zone(s) exclue(s) manuellement lors de la révision.",
+  "preview_visual_check_heading": "Aperçu (contrôle visuel)",
+  "result_page_title": "Résultat - Obfusk8",
+  "anonymize_another_doc_link": "Anonymiser un autre document",
+  "anonymized_document_heading": "Document anonymisé",
+  "total_redacted_elements_text": "<strong>{count}</strong> élément(s) caviardé(s) au total.",
+  "download_anonymized_button": "Télécharger le document anonymisé",
+  "table_header_data_type": "Type de donnée",
+  "table_header_occurrences": "Occurrences",
+  "file_auto_deleted_note": "Le fichier sera automatiquement supprimé du serveur dans {minutes} minutes.",
+
+  "invalid_job_id": "Identifiant de job invalide",
+  "file_not_found_purged": "Fichier introuvable ou déjà purgé",
+  "output_format_unrecognized": "Format de fichier de sortie non reconnu",
+  "audit_log_unavailable": "Journal d'audit temporairement indisponible",
+
+  "theme_none_option": "Aucun (détection générique uniquement)",
+  "home_page_title": "Obfusk8 - Anonymiseur de documents",
+  "home_page_heading": "Obfusk8 - Anonymiseur de documents (PDF, DOCX, CSV, image)",
+  "home_page_intro": "Déposez un document. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.",
+  "theme_select_label": "Type de document :",
+  "analyze_button": "Analyser"
+}

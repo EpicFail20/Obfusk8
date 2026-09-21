@@ -1347,3 +1347,109 @@ def test_gateway_401_enveloppe_par_les_entetes_de_securite(monkeypatch):
     assert status == 401
     assert headers.get("cache-control") == "no-store"
     assert headers.get("x-content-type-options") == "nosniff"
+
+
+# ---------------------------------------------------------------------------
+# i18n (app/i18n/*.json) — loading, fallback, UI_LANG
+# ---------------------------------------------------------------------------
+
+def test_i18n_fr_json_loads_correctly():
+    """The real app/i18n/fr.json loads and is used as-is when UI_LANG=fr
+    (the default, unless the test environment overrides it)."""
+    strings = main._load_strings()
+    assert strings["analyze_button"] == "Analyser"
+    assert strings["home_page_title"] == "Obfusk8 - Anonymiseur de documents"
+
+
+def test_i18n_en_json_loads_correctly(monkeypatch):
+    """The real app/i18n/en.json loads correctly under UI_LANG=en."""
+    monkeypatch.setattr(main, "UI_LANG", "en")
+    strings = main._load_strings()
+    assert strings["analyze_button"] == "Analyze"
+    assert strings["home_page_title"] == "Obfusk8 - Document Anonymizer"
+
+
+def test_i18n_fr_et_en_ont_exactement_les_memes_cles():
+    """fr.json is the mandatory fallback base (see _load_strings): a key
+    present in en.json but missing from fr.json would never be reachable
+    as a fallback target, and a key missing from en.json falls back
+    silently — but both files should stay in sync so nothing is
+    accidentally left untranslated forever."""
+    fr = json.loads((main.I18N_DIR / "fr.json").read_text(encoding="utf-8"))
+    en = json.loads((main.I18N_DIR / "en.json").read_text(encoding="utf-8"))
+    assert fr.keys() == en.keys()
+
+
+def test_i18n_cle_manquante_dans_la_langue_cible_replie_sur_le_francais(tmp_path, monkeypatch):
+    i18n_dir = tmp_path / "i18n"
+    i18n_dir.mkdir()
+    (i18n_dir / "fr.json").write_text(json.dumps({"a": "Bonjour", "b": "Salut"}), encoding="utf-8")
+    (i18n_dir / "xx.json").write_text(json.dumps({"a": "Hello"}), encoding="utf-8")  # "b" missing
+    monkeypatch.setattr(main, "I18N_DIR", i18n_dir)
+    monkeypatch.setattr(main, "UI_LANG", "xx")
+
+    strings = main._load_strings()
+
+    assert strings["a"] == "Hello"
+    assert strings["b"] == "Salut"  # silent fallback, never a raw key or empty text
+
+
+def test_i18n_langue_inconnue_replie_entierement_sur_le_francais(tmp_path, monkeypatch):
+    i18n_dir = tmp_path / "i18n"
+    i18n_dir.mkdir()
+    (i18n_dir / "fr.json").write_text(json.dumps({"a": "Bonjour"}), encoding="utf-8")
+    monkeypatch.setattr(main, "I18N_DIR", i18n_dir)
+    monkeypatch.setattr(main, "UI_LANG", "zz")  # zz.json does not exist at all
+
+    strings = main._load_strings()
+
+    assert strings == {"a": "Bonjour"}
+
+
+def test_i18n_fichier_langue_illisible_replie_entierement_sur_le_francais(tmp_path, monkeypatch):
+    """A malformed JSON file for the target language must never crash the
+    application (same fail-safe logic as the rest of the project)."""
+    i18n_dir = tmp_path / "i18n"
+    i18n_dir.mkdir()
+    (i18n_dir / "fr.json").write_text(json.dumps({"a": "Bonjour"}), encoding="utf-8")
+    (i18n_dir / "xx.json").write_text("{ not valid json", encoding="utf-8")
+    monkeypatch.setattr(main, "I18N_DIR", i18n_dir)
+    monkeypatch.setattr(main, "UI_LANG", "xx")
+
+    strings = main._load_strings()
+
+    assert strings == {"a": "Bonjour"}
+
+
+def test_i18n_theme_labels_chargent_et_replient_sur_le_francais(tmp_path, monkeypatch):
+    i18n_dir = tmp_path / "i18n"
+    i18n_dir.mkdir()
+    (i18n_dir / "themes.json").write_text(
+        json.dumps({"compta": {"fr": "Comptabilité", "en": "Accounting"}, "it": {"fr": "IT"}}),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(main, "I18N_DIR", i18n_dir)
+
+    monkeypatch.setattr(main, "UI_LANG", "en")
+    labels = main._load_theme_labels()
+    assert labels["compta"] == "Accounting"
+    assert labels["it"] == "IT"  # missing "en" entry -> falls back to "fr"
+
+
+def test_i18n_page_accueil_texte_different_selon_ui_lang(monkeypatch):
+    """End-to-end check requested by the audit: the home page
+    (formulaire d'accueil) must actually render different text for
+    UI_LANG=fr vs UI_LANG=en, using the real i18n files."""
+    html_fr = main.upload_form()
+    assert "Analyser" in html_fr
+    assert 'lang="fr"' in html_fr
+    assert "Analyze" not in html_fr
+
+    en_strings = json.loads((main.I18N_DIR / "en.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(main, "STRINGS", en_strings)
+    monkeypatch.setattr(main, "UI_LANG", "en")
+
+    html_en = main.upload_form()
+    assert "Analyze" in html_en
+    assert 'lang="en"' in html_en
+    assert html_en != html_fr

@@ -1,0 +1,118 @@
+{
+  "api_title": "Obfusk8 - Document Anonymizer - PDF/DOCX/CSV",
+
+  "error_400_title": "Invalid request",
+  "error_404_title": "Not found",
+  "error_413_title": "File too large",
+  "error_422_title": "Incomplete form",
+  "error_502_title": "Service unavailable",
+  "error_generic_title": "An error occurred",
+  "back_to_home_link": "Back to home",
+
+  "unauthorized_request": "Unauthorized request",
+  "request_body_too_large": "Request too large (file limited to {max_mb} MB)",
+  "detection_timeout": "This document is too large to be analyzed within the allotted time (max {max_seconds}s) — reduce its size or contact the administrator.",
+
+  "docx_zip_bomb_entries": "Suspicious archive structure detected (anti zip-bomb protection, {count} entries, max {max_entries}).",
+  "docx_invalid_corrupt": "Invalid or corrupted ZIP/DOCX file",
+  "docx_not_a_word_doc": "This file is not a valid Word document (.docx).",
+  "docx_macro_rejected": "Documents with macros (.docm) are not accepted.",
+  "docx_zip_bomb_uncompressed": "Document too large once decompressed (anti zip-bomb protection, max {max_mb} MB).",
+  "docx_zip_bomb_generic": "Suspicious archive structure detected (anti zip-bomb protection).",
+
+  "unknown_file_format": "Unrecognized file format (only PDF, DOCX, CSV, PNG and JPEG are accepted).",
+  "csv_encoding_unrecognized": "Unrecognized CSV file encoding (UTF-8 or Windows-1252 expected).",
+  "csv_too_many_rows": "CSV file too large ({count}+ rows, max {max_rows})",
+
+  "av_service_unavailable": "The antivirus scanning service is unavailable, please try again later.",
+  "av_threat_detected": "Threat detected by the antivirus ({threat}) — file rejected.",
+  "av_unknown_threat": "unknown threat",
+
+  "page_invalid_image_dimensions": "This page contains an image with invalid dimensions.",
+  "image_dimension_limit_bomb": "This image exceeds the allowed dimension limit (decompression-bomb protection).",
+  "image_unreadable": "Unreadable or corrupted image.",
+  "image_dimension_limit_pixels": "This image exceeds the allowed dimension limit (max {max_pixels} pixels).",
+  "image_format_unrecognized": "Unrecognized image format (only PNG and JPEG are accepted).",
+  "ocr_engine_unavailable": "The OCR engine is unavailable, please try again later.",
+  "ocr_analysis_failed": "This image could not be analyzed by OCR.",
+  "ocr_timeout": "This image is too complex to be analyzed by OCR within the allotted time (max {max_seconds}s).",
+
+  "docx_block_label_table": "table",
+  "docx_block_label_header": "header",
+  "docx_block_label_footer": "footer",
+  "docx_block_label_footnote": "footnote",
+  "docx_block_label_endnote": "endnote",
+
+  "docx_image_preview_unavailable": "Preview unavailable<br>({size_kb} KB)",
+  "docx_image_redact_label": "Redact",
+  "docx_image_size_suffix": "({content_type}, {size_kb} KB)",
+  "docx_images_found_intro": "<strong>{count}</strong> embedded image(s) found in this document (body, headers/footers, notes) — not automatically analyzed (see warning above). Check the ones to replace with a black square before validating.",
+
+  "review_page_title": "Review - Obfusk8",
+  "restart_link": "Start over",
+  "review_zone_count_text": "<strong>{count}</strong> zone(s) detected, highlighted in red. Click a zone to <strong>exclude it</strong> from redaction (it will turn dashed green) — if the same person appears elsewhere in the document, all their occurrences will be excluded at the same time.",
+  "confirm_and_redact_button": "Confirm and redact",
+
+  "add_manual_zone_button": "✏️ Add a zone to mask",
+  "manual_mode_active_button": "✅ Add mode active (click-drag on the document)",
+  "manual_zone_tooltip": "Manual zone - click to remove",
+
+  "upload_too_large": "File too large ({size_mb} MB, max {max_mb} MB)",
+  "too_many_pending_jobs": "Too many documents currently pending review, please try again in a few minutes",
+  "pdf_unreadable": "Unreadable or corrupted PDF",
+  "pdf_password_protected": "This PDF is password-protected. Please remove the protection (or provide an unprotected version) before analyzing it.",
+  "pdf_too_many_pages": "This PDF has too many pages ({page_count}, max {max_pages}) — a small file size does not guarantee a reasonable page count.",
+  "pdf_corrupt_structure": "This PDF is corrupted or has an invalid structure that prevents processing it.",
+
+  "image_corrupt_truncated": "Corrupted or truncated image, unable to fully decode it.",
+  "image_invalid_structure": "This image has an invalid structure that prevents processing it.",
+
+  "docx_unreadable": "Unreadable or corrupted Word document",
+  "docx_too_many_paragraphs": "Document too large ({count} paragraphs, max {max_paragraphs})",
+  "docx_corrupt_structure": "This Word document is corrupted or has an invalid structure that prevents processing it.",
+  "docx_limitation_warning": "⚠️ Text boxes, shapes, embedded objects and SmartArt in this document are not analyzed by this engine (known technical limitation of python-docx) — check manually if the document contains any. Embedded images are not analyzed either (no automatic text detection in the image), but can be entirely replaced with a black square below if needed — unlike PDF, there is no tool to redact only part of an image.",
+  "docx_truncated_note": "⚠️ Preview limited to the first {max_rows} non-empty paragraphs — the rest will still be fully analyzed and redacted at finalization, they are simply not displayed here.",
+
+  "csv_too_many_cells": "CSV file too large ({count} cells, max {max_cells})",
+  "csv_corrupt_structure": "This CSV file has an invalid structure that prevents processing it.",
+  "csv_truncated_note": "⚠️ Preview limited to the first {max_rows} rows out of {total_rows} — rows beyond this preview will still be fully analyzed and redacted at finalization, they are simply not displayed here to avoid overloading the page.",
+
+  "job_not_found_expired": "Job not found or expired",
+  "page_not_found": "Page not found",
+  "image_preview_pdf_image_only": "Image preview available only for PDF/image jobs",
+  "page_preview_invalid_structure": "This page has an invalid structure that prevents its preview.",
+
+  "pdf_finalize_corrupt": "This PDF is corrupted or has an invalid structure that prevents its finalization.",
+  "image_finalize_corrupt": "This image is corrupted or has an invalid structure that prevents its finalization.",
+  "docx_finalize_corrupt": "This Word document is corrupted or has an invalid structure that prevents its finalization.",
+  "csv_finalize_corrupt": "This CSV file is corrupted or has an invalid structure that prevents its finalization.",
+
+  "too_many_manual_zones": "Too many manual zones ({count}, max {max_zones})",
+  "too_many_excluded_zones": "Too many excluded zones ({count}, max {max_ids})",
+  "too_many_selected_images": "Too many selected images ({count}, max {max_images})",
+  "unknown_document_type": "Unknown document type",
+
+  "no_entity_redacted": "No entity redacted",
+  "excluded_zones_note": "{count} zone(s) manually excluded during review.",
+  "preview_visual_check_heading": "Preview (visual check)",
+  "result_page_title": "Result - Obfusk8",
+  "anonymize_another_doc_link": "Anonymize another document",
+  "anonymized_document_heading": "Anonymized document",
+  "total_redacted_elements_text": "<strong>{count}</strong> element(s) redacted in total.",
+  "download_anonymized_button": "Download the anonymized document",
+  "table_header_data_type": "Data type",
+  "table_header_occurrences": "Occurrences",
+  "file_auto_deleted_note": "The file will be automatically deleted from the server in {minutes} minutes.",
+
+  "invalid_job_id": "Invalid job identifier",
+  "file_not_found_purged": "File not found or already purged",
+  "output_format_unrecognized": "Unrecognized output file format",
+  "audit_log_unavailable": "Audit log temporarily unavailable",
+
+  "theme_none_option": "None (generic detection only)",
+  "home_page_title": "Obfusk8 - Document Anonymizer",
+  "home_page_heading": "Obfusk8 - Document Anonymizer (PDF, DOCX, CSV, image)",
+  "home_page_intro": "Upload a document. You'll be able to review and adjust the detected zones before final redaction.",
+  "theme_select_label": "Document type:",
+  "analyze_button": "Analyze"
+}
