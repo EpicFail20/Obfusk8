@@ -38,8 +38,8 @@ Self-hosted anonymization tool for documents (PDF, DOCX, CSV and PNG/JPEG images
 ## Quick start
 
 ```bash
-git clone https://github.com/EpicFail20/0bfusk8.git
-cd 0bfusk8
+git clone https://github.com/EpicFail20/Obfusk8.git
+cd Obfusk8
 
 cp .env.example .env
 # edit .env with your own values (see the Configuration section below)
