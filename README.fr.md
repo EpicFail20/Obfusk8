@@ -38,8 +38,8 @@ Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-héb
 ## Démarrage rapide
 
 ```bash
-git clone https://github.com/EpicFail20/0bfusk8.git
-cd 0bfusk8
+git clone https://github.com/EpicFail20/Obfusk8.git
+cd Obfusk8
 
 cp .env.example .env
 # éditez .env avec vos propres valeurs (voir section Configuration ci-dessous)
