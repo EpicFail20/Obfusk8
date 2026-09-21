@@ -234,7 +234,7 @@ services:
   # Application (frontend + API)
   # -------------------------------------------------------------------------
   app:
-    image: ghcr.io/epicfail20/obfusk8-app:latest
+    image: ghcr.io/epicfail20/obfusk8-app:main
     build: ./app
     restart: unless-stopped
     logging:
