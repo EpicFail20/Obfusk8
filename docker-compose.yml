@@ -234,7 +234,7 @@ services:
   # Application (frontend + API)
   # -------------------------------------------------------------------------
   app:
-    image: ghcr.io/epicfail20/Obfusk8-app:latest
+    image: ghcr.io/epicfail20/obfusk8-app:latest
     build: ./app
     restart: unless-stopped
     logging:
@@ -427,7 +427,7 @@ services:
   # PII detection engine
   # -------------------------------------------------------------------------
   presidio-analyzer:
-    image: ghcr.io/epicfail20/Obfusk8-presidio-analyzer:latest
+    image: ghcr.io/epicfail20/obfusk8-presidio-analyzer:latest
     build: ./presidio/analyzer-build
     restart: unless-stopped
     logging:
