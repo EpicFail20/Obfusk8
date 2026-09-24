@@ -77,6 +77,7 @@ from lxml import etree
 from PIL import Image, ImageDraw, UnidentifiedImageError as PILUnidentifiedImageError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from branding import install_branding
 from supervision import Alert, AlertSeverity, get_alert_sink
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -864,6 +865,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=STRINGS["api_title"], lifespan=lifespan)
+install_branding(app)
 
 ERROR_TITLES = {
     400: STRINGS["error_400_title"],

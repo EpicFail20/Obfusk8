@@ -37,6 +37,7 @@ COPY main.py .
 COPY antivirus.py .
 COPY metrics.py .
 COPY supervision.py .
+COPY branding.py .
 COPY themes/ ./themes/
 COPY i18n/ ./i18n/
 COPY tests/ ./tests/
