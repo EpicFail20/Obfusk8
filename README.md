@@ -105,7 +105,7 @@ Le comportement de détection est piloté par des **thèmes** (dossier `themes/`
 
 ## Sécurité
 
-Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.md`](./SECURITE.md).
+Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.md`](./SECURITE.fr.md).
 
 Si vous découvrez une vulnérabilité, merci de la signaler de façon responsable plutôt que de la publier directement — voir [`SECURITE.md#signaler-une-vulnérabilité`](./SECURITE.md#signaler-une-vulnérabilité).
 
