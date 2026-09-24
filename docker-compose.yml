@@ -284,17 +284,18 @@ services:
       # UI_LANG: interface language, must match one of the files present
       # in app/i18n/ (currently "fr", "en") — see docs/traduire-interface.md.
       # Falls back to French if the file is missing or unreadable.
-      - UI_LANG=fr
-      - MAX_UPLOAD_MB=25
-      - FILE_TTL_SECONDS=180
-      - JOB_REVIEW_TTL_SECONDS=600
-      - MAX_PDF_PAGES=70
-      - MAX_DOCX_PARAGRAPHS=5000
-      - MAX_DOCX_UNCOMPRESSED_MB=200
-      - MAX_DOCX_ZIP_RATIO=100
-      - MAX_CSV_ROWS=20000
-      - MAX_CSV_CELLS=5000
-      - MAX_CSV_FIELD_CHARS=100000
+      # Configurable via .env (see env.example).
+      - UI_LANG=${UI_LANG:-fr}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-25}
+      - FILE_TTL_SECONDS=${FILE_TTL_SECONDS:-180}
+      - JOB_REVIEW_TTL_SECONDS=${JOB_REVIEW_TTL_SECONDS:-600}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-70}
+      - MAX_DOCX_PARAGRAPHS=${MAX_DOCX_PARAGRAPHS:-5000}
+      - MAX_DOCX_UNCOMPRESSED_MB=${MAX_DOCX_UNCOMPRESSED_MB:-200}
+      - MAX_DOCX_ZIP_RATIO=${MAX_DOCX_ZIP_RATIO:-100}
+      - MAX_CSV_ROWS=${MAX_CSV_ROWS:-20000}
+      - MAX_CSV_CELLS=${MAX_CSV_CELLS:-5000}
+      - MAX_CSV_FIELD_CHARS=${MAX_CSV_FIELD_CHARS:-100000}
       # IMPORTANT: the score CANNOT distinguish a real name from an
       # ordinary administrative word — both share the same fixed score
       # (0.85) assigned by Presidio's spaCy recognizer, which does not
