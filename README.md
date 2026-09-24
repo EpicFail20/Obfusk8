@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo-badge.svg" width="120" alt="Obfusk8"></p>
+
 # Obfusk8 — anonymisation automatique de documents
 
 🇫🇷 Français | 🇬🇧 [English](./README.en.md)
