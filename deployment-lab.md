@@ -1,5 +1,7 @@
 # Anonymizer - lab deployment on a Docker VM (Proxmox)
 
+🇬🇧 English | 🇫🇷 [Français](./deploiement-lab.md)
+
 This guide assumes a **completely fresh** install, on a VM that has never run this project before. Every step exists because a real from-scratch test tripped over it — follow them in order, without skipping any, even the ones that look obvious.
 
 ## 0. Proxmox VM prerequisites — check BEFORE starting anything
