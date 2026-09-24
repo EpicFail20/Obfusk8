@@ -993,7 +993,7 @@ _EXPECTED_SECURITY_HEADERS = {
 }
 
 
-def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps():
+def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps(monkeypatch):
     """
     A Content-Length beyond the cap must be rejected BEFORE any body
     read: zero chunks consumed. Without this safeguard, the entire body
@@ -1001,6 +1001,7 @@ def test_upload_content_length_excessif_rejete_413_sans_lire_le_corps():
     before the MAX_UPLOAD_MB check — a single upload was enough to kill
     the container via OOM (reproduced: 700 MB chunked -> exit 137).
     """
+    monkeypatch.setattr(main, "GATEWAY_SECRET", "")
     huge = 200 * 1024 * 1024
     status, headers, body, consumed = _asgi_request(
         "POST", "/api/detect",
@@ -1023,6 +1024,7 @@ def test_upload_chunke_sans_content_length_interrompu_au_plafond(monkeypatch):
     without consuming the rest of the body, and the response is a clean
     413 (not a generic 400 "error parsing the body", nor a 500).
     """
+    monkeypatch.setattr(main, "GATEWAY_SECRET", "")
     monkeypatch.setattr(main, "MAX_REQUEST_BODY_BYTES", 64 * 1024)
     chunk = b"\0" * (16 * 1024)
     body = _multipart_file_body(b"\0" * (256 * 1024))
@@ -1044,6 +1046,7 @@ def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
     page, which carries the security headers — including no-store,
     essential on this page which displays the detected content IN THE
     CLEAR for review."""
+    monkeypatch.setattr(main, "GATEWAY_SECRET", "")
     monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
     body = _multipart_file_body(b"nom,ville\nJean Dupont,Paris\n")
     status, headers, resp_body, consumed = _asgi_request(
@@ -1064,10 +1067,11 @@ def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
             main.PENDING_JOBS.clear()
 
 
-def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite():
+def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite(monkeypatch):
     """Headers must also cover the error responses produced by
     http_exception_handler (here a 404 from /api/finalize for an unknown
     job)."""
+    monkeypatch.setattr(main, "GATEWAY_SECRET", "")
     form = b"job_id=00000000000000000000000000000000"
     status, headers, _, _ = _asgi_request(
         "POST", "/api/finalize",
