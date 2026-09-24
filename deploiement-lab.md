@@ -1,5 +1,7 @@
 # Anonymiseur - déploiement lab sur VM Docker (Proxmox)
 
+🇫🇷 Français | 🇬🇧 [English](./deployment-lab.md)
+
 Ce guide part du principe d'une installation **entièrement neuve**, sur une VM qui n'a jamais fait tourner ce projet. Chaque étape existe parce qu'un test réel "from scratch" a buté dessus — suis-les dans l'ordre, sans en sauter aucune, même celles qui semblent évidentes.
 
 ## 0. Prérequis VM Proxmox — à vérifier AVANT de démarrer quoi que ce soit
