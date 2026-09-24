@@ -38,8 +38,8 @@ Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-héb
 ## Démarrage rapide
 
 ```bash
-git clone https://github.com/EpicFail20/Obfusk8.git
-cd Obfusk8
+git clone https://github.com/EpicFail20/obfusk8.git
+cd obfusk8
 
 cp .env.example .env
 # éditez .env avec vos propres valeurs (voir section Configuration ci-dessous)
@@ -117,7 +117,7 @@ Si vous découvrez une vulnérabilité, merci de la signaler de façon responsab
 
 ## Mises à jour et versions
 
-Ce projet suit le [versionnage sémantique](https://semver.org/lang/fr/). Consultez le [`CHANGELOG.md`](./CHANGELOG.md) et les [Releases GitHub](../../releases) pour l'historique des versions. Les images Docker sont publiées et taguées automatiquement à chaque release (`ghcr.io/epicfail20/0bfusk8:vX.Y.Z`).
+Ce projet suit le [versionnage sémantique](https://semver.org/lang/fr/). Consultez le [`CHANGELOG.md`](./CHANGELOG.md) et les [Releases GitHub](../../releases) pour l'historique des versions. Les images Docker sont publiées et taguées automatiquement à chaque release (`ghcr.io/epicfail20/obfusk8:vX.Y.Z`).
 
 ## Licence
 
