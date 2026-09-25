@@ -81,6 +81,19 @@
       ],
       "context": [],
       "supported_entity": "PRIVATE_KEY"
+    },
+    {
+      "name": "ShellPromptUserHostRecognizer",
+      "supported_language": "fr",
+      "patterns": [
+        {
+          "name": "prompt shell utilisateur@hostname (suivi de : $ # >)",
+          "regex": "\\b[\\w-]{1,32}@[\\w-]{1,64}(?=[:$#>])",
+          "score": 0.6
+        }
+      ],
+      "context": ["ssh", "shell", "terminal", "prompt", "root"],
+      "supported_entity": "SHELL_USER_HOST"
     }
   ]
 }
