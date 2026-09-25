@@ -91,6 +91,60 @@ def test_iep_pattern_rejects_invalid_examples(text):
     assert re.search(regex, text) is None, f"should not have matched: {text!r}"
 
 
+SHELL_PROMPT_PATTERN_NAME = "prompt shell utilisateur@hostname (suivi de : $ # >)"
+
+SHELL_PROMPT_SHOULD_MATCH = [
+    ("alice@devbox:~$ sudo tcpdump", "alice@devbox"),
+    ("root@srv-web01:/var/log# tail", "root@srv-web01"),
+    ("admin@fw-edge-02> show running-config", "admin@fw-edge-02"),
+    ("deploy@ci_runner$ ./build.sh", "deploy@ci_runner"),
+]
+SHELL_PROMPT_SHOULD_NOT_MATCH = [
+    "écrivez à contact@exemple.fr dans la journée",   # ordinary email: EMAIL_ADDRESS's job
+    "Contact : jean.dupont@hopital-paris.fr, tél.",
+    "Mail: admin@exemple.com: merci",                 # prompt char after the TLD, not the host
+    "ssh root@10.0.0.5 -i id_rsa",                    # no prompt char after the host
+]
+
+
+@pytest.mark.parametrize("text,expected", SHELL_PROMPT_SHOULD_MATCH)
+def test_shell_prompt_pattern_matches_prompts(text, expected):
+    regex = _get_pattern_regex("it", SHELL_PROMPT_PATTERN_NAME)
+    match = re.search(regex, text)
+    assert match is not None and match.group(0) == expected
+
+
+@pytest.mark.parametrize("text", SHELL_PROMPT_SHOULD_NOT_MATCH)
+def test_shell_prompt_pattern_rejects_emails_and_non_prompts(text):
+    regex = _get_pattern_regex("it", SHELL_PROMPT_PATTERN_NAME)
+    assert re.search(regex, text) is None, f"should not have matched: {text!r}"
+
+
+@pytest.mark.parametrize(
+    "pathological",
+    [
+        "a@" * 100_000,                                     # many "@", never a prompt char
+        "_-@" * 66_666,
+        ("x" * 31 + "@" + "y" * 63 + ".") * 2_000,          # max bounded lengths, then a miss
+        "a" * 100_000 + "@" + "b" * 100_000 + ".",          # both sides beyond their bounds
+    ],
+    ids=["a@-repete", "_-@-repete", "bornes-max-puis-echec", "au-dela-des-bornes"],
+)
+def test_shell_prompt_pattern_linear_on_pathological_input(pathological):
+    # Bounded quantifiers on a single character class: at most 32x64
+    # steps per start position, never exponential. Measured ~0.1-0.2 µs
+    # per character on these inputs (200k chars: well under 100 ms); 1 s
+    # leaves ample margin on a slow CI runner while still catching any
+    # catastrophic-backtracking regression.
+    regex = re.compile(
+        _get_pattern_regex("it", SHELL_PROMPT_PATTERN_NAME),
+        flags=re.DOTALL | re.MULTILINE | re.IGNORECASE,  # Presidio's global flags
+    )
+    start = _time.perf_counter()
+    list(regex.finditer(pathological))
+    assert _time.perf_counter() - start < 1.0
+
+
 # ---------------------------------------------------------------------------
 # _cluster_detections — merging of overlapping zones (bug fixed tonight)
 # ---------------------------------------------------------------------------
