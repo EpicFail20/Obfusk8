@@ -39,6 +39,8 @@ Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-héb
 
 ## Démarrage rapide
 
+Pour un lab ou pour tester vous pouvez aussi suivre le document plus complet: [`deploiement-lab.md`](./deploiement-lab.md)
+
 ```bash
 git clone https://github.com/EpicFail20/obfusk8.git
 cd obfusk8
