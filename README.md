@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/logo-badge.svg" width="120" alt="Obfusk8"></p>
+
 # Obfusk8 — anonymisation automatique de documents
 
 🇫🇷 Français | 🇬🇧 [English](./README.en.md)
@@ -36,6 +38,8 @@ Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-héb
 - Un **nom de domaine ou entrée DNS interne** pointant vers le serveur (un certificat TLS valide sera nécessaire pour tout usage au-delà d'un lab, voir [Limites connues](#limites-connues)).
 
 ## Démarrage rapide
+
+Pour un lab ou pour tester vous pouvez aussi suivre le document plus complet: [`deploiement-lab.md`](./deploiement-lab.md)
 
 ```bash
 git clone https://github.com/EpicFail20/obfusk8.git
@@ -103,7 +107,7 @@ Le comportement de détection est piloté par des **thèmes** (dossier `themes/`
 
 ## Sécurité
 
-Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.md`](./SECURITE.md).
+Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.md`](./SECURITE.fr.md).
 
 Si vous découvrez une vulnérabilité, merci de la signaler de façon responsable plutôt que de la publier directement — voir [`SECURITE.md#signaler-une-vulnérabilité`](./SECURITE.md#signaler-une-vulnérabilité).
 

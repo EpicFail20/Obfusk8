@@ -102,7 +102,7 @@ Ce projet documente honnêtement ce qui reste ouvert plutôt que de le passer so
 
 Si vous découvrez une vulnérabilité dans ce projet, merci de la signaler de manière responsable plutôt que de la publier directement (issue publique, réseaux sociaux...) :
 
-- Contactez-nous en privé à l'adresse indiquée dans le profil du dépôt, avec une description du problème et, si possible, les étapes pour le reproduire.
+- https://github.com/EpicFail20/obfusk8/security/advisories/new
 - Nous nous engageons à accuser réception dans un délai raisonnable et à vous tenir informé de l'avancement du correctif avant toute divulgation publique.
 - Une fois un correctif publié, nous documentons la nature du risque et la remédiation dans le [`CHANGELOG.md`](./CHANGELOG.md), dans le même esprit résumé que ce document.
 

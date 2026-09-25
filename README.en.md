@@ -37,6 +37,8 @@ Self-hosted document anonymization tool (PDF, DOCX, CSV, and PNG/JPEG images), d
 
 ## Quick start
 
+For a lab or for testing purposes, you can also refer to the more comprehensive document: [`deployment-lab.md`](./deployment-lab.md)
+
 ```bash
 git clone https://github.com/EpicFail20/obfusk8.git
 cd obfusk8
