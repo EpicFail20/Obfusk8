@@ -598,6 +598,87 @@ def test_run_ocr_timeout_error_distinct_de_tesseract_error(monkeypatch):
     assert "temps imparti" not in exc_info.value.detail
 
 
+def _fake_tesseract_capture(monkeypatch, left, top, width, height):
+    """Replaces image_to_data with a stub returning one word at the given
+    box (in the PREPARED image's coordinates) and records what it received."""
+    seen = {}
+
+    def _fake(image, lang, config, output_type, timeout):
+        seen.update(image=image, config=config)
+        return {
+            "text": ["", "mot"], "left": [0, left], "top": [0, top],
+            "width": [0, width], "height": [0, height],
+            "block_num": [1, 1], "par_num": [1, 1], "line_num": [1, 1],
+        }
+
+    monkeypatch.setattr(main.pytesseract, "image_to_data", _fake)
+    return seen
+
+
+def test_run_ocr_boites_ramenees_aux_coordonnees_originales_arrondies_vers_l_exterieur(monkeypatch):
+    # Upscale x2: a word at (21, 11, 31x9) in the prepared image covers
+    # [10.5, 26] x [5.5, 10] in the original — the box must never shrink
+    # (a redaction box smaller than the word would leave a sliver visible).
+    seen = _fake_tesseract_capture(monkeypatch, left=21, top=11, width=31, height=9)
+    img = Image.new("RGB", (200, 100), (255, 255, 255))
+
+    words = main._run_ocr(img)
+
+    assert seen["image"].size == (400, 200)
+    assert seen["config"] == f"--psm {main.OCR_PSM}"
+    assert words == [{
+        "text": "mot", "left": 10, "top": 5, "width": 16, "height": 5,
+        "block_num": 1, "par_num": 1, "line_num": 1,
+    }]
+
+
+def test_prepare_image_for_ocr_inverse_uniquement_les_fonds_sombres():
+    dark = Image.new("RGB", (50, 20), (30, 30, 30))
+    light = Image.new("RGB", (50, 20), (250, 250, 250))
+
+    prepared_dark, _ = main._prepare_image_for_ocr(dark)
+    prepared_light, _ = main._prepare_image_for_ocr(light)
+
+    assert prepared_dark.mode == prepared_light.mode == "L"
+    assert prepared_dark.getpixel((0, 0)) > 200  # inverted -> light background
+    assert prepared_light.getpixel((0, 0)) > 200  # left as-is
+
+
+def test_prepare_image_for_ocr_agrandissement_plafonne_par_max_image_pixels(monkeypatch):
+    # An image already at the pixel ceiling must never be upscaled beyond
+    # it (worst case sent to tesseract unchanged by this feature).
+    monkeypatch.setattr(main, "MAX_IMAGE_PIXELS", 10_000)
+    at_limit = Image.new("RGB", (100, 100), (255, 255, 255))
+    half = Image.new("RGB", (50, 50), (255, 255, 255))
+
+    prepared, scale = main._prepare_image_for_ocr(at_limit)
+    assert scale == 1.0 and prepared.size == (100, 100)
+
+    prepared, scale = main._prepare_image_for_ocr(half)
+    assert prepared.size[0] * prepared.size[1] <= 10_000
+    assert scale == 2.0
+
+
+def test_prepare_image_for_ocr_transparence_aplatie_sur_blanc():
+    # Black text on a transparent background (transparent pixels stored as
+    # black RGB): a plain convert("L") would make the text invisible.
+    img = Image.new("RGBA", (40, 20), (0, 0, 0, 0))
+    img.putpixel((5, 5), (0, 0, 0, 255))
+
+    prepared, scale = main._prepare_image_for_ocr(img)
+    s = int(scale)
+
+    assert prepared.getpixel((0, 0)) > 200  # background: white, not inverted
+    assert prepared.getpixel((5 * s + 1, 5 * s + 1)) < 100  # text stays dark
+
+
+def test_ocr_psm_restreint_aux_modes_qui_renvoient_du_texte():
+    # Mode 0 (orientation detection only) would return no words at all:
+    # a silent "no detection" verdict, never accepted.
+    assert 0 not in main._OCR_ALLOWED_PSM
+    assert main.OCR_PSM in main._OCR_ALLOWED_PSM
+
+
 def test_build_ocr_text_reconstruit_avec_offsets_corrects():
     words = [
         {"text": "Jean", "left": 0, "top": 0, "width": 30, "height": 10, "block_num": 1, "par_num": 1, "line_num": 1},

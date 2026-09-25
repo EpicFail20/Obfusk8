@@ -50,6 +50,7 @@ import html
 import io
 import json
 import logging
+import math
 import os
 import re
 import shutil
@@ -74,7 +75,7 @@ from docx.oxml import parse_xml
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from lxml import etree
-from PIL import Image, ImageDraw, UnidentifiedImageError as PILUnidentifiedImageError
+from PIL import Image, ImageDraw, ImageOps, ImageStat, UnidentifiedImageError as PILUnidentifiedImageError
 from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from branding import install_branding
@@ -1570,6 +1571,27 @@ pytesseract.pytesseract.tesseract_cmd = "/usr/bin/tesseract"
 # applied symmetrically here.
 MAX_OCR_SECONDS = int(os.environ.get("MAX_OCR_SECONDS", "60"))
 
+# Tesseract page segmentation mode. The engine default (3, automatic
+# layout analysis) splits column-aligned monospace screenshots (Suricata/
+# Snort logs) into separate column blocks and silently DROPS the rightmost
+# region: on a real log screenshot, 24 of 26 IP occurrences never reached
+# Presidio at all (confirmed on the raw Tesseract output, before any text
+# reconstruction). 6 (single uniform block) keeps each visual line whole. Restricted to modes that actually return text: a mode such as 0
+# (orientation detection only) would yield no words, i.e. a silent "no
+# detection" verdict — fail closed at startup instead.
+_OCR_ALLOWED_PSM = {3, 4, 6, 11}
+OCR_PSM = int(os.environ.get("OCR_PSM", "6"))
+if OCR_PSM not in _OCR_ALLOWED_PSM:
+    raise RuntimeError(f"OCR_PSM={OCR_PSM} invalide, valeurs acceptées : {sorted(_OCR_ALLOWED_PSM)}")
+
+# Upscaling factor applied before OCR: screen captures typically use
+# ~11px fonts, below the glyph height Tesseract's LSTM model is trained
+# on. Capped so that the upscaled image never exceeds MAX_IMAGE_PIXELS
+# (see _prepare_image_for_ocr): the worst case sent to tesseract stays
+# the one that already existed before this upscaling (in grayscale,
+# i.e. 1 byte/pixel instead of 3).
+OCR_MAX_UPSCALE = 2.0
+
 
 def _open_and_validate_image(raw: bytes) -> "Image.Image":
     """
@@ -1615,6 +1637,42 @@ def _open_and_validate_image(raw: bytes) -> "Image.Image":
     return img
 
 
+def _prepare_image_for_ocr(img: "Image.Image") -> tuple["Image.Image", float]:
+    """
+    Grayscale + upscale (LANCZOS) + inversion of dark backgrounds, before
+    OCR only — the image that is later redacted and returned is never
+    touched. Returns the prepared image and the scale factor actually
+    applied, so that _run_ocr can bring the word boxes back to the
+    original image's coordinates.
+
+    Transparent images are flattened onto white first: a plain
+    convert("L") would map a transparent background (usually stored as
+    black RGB) to black and make dark text invisible — a silent false
+    negative.
+
+    Inversion: Tesseract recognizes dark text on a light background
+    better; dark-theme terminal captures (light text on dark) are
+    therefore inverted when the mean luminance is below mid-gray.
+    """
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        rgba = img.convert("RGBA")
+        flat = Image.new("RGB", rgba.size, (255, 255, 255))
+        flat.paste(rgba, mask=rgba.getchannel("A"))
+        gray = flat.convert("L")
+    else:
+        gray = img.convert("L")
+
+    width, height = gray.size
+    scale = min(OCR_MAX_UPSCALE, math.sqrt(MAX_IMAGE_PIXELS / (width * height)))
+    scale = max(scale, 1.0)  # never downscale: would only degrade OCR
+    if scale > 1.0:
+        gray = gray.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
+
+    if ImageStat.Stat(gray).mean[0] < 128:
+        gray = ImageOps.invert(gray)
+    return gray, scale
+
+
 def _run_ocr(img: "Image.Image") -> list[dict]:
     """
     Runs pytesseract.image_to_data (not image_to_string): returns the text
@@ -1627,10 +1685,21 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
     subprocess: beyond that, pytesseract terminates it cleanly (SIGTERM then
     SIGKILL, see its `kill()` function) and raises a RuntimeError, never a
     zombie process or a request blocked indefinitely.
+
+    OCR runs on _prepare_image_for_ocr's output (grayscale, upscaled,
+    dark backgrounds inverted) with `--psm OCR_PSM`; the returned boxes are
+    brought back to the ORIGINAL image's coordinates, rounded outward
+    (floor on the top-left corner, ceil on the bottom-right one) so that a
+    redaction box can never end up smaller than the word it must cover.
     """
+    prepared, scale = _prepare_image_for_ocr(img)
     try:
         data = pytesseract.image_to_data(
-            img, lang=OCR_LANGUAGE, output_type=pytesseract.Output.DICT, timeout=MAX_OCR_SECONDS
+            prepared,
+            lang=OCR_LANGUAGE,
+            config=f"--psm {OCR_PSM}",
+            output_type=pytesseract.Output.DICT,
+            timeout=MAX_OCR_SECONDS,
         )
     except pytesseract.TesseractNotFoundError as exc:
         log.error("Binaire tesseract introuvable : %s", exc)
@@ -1657,12 +1726,16 @@ def _run_ocr(img: "Image.Image") -> list[dict]:
             # structural levels (block/paragraph/line) with no actual text —
             # we only keep words that were actually recognized.
             continue
+        left = math.floor(data["left"][i] / scale)
+        top = math.floor(data["top"][i] / scale)
+        right = math.ceil((data["left"][i] + data["width"][i]) / scale)
+        bottom = math.ceil((data["top"][i] + data["height"][i]) / scale)
         words.append({
             "text": text,
-            "left": data["left"][i],
-            "top": data["top"][i],
-            "width": data["width"][i],
-            "height": data["height"][i],
+            "left": left,
+            "top": top,
+            "width": right - left,
+            "height": bottom - top,
             "block_num": data["block_num"][i],
             "par_num": data["par_num"][i],
             "line_num": data["line_num"][i],
