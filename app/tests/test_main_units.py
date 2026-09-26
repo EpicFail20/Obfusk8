@@ -91,19 +91,25 @@ def test_iep_pattern_rejects_invalid_examples(text):
     assert re.search(regex, text) is None, f"should not have matched: {text!r}"
 
 
-SHELL_PROMPT_PATTERN_NAME = "prompt shell utilisateur@hostname (suivi de : $ # >)"
+SHELL_PROMPT_PATTERN_NAME = "prompt shell utilisateur@hostname (suivi de : $ # > ) ])"
 
 SHELL_PROMPT_SHOULD_MATCH = [
     ("alice@devbox:~$ sudo tcpdump", "alice@devbox"),
     ("root@srv-web01:/var/log# tail", "root@srv-web01"),
     ("admin@fw-edge-02> show running-config", "admin@fw-edge-02"),
     ("deploy@ci_runner$ ./build.sh", "deploy@ci_runner"),
+    # Kali/oh-my-zsh "(user㉿host)-[path]": Tesseract reads the separator
+    # glyph as "@" (confirmed on a real screenshot), the host is followed by ")"
+    ("(epicfail@EpicFail)-[-/anonymiseur-clean]$ git push", "epicfail@EpicFail"),
+    ("┌─[analyst@parrot]─[~/pcap]", "analyst@parrot"),   # Parrot OS
 ]
 SHELL_PROMPT_SHOULD_NOT_MATCH = [
     "écrivez à contact@exemple.fr dans la journée",   # ordinary email: EMAIL_ADDRESS's job
     "Contact : jean.dupont@hopital-paris.fr, tél.",
     "Mail: admin@exemple.com: merci",                 # prompt char after the TLD, not the host
     "ssh root@10.0.0.5 -i id_rsa",                    # no prompt char after the host
+    "(contact : jean.dupont@exemple.fr)",             # email in parentheses: "." before ")"
+    "[support@exemple.com] a répondu",                # email in brackets
 ]
 
 
@@ -127,8 +133,11 @@ def test_shell_prompt_pattern_rejects_emails_and_non_prompts(text):
         "_-@" * 66_666,
         ("x" * 31 + "@" + "y" * 63 + ".") * 2_000,          # max bounded lengths, then a miss
         "a" * 100_000 + "@" + "b" * 100_000 + ".",          # both sides beyond their bounds
+        "(a@b.)" * 33_333,                                  # new ")" lookahead chars, always missed
+        ("x" * 31 + "@" + "y" * 65 + ")") * 2_000,         # host one past its bound before ")"
     ],
-    ids=["a@-repete", "_-@-repete", "bornes-max-puis-echec", "au-dela-des-bornes"],
+    ids=["a@-repete", "_-@-repete", "bornes-max-puis-echec", "au-dela-des-bornes",
+         "parentheses-repetees", "hote-trop-long-avant-parenthese"],
 )
 def test_shell_prompt_pattern_linear_on_pathological_input(pathological):
     # Bounded quantifiers on a single character class: at most 32x64

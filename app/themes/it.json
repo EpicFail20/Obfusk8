@@ -87,8 +87,8 @@
       "supported_language": "fr",
       "patterns": [
         {
-          "name": "prompt shell utilisateur@hostname (suivi de : $ # >)",
-          "regex": "\\b[\\w-]{1,32}@[\\w-]{1,64}(?=[:$#>])",
+          "name": "prompt shell utilisateur@hostname (suivi de : $ # > ) ])",
+          "regex": "\\b[\\w-]{1,32}@[\\w-]{1,64}(?=[:$#>)\\]])",
           "score": 0.6
         }
       ],
