@@ -1601,3 +1601,80 @@ def test_i18n_page_accueil_texte_different_selon_ui_lang(monkeypatch):
     assert "Analyze" in html_en
     assert 'lang="en"' in html_en
     assert html_en != html_fr
+
+
+# ---------------------------------------------------------------------------
+# _filename_hash — keyed pseudonym of the file name (logs, audit, alerts)
+# ---------------------------------------------------------------------------
+
+def test_filename_hash_n_est_pas_un_sha256_nu():
+    """Regression: the bare SHA-256 let anyone reading the SIEM confirm a
+    guessed file name by hashing it."""
+    import hashlib
+    name = "Dupont_Jean_jean.dupont@exemple.fr_bilan.pdf"
+    assert main._filename_hash(name) != hashlib.sha256(name.encode()).hexdigest()[:12]
+    assert main._filename_hash(name) == main._filename_hash(name)  # stable: audit correlation
+    assert len(main._filename_hash(name)) == 12
+
+
+def test_filename_hash_depend_de_la_cle(monkeypatch):
+    name = "Dupont_Jean.pdf"
+    before = main._filename_hash(name)
+    monkeypatch.setattr(main, "_FILENAME_HASH_KEY", b"\x00" * 32)
+    assert main._filename_hash(name) != before
+
+
+# ---------------------------------------------------------------------------
+# _alert_on_state_change — periodic alerts sent on state change, not every tick
+# ---------------------------------------------------------------------------
+
+@pytest.fixture
+def sent_alerts(monkeypatch):
+    sent = []
+    monkeypatch.setattr(main, "_send_alert", sent.append)
+    monkeypatch.setattr(main, "_ALERT_STATE", {})
+    return sent
+
+
+def _alert(severity):
+    return main.Alert(severity=severity, source="disk-space", message=severity.value)
+
+
+_RECOVERY = main.Alert(severity=main.AlertSeverity.INFO, source="disk-space", message="ok")
+
+
+def test_alerte_periodique_pas_repetee_a_chaque_tour(sent_alerts):
+    for _ in range(5):
+        main._alert_on_state_change("disk-space:audit", _alert(main.AlertSeverity.WARNING), _RECOVERY)
+    assert [a.message for a in sent_alerts] == ["warning"]
+
+
+def test_alerte_periodique_escalade_retour_et_normal(sent_alerts):
+    W, C = main.AlertSeverity.WARNING, main.AlertSeverity.CRITICAL
+    main._alert_on_state_change("k", None, _RECOVERY)          # normal from the start: nothing
+    main._alert_on_state_change("k", _alert(W), _RECOVERY)     # -> warning
+    main._alert_on_state_change("k", _alert(C), _RECOVERY)     # escalation -> critical
+    main._alert_on_state_change("k", _alert(C), _RECOVERY)     # unchanged: nothing
+    main._alert_on_state_change("k", _alert(W), _RECOVERY)     # de-escalation -> warning
+    main._alert_on_state_change("k", None, _RECOVERY)          # recovery -> INFO, once
+    main._alert_on_state_change("k", None, _RECOVERY)
+    assert [a.message for a in sent_alerts] == ["warning", "critical", "warning", "ok"]
+
+
+def test_alerte_periodique_rappel_si_le_probleme_dure(sent_alerts, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(main.time, "monotonic", lambda: clock[0])
+    W = main.AlertSeverity.WARNING
+    main._alert_on_state_change("k", _alert(W), _RECOVERY)
+    clock[0] += main._ALERT_REPEAT_SECONDS - 1
+    main._alert_on_state_change("k", _alert(W), _RECOVERY)
+    clock[0] += 1
+    main._alert_on_state_change("k", _alert(W), _RECOVERY)
+    assert len(sent_alerts) == 2
+
+
+def test_alertes_periodiques_independantes_par_cle(sent_alerts):
+    W = main.AlertSeverity.WARNING
+    main._alert_on_state_change("disk-space:workdir", _alert(W), _RECOVERY)
+    main._alert_on_state_change("disk-space:audit", _alert(W), _RECOVERY)
+    assert len(sent_alerts) == 2

@@ -760,6 +760,32 @@ _DISK_CRITICAL_PCT = 5.0
 _DISK_CRITICAL_MB = 100
 
 
+# The periodic checks (disk, Presidio) run every 60 s: alerting on every
+# pass while a condition lasts floods the SIEM with the same alert every
+# minute (confirmed end-to-end). Alert on each state CHANGE instead —
+# including the return to normal (INFO), which did not exist — plus a
+# reminder every _ALERT_REPEAT_SECONDS while the problem lasts: syslog over
+# UDP can lose a datagram, a single alert must not be the only trace of an
+# ongoing incident. Only touched by the sweep thread, hence no lock.
+_ALERT_REPEAT_SECONDS = 3600
+_ALERT_STATE: dict[str, tuple[AlertSeverity, float]] = {}
+
+
+def _alert_on_state_change(key: str, alert: Alert | None, recovery: Alert) -> None:
+    """`alert` is the current problem (None = normal state); `recovery` is
+    sent once when a problem previously alerted on is over."""
+    previous = _ALERT_STATE.get(key)
+    if alert is None:
+        if previous is not None:
+            del _ALERT_STATE[key]
+            _send_alert(recovery)
+        return
+    now = time.monotonic()
+    if previous is None or previous[0] != alert.severity or now - previous[1] >= _ALERT_REPEAT_SECONDS:
+        _ALERT_STATE[key] = (alert.severity, now)
+        _send_alert(alert)
+
+
 def _check_disk_space(volume: str, path: Path) -> None:
     try:
         total, _used, free = shutil.disk_usage(path)
@@ -772,24 +798,31 @@ def _check_disk_space(volume: str, path: Path) -> None:
     free_pct = (free / total * 100) if total else 100.0
     details = {"volume": volume, "free_mb": round(free_mb, 1), "free_pct": round(free_pct, 1)}
 
+    alert = None
     if free_pct < _DISK_CRITICAL_PCT or free_mb < _DISK_CRITICAL_MB:
-        _send_alert(
-            Alert(
-                severity=AlertSeverity.CRITICAL,
-                source="disk-space",
-                message=f"Espace disque critique sur le volume '{volume}'",
-                details=details,
-            )
+        alert = Alert(
+            severity=AlertSeverity.CRITICAL,
+            source="disk-space",
+            message=f"Espace disque critique sur le volume '{volume}'",
+            details=details,
         )
     elif free_pct < _DISK_WARNING_PCT or free_mb < _DISK_WARNING_MB:
-        _send_alert(
-            Alert(
-                severity=AlertSeverity.WARNING,
-                source="disk-space",
-                message=f"Espace disque faible sur le volume '{volume}'",
-                details=details,
-            )
+        alert = Alert(
+            severity=AlertSeverity.WARNING,
+            source="disk-space",
+            message=f"Espace disque faible sur le volume '{volume}'",
+            details=details,
         )
+    _alert_on_state_change(
+        f"disk-space:{volume}",
+        alert,
+        Alert(
+            severity=AlertSeverity.INFO,
+            source="disk-space",
+            message=f"Espace disque revenu à la normale sur le volume '{volume}'",
+            details=details,
+        ),
+    )
 
 
 def _check_presidio_health(service: str, base_url: str) -> None:
@@ -801,15 +834,21 @@ def _check_presidio_health(service: str, base_url: str) -> None:
     except requests.RequestException:
         up = False
     metrics.PRESIDIO_UP.labels(service=service).set(1 if up else 0)
-    if not up:
-        _send_alert(
-            Alert(
-                severity=AlertSeverity.WARNING,
-                source="presidio",
-                message=f"Service presidio-{service} injoignable",
-                details={"service": service},
-            )
-        )
+    _alert_on_state_change(
+        f"presidio:{service}",
+        None if up else Alert(
+            severity=AlertSeverity.WARNING,
+            source="presidio",
+            message=f"Service presidio-{service} injoignable",
+            details={"service": service},
+        ),
+        Alert(
+            severity=AlertSeverity.INFO,
+            source="presidio",
+            message=f"Service presidio-{service} de nouveau joignable",
+            details={"service": service},
+        ),
+    )
 
 
 def _cleanup_sweep_loop(interval_seconds: int = 60):
@@ -1000,6 +1039,29 @@ if not GATEWAY_SECRET:
         "du même réseau Docker peut joindre `app` directement, hors Traefik, "
         "et forger X-Auth-Request-Email."
     )
+
+
+# Pseudonym of the uploaded file name, the only form in which it appears in
+# the logs, the audit log and the alerts sent to the SIEM (a file name may
+# contain real patient data). A bare SHA-256 is NOT enough: a file name has
+# low entropy, anyone reading the SIEM can confirm a guessed name by hashing
+# it — confirmed end-to-end ("Dupont_Jean_..._bilan.pdf" gave the exact
+# hash received by syslog). Keyed HMAC instead, with a key DERIVED from the
+# gateway secret under a dedicated label: domain separation, the key reveals
+# nothing about the gateway secret and serves no other purpose, and no extra
+# secret to deploy. Rotating the gateway secret changes the pseudonyms
+# (audit entries before/after a rotation no longer correlate) — accepted.
+# Without a gateway secret (dev/test only, see the warning above): random
+# per-process key, pseudonyms stable only until the next restart.
+_FILENAME_HASH_KEY = (
+    hmac.new(GATEWAY_SECRET.encode("utf-8"), b"obfusk8/filename-hash/v1", hashlib.sha256).digest()
+    if GATEWAY_SECRET
+    else os.urandom(32)
+)
+
+
+def _filename_hash(filename: str) -> str:
+    return hmac.new(_FILENAME_HASH_KEY, filename.encode("utf-8"), hashlib.sha256).hexdigest()[:12]
 
 
 class _GatewaySecretMiddleware:
@@ -2928,7 +2990,7 @@ async def detect_document(
             detail=STRINGS["upload_too_large"].format(size_mb=f"{size_mb:.1f}", max_mb=MAX_UPLOAD_MB),
         )
 
-    filename_hash = hashlib.sha256((file.filename or "").encode()).hexdigest()[:12]
+    filename_hash = _filename_hash(file.filename or "")
 
     _run_antivirus_scan(raw, file.filename or "", filename_hash)
 
