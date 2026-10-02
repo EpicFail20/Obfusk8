@@ -323,6 +323,25 @@ services:
       - MAX_CSV_ROWS=${MAX_CSV_ROWS:-20000}
       - MAX_CSV_CELLS=${MAX_CSV_CELLS:-5000}
       - MAX_CSV_FIELD_CHARS=${MAX_CSV_FIELD_CHARS:-100000}
+      # --- Text API for the browser extension (app/text_api.py) ---
+      # Contract and justification of every default: docs/api-extension.en.md.
+      # ENABLE_EXTENSION_API: false (default) = the /api/v1/ routes do not
+      # exist (404), the document flow is strictly unchanged.
+      - ENABLE_EXTENSION_API=${ENABLE_EXTENSION_API:-false}
+      # MAX_TEXT_CHARS: measured on this VM (analyzer alone): 0.71 s at
+      # 20000 characters, 2.7 s at 50000 — the analyzer has ONE worker shared
+      # with the document flow. If changed, recompute the text-bodylimit
+      # label below: 12 x MAX_TEXT_CHARS + 4096 bytes.
+      - MAX_TEXT_CHARS=${MAX_TEXT_CHARS:-20000}
+      # Total time of a text request (queue wait included), also the timeout
+      # of the call to presidio-analyzer: ~14x the time measured at the cap.
+      - MAX_TEXT_ANALYSIS_SECONDS=${MAX_TEXT_ANALYSIS_SECONDS:-10}
+      # Text analyses in progress at once: 1, since the single analyzer
+      # worker serializes them anyway; more would only lengthen the wait of
+      # document batches.
+      - MAX_TEXT_CONCURRENCY=${MAX_TEXT_CONCURRENCY:-1}
+      # Text requests allowed to wait for their turn; beyond, immediate 429.
+      - MAX_TEXT_QUEUE=${MAX_TEXT_QUEUE:-8}
       # IMPORTANT: the score CANNOT distinguish a real name from an
       # ordinary administrative word — both share the same fixed score
       # (0.85) assigned by Presidio's spaCy recognizer, which does not
@@ -425,6 +444,33 @@ services:
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.burst=150"
+      # Dedicated router for the text API of the browser extension (/api/v1/,
+      # app/text_api.py, docs/api-extension.en.md §7). Same authentication
+      # chain as every other route. The routes only exist in the app when
+      # ENABLE_EXTENSION_API=true; otherwise this router just leads to a 404.
+      - "traefik.http.routers.app-text.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/v1/`)"
+      - "traefik.http.routers.app-text.entrypoints=websecure"
+      - "traefik.http.routers.app-text.tls=true"
+      - "traefik.http.routers.app-text.priority=100"
+      - "traefik.http.routers.app-text.middlewares=oauth2-errors,oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-text.service=app"
+      # Per USER rather than per IP: a per-IP key penalizes everyone behind
+      # the same NAT/corporate proxy. text-ratelimit MUST stay after
+      # oidc-auth: forwardAuth deletes any client-supplied X-Auth-Request-User
+      # then sets the authenticated one (checked in Traefik 3.7 source,
+      # pkg/middlewares/auth/forward.go). 60/min, burst 20: one prompt costs
+      # one or two requests; above uploads (5/min), below previews (120/min).
+      - "traefik.http.middlewares.text-ratelimit.ratelimit.average=60"
+      - "traefik.http.middlewares.text-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.text-ratelimit.ratelimit.burst=20"
+      - "traefik.http.middlewares.text-ratelimit.ratelimit.sourcecriterion.requestheadername=X-Auth-Request-User"
+      # Body cap AT THE EDGE, equal to the one applied in the app
+      # (text_api.TextApiSettings.max_body_bytes): 12 x MAX_TEXT_CHARS (20000)
+      # + 4096 = 244096 bytes — worst-case JSON escaping (12 bytes per code
+      # point) plus the envelope. Realign if MAX_TEXT_CHARS changes. Fully
+      # buffered in memory (memRequestBodyBytes = the cap): never on disk.
+      - "traefik.http.middlewares.text-bodylimit.buffering.maxRequestBodyBytes=244096"
+      - "traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096"
       # Dedicated router for /metrics: a Prometheus scraper cannot do
       # the oidc-auth OAuth dance (see main.py, /metrics endpoint) — but
       # Traefik remains exposed to the Internet (non-internal frontend network),
