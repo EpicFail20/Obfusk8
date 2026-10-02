@@ -139,8 +139,13 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Décision** : sous-répertoire `app/themes/extension/` (non parcouru par le `glob` non récursif, copié par le `COPY themes/` existant). Reconnaisseurs
   ponctuels envoyés à Presidio par le mécanisme existant (`ad_hoc_recognizers`), ajoutés pour les seules routes texte, quel que soit le thème.
   Le flux documents reste strictement inchangé.
-- **Conséquences** : EXT-08 reste ouvert pour le flux documents (hors périmètre). Les reconnaisseurs de motif de Presidio ne valident pas la clé de Luhn ;
-  la validation des numéros de carte est à trancher à l'étape D (faux positifs sur les longues suites de chiffres contre faux négatifs).
+- **Conséquences** : EXT-08 et EXT-23 restent ouverts pour le flux documents (hors périmètre).
+- **Mise en œuvre (étape D)** : `secrets.json` (type `SECRET`) et `identifiers.json` (`CREDIT_CARD`, `FR_NIR`, `EMAIL_ADDRESS` à domaine libre).
+  Le NIR est **repris par référence** au thème médical (`include_theme_recognizers`), pas recopié : une correction du thème s'applique ici aussi,
+  et un nom introuvable fait échouer le démarrage. Numéro de carte : même motif que le `CreditCardRecognizer` de Presidio 2.2.364, **sans** contrôle
+  de Luhn (impossible dans un reconnaisseur ponctuel) ; faux positifs acceptés (doctrine §0.1), score 0,6 pour garder une marge au-dessus de tout seuil.
+  Chaque format de secret est sourcé dans le nom du motif. Les marqueurs sont écrits insensibles à la casse là où `main.py` normalise les mots en
+  majuscules avant l'analyse (défaut trouvé par le banc d'essai de bout en bout, test de non-régression ajouté).
 
 ## D-016 — Tests exécutés dans un conteneur jetable sous le profil seccomp — validée (2026-10-02, validation humaine de l'étape B)
 
@@ -149,3 +154,23 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   `--read-only`, `--network none`, `tmpfs` à la place des volumes). Outils de développement (ruff, mypy, bandit, pytest-cov, pip-audit) dans
   `app/requirements-dev.txt`, installés dans un environnement isolé, jamais dans l'image.
 - **Conséquences** : la présence de `pytest` dans l'image (EXT-09) n'est pas corrigée dans cette phase.
+
+## D-017 — Module `regex` de développement à la version de l'analyseur — validée par délégation (étape D, 2026-10-02)
+
+- **Contexte** : Presidio compile les reconnaisseurs ponctuels avec le module `regex` (et non `re`), avec `IGNORECASE | DOTALL | MULTILINE`
+  (vérifié dans `pattern_recognizer.py` de l'image `presidio-analyzer`). Tester les motifs avec `re` donnerait des résultats différents
+  (quantificateurs possessifs, regards arrière de longueur variable).
+- **Décision** : dépendance de **développement** `regex==2026.7.10`, la version présente dans l'image de l'analyseur, et non la dernière stable
+  (2026.9.29) : la parité du moteur prime ici. Aucune vulnérabilité connue (OSV) pour 2026.7.10.
+- **Condition de levée** : réaligner sur la version de l'analyseur à chaque reconstruction de son image.
+
+## D-018 — Heuristiques des affectations de secrets — validée par délégation (étape D, 2026-10-02)
+
+- **Contexte** : `password = valeur`, `"api_key": "valeur"`, `mot de passe : valeur` sont la forme la plus fréquente d'un secret dans un prompt,
+  mais du code ordinaire contient les mêmes clés sans secret.
+- **Décision** : seule la **valeur** est marquée ; clé non précédée d'une lettre ou d'un chiffre (`DB_PASSWORD`, `spring.datasource.password`) ;
+  séparateur et valeur **sur la même ligne** ; exclusion des valeurs qui sont des références (`os.environ`, `process.env`, `${…}`, `{{…}}`, `<…>`),
+  des littéraux (`true`, `false`, `null`…) et des expressions de code (valeur suivie de `(` ou `[`). Ces exclusions viennent des faux positifs
+  mesurés de bout en bout (3 sur 30 textes au premier passage), chacun couvert par un test.
+- **Risque accepté par construction** : une vraie valeur secrète qui commencerait par `$` ou serait suivie de `(` ne serait pas marquée par cette
+  règle (elle peut l'être par une autre : préfixe de fournisseur, URI). Le corpus de l'étape E sert de contrôle indépendant.

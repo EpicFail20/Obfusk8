@@ -100,9 +100,10 @@ Réponse 200 :
 - Les entités incluent celles trouvées par **propagation** : toute autre occurrence exacte d'une valeur déjà détectée est signalée aussi (D-012).
 - **Pas de score** (D-003) : les scores de Presidio ne sont pas calibrés ; un client qui filtrerait dessus créerait des faux négatifs.
 - Types d'entités : ceux de Presidio et des thèmes (`PERSON`, `LOCATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `DATE_TIME`, `PATIENT_ID`, `FR_NIR`…),
-  plus ceux propres à l'API texte, actifs quel que soit le thème : `SECRET` (secrets dans les prompts) et la couverture des identifiants absents
-  du flux sans thème, notamment carte bancaire et NIR (EXT-08). La liste exacte sera figée aux étapes C et D. Le client doit traiter tout type inconnu
-  comme sensible.
+  plus ceux propres à l'API texte, actifs quel que soit le thème (`app/themes/extension/`) : `SECRET` (clés privées PEM, JWT, URI avec identifiants,
+  affectations `password`/`token`/`secret`/`api_key`, en-têtes `Authorization`, clés AWS, Google Cloud, Azure, GitHub, GitLab, Slack, Telegram,
+  Stripe), `CREDIT_CARD`, `FR_NIR` (EXT-08) et `EMAIL_ADDRESS` quel que soit le domaine, y compris interne (EXT-23). Le client doit traiter
+  tout type inconnu comme sensible.
 
 ### 2.3 `POST /api/v1/text/pseudonymize`
 

@@ -24,7 +24,7 @@ Audit de l'environnement installé dans l'image reconstruite (`pip-audit --path 
 
 ### Développement (jamais dans l'image)
 
-Fichiers : `app/requirements-dev.in` (versions de premier niveau) et `app/requirements-dev.txt` (verrou complet, 43 paquets, empreintes SHA-256,
+Fichiers : `app/requirements-dev.in` (versions de premier niveau) et `app/requirements-dev.txt` (verrou complet, 44 paquets, empreintes SHA-256,
 généré par `pip install --dry-run --report` avec le Python 3.12 de l'image ; méthode en tête du fichier). Installation uniquement dans un
 environnement isolé : `pip install --require-hashes --no-deps -r requirements-dev.txt` (décision D-016).
 
@@ -37,5 +37,6 @@ environnement isolé : `pip install --require-hashes --no-deps -r requirements-d
 | pytest-cov | 7.1.0 | 7.1.0 (2026-03-21) | idem | MIT | |
 | coverage | 7.16.2 | 7.16.2 (2026-09-27) | idem | Apache-2.0 | Sa base SQLite échoue sous `app-enforce.json` : couverture mesurée sans seccomp, suite fonctionnelle sous seccomp |
 | pip-audit | 2.10.1 | 2.10.1 (2026-06-10) | idem | Apache-2.0 | |
+| regex | 2026.7.10 | 2026.9.29 (2026-09-29) — **non retenue** (D-017) | OSV : aucune vulnérabilité pour 2026.7.10 | Apache-2.0 AND CNRI-Python | Même version que dans `presidio-analyzer`, pour tester les motifs avec le même moteur |
 
 Sources : API JSON de PyPI (`https://pypi.org/pypi/<paquet>/json`, champ `info.version`, hors préversions), API OSV (`https://api.osv.dev/v1/query`).

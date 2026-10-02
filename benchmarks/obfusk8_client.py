@@ -1,0 +1,115 @@
+# Copyright (C) 2026 CARROLAGGI Xavier
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://www.gnu.org/licenses/>.
+"""
+Minimal client for the benchmarks: authenticates THROUGH THE FULL CHAIN
+(Traefik -> oauth2-proxy -> Keycloak login form) like a browser, then calls
+the text API. Nothing is measured behind Traefik's back.
+
+Configuration (environment only — credentials never go in the repository):
+  BENCH_BASE_URL      e.g. https://obfusk8.lab.local
+  BENCH_USER          test account (synthetic, lab only)
+  BENCH_PASSWORD
+  BENCH_INSECURE_TLS  "1" for the lab's self-signed certificate
+  BENCH_RESOLVE_LOOPBACK  "1" to resolve *.lab.local to 127.0.0.1 when the
+                      lab names are not in /etc/hosts (VM-local runs)
+"""
+
+import html
+import os
+import re
+import socket
+import time
+from typing import Any
+
+import requests
+
+HTTP_OK = 200
+HTTP_TOO_MANY_REQUESTS = 429
+
+BASE_URL = os.environ.get("BENCH_BASE_URL", "https://obfusk8.lab.local").rstrip("/")
+VERIFY_TLS = os.environ.get("BENCH_INSECURE_TLS") != "1"
+
+if os.environ.get("BENCH_RESOLVE_LOOPBACK") == "1":
+    _real_getaddrinfo = socket.getaddrinfo
+
+    def _loopback_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+        if isinstance(host, str) and host.endswith(".lab.local"):
+            host = "127.0.0.1"
+        return _real_getaddrinfo(host, *args, **kwargs)
+
+    socket.getaddrinfo = _loopback_getaddrinfo
+
+if not VERIFY_TLS:
+    import urllib3
+
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+def login() -> requests.Session:
+    session = requests.Session()
+    session.verify = VERIFY_TLS
+    page = session.get(f"{BASE_URL}/oauth2/start?rd=%2F", timeout=30)
+    form = re.search(r'<form[^>]+id="kc-form-login"[^>]+action="([^"]+)"', page.text)
+    if not form:
+        raise RuntimeError(f"Keycloak login form not found (HTTP {page.status_code})")
+    session.post(
+        html.unescape(form.group(1)),
+        data={"username": os.environ["BENCH_USER"], "password": os.environ["BENCH_PASSWORD"], "credentialId": ""},
+        timeout=30,
+    )
+    if not any(c.name.startswith("_oauth2_proxy") for c in session.cookies):
+        raise RuntimeError("login failed")
+    return session
+
+
+class TextApi:
+    """Calls /api/v1/text/* with pacing below the per-user Traefik rate limit
+    (60/min, burst 20): a 429 from Traefik is waited out and retried, never
+    counted as a detection result."""
+
+    def __init__(self, session: requests.Session, min_interval: float = 1.05) -> None:
+        self.session = session
+        self.min_interval = min_interval
+        self._last = 0.0
+
+    def call(self, route: str, text: str, theme: str | None = None) -> tuple[int, dict[str, Any], float]:
+        payload: dict[str, Any] = {"text": text}
+        if theme:
+            payload["theme"] = theme
+        for _ in range(10):
+            wait = self._last + self.min_interval - time.monotonic()
+            if wait > 0:
+                time.sleep(wait)
+            started = time.monotonic()
+            response = self.session.post(f"{BASE_URL}/api/v1/text/{route}", json=payload, timeout=60)
+            elapsed = time.monotonic() - started
+            self._last = time.monotonic()
+            if response.status_code == HTTP_TOO_MANY_REQUESTS and "request_id" not in response.text:
+                time.sleep(float(response.headers.get("Retry-After", "2")))
+                continue
+            return response.status_code, response.json(), elapsed
+        raise RuntimeError("rate limited 10 times in a row")
+
+    def version(self, wait_seconds: float = 60) -> dict[str, Any]:
+        """Also waits for the stack: right after `app` is recreated, Traefik
+        answers 404/502 until it has registered the new container."""
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            response = self.session.get(f"{BASE_URL}/api/v1/version", timeout=30)
+            if response.status_code == HTTP_OK:
+                body: dict[str, Any] = response.json()
+                return body
+            if time.monotonic() > deadline:
+                raise RuntimeError(f"/api/v1/version unavailable (HTTP {response.status_code})")
+            time.sleep(2)

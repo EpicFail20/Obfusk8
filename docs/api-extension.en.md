@@ -99,8 +99,9 @@ Any other field (for instance `score_threshold`, `entities`, `ad_hoc_recognizers
 - Entities include those found by **propagation**: every other exact occurrence of an already detected value is reported too (D-012).
 - **No score** (D-003): Presidio scores are not calibrated; a client filtering on them would create false negatives.
 - Entity types: those of Presidio and of the themes (`PERSON`, `LOCATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `DATE_TIME`, `PATIENT_ID`, `FR_NIR`…),
-  plus the text-API-specific ones, active whatever the theme: `SECRET` (secrets in prompts) and coverage of the identifiers missing from the no-theme
-  flow, notably payment card and French social security number (EXT-08). The exact list will be frozen in steps C and D. The client must treat any
+  plus the text-API-specific ones, active whatever the theme (`app/themes/extension/`): `SECRET` (PEM private keys, JWT, URIs with credentials,
+  `password`/`token`/`secret`/`api_key` assignments, `Authorization` headers, AWS, Google Cloud, Azure, GitHub, GitLab, Slack, Telegram and Stripe
+  keys), `CREDIT_CARD`, `FR_NIR` (EXT-08) and `EMAIL_ADDRESS` whatever the domain, internal ones included (EXT-23). The client must treat any
   unknown type as sensitive.
 
 ### 2.3 `POST /api/v1/text/pseudonymize`
