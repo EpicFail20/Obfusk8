@@ -938,6 +938,8 @@ def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
 import time as _time  # noqa: E402
 import unicodedata  # noqa: E402
 
+import uvloop  # noqa: E402
+
 
 def _drive(coro):
     """Runs a coroutine with no real suspension point through to its
@@ -1084,6 +1086,21 @@ import os as _os  # noqa: E402
 import stat as _stat  # noqa: E402
 
 
+def _run_in_uvloop(coro):
+    """Runs a coroutine on a real event loop. `_drive` (no loop) is not
+    enough for the full ASGI stack: since Starlette 1.x, the error path of
+    ServerErrorMiddleware calls anyio, which requires a running loop
+    (`NoEventLoopError`, EXT-10). uvloop rather than `asyncio.run()`: the
+    stdlib selector uses `epoll_wait`, absent from the enforcing seccomp
+    profile (EXT-11), while uvloop uses `epoll_pwait` — the same loop
+    uvicorn runs in production."""
+    loop = uvloop.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
+
+
 def _asgi_request(method, path, headers=None, body_chunks=(), content_length=None):
     """Plays an HTTP request through `main.app` (full ASGI stack) and
     returns (status, headers, body, number of body chunks actually
@@ -1112,7 +1129,7 @@ def _asgi_request(method, path, headers=None, body_chunks=(), content_length=Non
     async def send(message):
         sent.append(message)
 
-    _drive(main.app(scope, receive, send))
+    _run_in_uvloop(main.app(scope, receive, send))
     start = next(m for m in sent if m["type"] == "http.response.start")
     resp_headers = {k.decode().lower(): v.decode() for k, v in start["headers"]}
     body = b"".join(m.get("body", b"") for m in sent if m["type"] == "http.response.body")

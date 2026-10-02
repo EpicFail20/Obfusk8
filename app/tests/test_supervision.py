@@ -191,30 +191,45 @@ def test_donnee_externe_malformee_ni_perte_ni_injection_de_trame(local_syslog_re
 
 class _TcpReceiver:
     """A real local TCP syslog receiver that splits frames on LF, like a
-    standard rsyslog (RFC 6587 non-transparent framing)."""
+    standard rsyslog (RFC 6587 non-transparent framing).
+
+    Accept/recv use a short timeout and a stop flag instead of a
+    cross-thread `shutdown()`: the `shutdown` syscall is not in the app's
+    enforcing seccomp profile (ENOSYS), so under that profile the old
+    close() could not wake the thread blocked in recv() — no FIN reached
+    the sink and the reconnection test failed (EXT-10). Socket timeouts
+    rely on poll(), which the profile allows. Closing the connection from
+    the serving thread itself sends the FIN, as a collector restart does."""
+
+    _POLL_SECONDS = 0.05
 
     def __init__(self, port: int = 0):
         self.server = socket.create_server(("127.0.0.1", port))
+        self.server.settimeout(self._POLL_SECONDS)
         self.port = self.server.getsockname()[1]
         self.frames: list[str] = []
         self.connections = 0
-        self._conns: list[socket.socket] = []
+        self._stopped = threading.Event()
         self._thread = threading.Thread(target=self._serve, daemon=True)
         self._thread.start()
 
     def _serve(self):
-        while True:
+        while not self._stopped.is_set():
             try:
                 conn, _ = self.server.accept()
+            except TimeoutError:
+                continue
             except OSError:
                 return
             self.connections += 1
-            self._conns.append(conn)
+            conn.settimeout(self._POLL_SECONDS)
             buf = b""
             with conn:
-                while True:
+                while not self._stopped.is_set():
                     try:
                         chunk = conn.recv(65535)
+                    except TimeoutError:
+                        continue
                     except OSError:
                         break
                     if not chunk:
@@ -233,13 +248,9 @@ class _TcpReceiver:
     def close(self):
         """Stops listening AND closes the open connections, as a collector
         restart does."""
+        self._stopped.set()
+        self._thread.join(timeout=2)
         self.server.close()
-        for conn in self._conns:
-            try:
-                conn.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
-            conn.close()
 
 
 def test_tcp_chaque_alerte_livree_immediatement_et_separement():
