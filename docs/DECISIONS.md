@@ -131,6 +131,11 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   apostrophes typographiques peuvent causer des faux négatifs, mais une normalisation qui change la longueur exige une table de correspondance des positions.
 - **Décision** : rien d'ajouté avant mesure ; le banc d'essai (étape E) quantifie chaque variante. Toute normalisation ajoutée conservera la correspondance
   des positions avec le texte reçu (`CLAUDE.md` §5) et sera testée.
+- **Mesure (étape E, 2026-10-02)** : rappel en masquage par variante — largeur nulle 0,646, espaces insécables 0,789, NFD 0,810, chiffres
+  espacés 0,846, contre 0,919 sans variante (`benchmarks/results/quality-20261002T091416.md`, EXT-26 à EXT-30).
+- **Proposition pour la phase suivante (à valider)** : avant analyse, supprimer les caractères de format (largeur nulle, contrôles bidirectionnels),
+  remplacer les espaces insécables par une espace et recomposer en NFC, **avec une table de correspondance** des positions vers le texte reçu ;
+  appliquer au flux documents comme au flux texte (même fonction), tests de non-régression sur chaque variante du corpus.
 
 ## D-015 — Reconnaisseurs propres à l'API texte dans `app/themes/extension/` — validée (2026-10-02, validation humaine de l'étape B)
 

@@ -40,3 +40,9 @@ environnement isolé : `pip install --require-hashes --no-deps -r requirements-d
 | regex | 2026.7.10 | 2026.9.29 (2026-09-29) — **non retenue** (D-017) | OSV : aucune vulnérabilité pour 2026.7.10 | Apache-2.0 AND CNRI-Python | Même version que dans `presidio-analyzer`, pour tester les motifs avec le même moteur |
 
 Sources : API JSON de PyPI (`https://pypi.org/pypi/<paquet>/json`, champ `info.version`, hors préversions), API OSV (`https://api.osv.dev/v1/query`).
+
+### Outils d'analyse exécutés hors dépôt (étape F)
+
+| Outil | Version retenue | Dernière stable observée (2026-10-02) | Source | Remarque |
+|---|---|---|---|---|
+| trivy | 0.75.0, image `aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa` | 0.75.0 (publiée le 2026-10-01) | API GitHub des versions d'aquasecurity/trivy ; condensat par `docker buildx imagetools inspect` | Conteneur jetable, mémoire limitée à 800 Mo, cache et archive d'image sur disque (pas dans le tmpfs `/tmp`, voir EXT-25). Résultat : EXT-33 |
