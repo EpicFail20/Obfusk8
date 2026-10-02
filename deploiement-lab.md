@@ -142,6 +142,31 @@ docker compose logs -f oauth2-proxy
 
 Ouvre `https://anonymiseur.lab.local` (bien `https`). Accepte l'avertissement de certificat (auto-signé en lab). Tu dois être redirigé vers Keycloak, te connecter avec un utilisateur de test, puis atterrir sur l'app.
 
+## 8. (Facultatif) Activer l'API texte pour l'extension de navigateur
+
+Désactivée par défaut. Elle permet à une future extension de navigateur d'analyser ou de pseudonymiser un prompt avant son envoi
+à un service d'IA. Contrat complet : [`docs/api-extension.md`](./docs/api-extension.md).
+
+1. Dans `.env` : `ENABLE_EXTENSION_API=true`. Les plafonds `MAX_TEXT_*` ont des valeurs par défaut mesurées (voir `env.fr.example`).
+2. Recréer le conteneur de l'application :
+   ```bash
+   docker compose up -d app
+   docker compose logs app | grep "API texte activée"
+   ```
+3. Vérifier, une fois connecté dans le navigateur : `https://anonymiseur.lab.local/api/v1/version` doit renvoyer un JSON
+   (`api_version`, thèmes disponibles). Drapeau désactivé : 404.
+
+À savoir :
+- Les routes `/api/v1/` ont leur propre routeur Traefik (`app-text`) : limitation de débit **par utilisateur** (60 requêtes par minute,
+  rafale de 20) et plafond de corps de 244 096 octets. **Si vous changez `MAX_TEXT_CHARS`**, recalculez le label
+  `text-bodylimit` dans `docker-compose.yml` : `12 × MAX_TEXT_CHARS + 4096`.
+- Les requêtes de prompts sont journalisées dans un journal d'audit séparé, `/var/log/anonymiseur-audit/audit-extension.log`
+  (métadonnées seulement : utilisateur, types et nombres d'entités, longueur, durée ; jamais le texte).
+- Une requête non authentifiée reçoit aujourd'hui la page de connexion avec un code 302 : adapté au navigateur, pas encore à une extension
+  (options étudiées dans `docs/DECISIONS.md`, D-010).
+- L'analyseur Presidio n'a qu'un worker, partagé avec le flux documents : un traitement de document en cours retarde les prompts, et
+  inversement dans une moindre mesure (mesures dans `benchmarks/results/`).
+
 ## Changer de domaine après coup
 
 Quatre endroits à mettre à jour si `APP_DOMAIN` change après une installation fonctionnelle :

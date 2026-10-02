@@ -71,6 +71,7 @@ Every variable is documented directly in `.env.example`. The main categories:
 | `MAX_*` | Size/volume caps (upload, pages, rows, detection duration...) — protect against oversized or malicious documents |
 | `AV_*`, `ICAP_*` | Optional antivirus scanning, via an ICAP server already deployed in your infrastructure |
 | `ALERT_SINK`, `SYSLOG_HOST` | Forwarding monitoring alerts to your SIEM/syslog collector |
+| `ENABLE_EXTENSION_API`, `MAX_TEXT_*` | Text API for a future browser extension (prompt analysis and pseudonymization), **disabled by default** — see [`docs/api-extension.en.md`](./docs/api-extension.en.md) |
 
 The `MAX_*` caps have safe defaults for standard use; only raise them if you know what you're doing (see [`SECURITY.md`](./SECURITY.md)).
 

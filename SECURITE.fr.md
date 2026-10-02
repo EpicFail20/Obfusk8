@@ -14,6 +14,7 @@ Il s'agit d'une **synthèse volontairement résumée** d'un audit de sécurité 
 - [Réseau et exposition](#réseau-et-exposition)
 - [Gestion des dépendances](#gestion-des-dépendances)
 - [Supervision et détection](#supervision-et-détection)
+- [API texte pour l'extension de navigateur (désactivée par défaut)](#api-texte-pour-lextension-de-navigateur-désactivée-par-défaut)
 - [Limites connues et risques acceptés](#limites-connues-et-risques-acceptés)
 - [Recommandations avant mise en production](#recommandations-avant-mise-en-production)
 - [Signaler une vulnérabilité](#signaler-une-vulnérabilité)
@@ -76,6 +77,22 @@ Chaque document uploadé passe par plusieurs couches de validation indépendante
 - Des métriques techniques (volumes traités, causes de rejet, disponibilité des services internes) sont exposées au format Prometheus standard, sans aucune donnée personnelle.
 - Un mécanisme d'alerte optionnel peut relayer les événements de sécurité significatifs (antivirus, disponibilité des services, espace disque) vers votre collecteur syslog/SIEM.
 
+## API texte pour l'extension de navigateur (désactivée par défaut)
+
+Une API d'analyse et de pseudonymisation de texte (`/api/v1/`) prépare une future extension de navigateur. Elle n'existe que si
+`ENABLE_EXTENSION_API=true` ; désactivée, le comportement de l'application est inchangé. Contrat et modèle de menace :
+[`docs/api-extension.md`](./docs/api-extension.md).
+
+- Même chaîne d'authentification et même secret de passerelle que le reste de l'application, avec un routeur dédié : limitation de débit
+  **par utilisateur authentifié** et plafond de taille appliqué à la fois en bordure et dans l'application.
+- Aucun paramètre client ne peut affaiblir la détection : ni seuil, ni liste d'entités à ignorer, ni reconnaisseur fourni par le client ;
+  tout champ inconnu est refusé.
+- Sans état : rien n'est conservé après la réponse, il n'existe pas de point de restauration. Les journaux et le journal d'audit (séparé,
+  `audit-extension.log`) ne reçoivent que des métadonnées, jamais le texte ni les valeurs détectées (vérifié par des tests).
+- Détection des secrets fréquents dans les prompts (clés privées, jetons, chaînes de connexion, mots de passe affectés, clés de grands
+  fournisseurs), des numéros de carte et de sécurité sociale et des adresses électroniques internes, actifs quel que soit le thème.
+- Bornes anti-épuisement propres : une seule analyse de texte à la fois, file d'attente bornée, délai maximal.
+
 ## Limites connues et risques acceptés
 
 Ce projet documente honnêtement ce qui reste ouvert plutôt que de le passer sous silence :
@@ -87,6 +104,11 @@ Ce projet documente honnêtement ce qui reste ouvert plutôt que de le passer so
 - **Sauvegarde et haute disponibilité** : le déploiement de référence ne couvre pas la sauvegarde automatisée ni la tolérance de panne — à mettre en place selon vos propres exigences de continuité.
 - **Veille de vulnérabilités continue** : un outillage existe mais n'est pas encore un processus entièrement automatisé et validé en conditions réelles — une vigilance manuelle périodique reste recommandée en complément.
 - **Qualité de détection** : comme tout système basé sur des modèles de reconnaissance d'entités, la détection n'est pas garantie exhaustive à 100 %, en particulier sur des mises en page ou des formulations inhabituelles. C'est pourquoi l'étape de révision humaine avant validation finale est obligatoire, pas optionnelle.
+- **API texte (si activée)** : la révision humaine des détections, obligatoire pour les documents, ne peut pas être imposée par le serveur
+  pour un prompt ; elle incombera à l'extension. La réponse de pseudonymisation contient, par nécessité, les valeurs d'origine pour la
+  restauration côté client. Pendant le traitement d'un document, les requêtes de texte attendent (le traitement des documents occupe le
+  processus unique de l'application). Les numéros de carte sont détectés sans contrôle de la clé de Luhn (plus de faux positifs, pas de
+  faux négatifs ajoutés).
 - **Pentest externe** : cette synthèse reflète un audit interne itératif, pas un test d'intrusion mené par un tiers indépendant — fortement recommandé en complément avant tout traitement de données réelles sensibles.
 
 ## Recommandations avant mise en production

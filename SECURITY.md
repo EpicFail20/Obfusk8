@@ -14,6 +14,7 @@ This is a **deliberately condensed summary** of a thorough, iterative internal s
 - [Network and exposure](#network-and-exposure)
 - [Dependency management](#dependency-management)
 - [Monitoring and detection](#monitoring-and-detection)
+- [Text API for the browser extension (disabled by default)](#text-api-for-the-browser-extension-disabled-by-default)
 - [Known limitations and accepted risks](#known-limitations-and-accepted-risks)
 - [Recommendations before going to production](#recommendations-before-going-to-production)
 - [Reporting a vulnerability](#reporting-a-vulnerability)
@@ -76,6 +77,22 @@ Every uploaded document goes through several independent validation layers befor
 - Technical metrics (volumes processed, rejection causes, internal service availability) are exposed in the standard Prometheus format, with no personal data whatsoever.
 - An optional alerting mechanism can relay significant security events (antivirus, service availability, disk space) to your syslog/SIEM collector.
 
+## Text API for the browser extension (disabled by default)
+
+A text analysis and pseudonymization API (`/api/v1/`) prepares a future browser extension. It only exists when
+`ENABLE_EXTENSION_API=true`; when disabled, the application behaves exactly as before. Contract and threat model:
+[`docs/api-extension.en.md`](./docs/api-extension.en.md).
+
+- Same authentication chain and gateway secret as the rest of the application, with a dedicated router: rate limiting **per
+  authenticated user** and a size cap enforced both at the edge and inside the application.
+- No client parameter can weaken detection: no threshold, no list of entities to ignore, no client-supplied recognizer; any unknown
+  field is rejected.
+- Stateless: nothing is kept after the response, there is no restore endpoint. Logs and the audit log (a separate
+  `audit-extension.log`) only receive metadata, never the text or the detected values (verified by tests).
+- Detection of secrets commonly found in prompts (private keys, tokens, connection strings, assigned passwords, major providers' keys),
+  payment card and French social security numbers, and internal email addresses, active whatever the theme.
+- Its own anti-exhaustion bounds: one text analysis at a time, bounded queue, maximum duration.
+
 ## Known limitations and accepted risks
 
 This project honestly documents what remains open rather than staying silent about it:
@@ -87,6 +104,10 @@ This project honestly documents what remains open rather than staying silent abo
 - **Backup and high availability**: the reference deployment does not cover automated backups or fault tolerance — to be set up according to your own continuity requirements.
 - **Continuous vulnerability monitoring**: tooling exists but is not yet a fully automated process validated under real conditions — periodic manual vigilance remains recommended in addition.
 - **Detection quality**: like any system based on entity recognition models, detection is not guaranteed to be 100% exhaustive, particularly on unusual layouts or phrasing. This is why the human review step before final validation is mandatory, not optional.
+- **Text API (when enabled)**: human review of detections, mandatory for documents, cannot be enforced by the server for a prompt;
+  it will be the extension's job. The pseudonymization response contains, by necessity, the original values for client-side
+  restoration. While a document is being processed, text requests wait (document processing occupies the application's single
+  process). Payment card numbers are detected without a Luhn check (more false positives, no added false negatives).
 - **External pentest**: this summary reflects an iterative internal audit, not a penetration test carried out by an independent third party — strongly recommended in addition, before processing any real sensitive data.
 
 ## Recommendations before going to production

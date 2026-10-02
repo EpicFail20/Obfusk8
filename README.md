@@ -73,6 +73,7 @@ Chaque variable est documentée directement dans `.env.example`. Les grandes cat
 | `MAX_*` | Plafonds de taille/volume (upload, pages, lignes, durée de détection...) — protègent contre les documents surdimensionnés ou malveillants |
 | `AV_*`, `ICAP_*` | Scan antivirus optionnel, via un serveur ICAP déjà déployé dans votre infrastructure |
 | `ALERT_SINK`, `SYSLOG_HOST` | Envoi d'alertes de supervision vers votre SIEM/collecteur syslog |
+| `ENABLE_EXTENSION_API`, `MAX_TEXT_*` | API texte pour une future extension de navigateur (analyse et pseudonymisation de prompts), **désactivée par défaut** — voir [`docs/api-extension.md`](./docs/api-extension.md) |
 
 Les plafonds `MAX_*` ont des valeurs par défaut sûres pour un usage standard ; ne les augmentez qu'en connaissance de cause (voir [`SECURITE.md`](./SECURITE.md)).
 

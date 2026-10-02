@@ -142,6 +142,31 @@ docker compose logs -f oauth2-proxy
 
 Open `https://anonymiseur.lab.local` (make sure it's `https`). Accept the certificate warning (self-signed in the lab). You should be redirected to Keycloak, log in with a test user, and land on the app.
 
+## 8. (Optional) Enable the text API for the browser extension
+
+Disabled by default. It lets a future browser extension analyze or pseudonymize a prompt before it is sent to an AI service.
+Full contract: [`docs/api-extension.en.md`](./docs/api-extension.en.md).
+
+1. In `.env`: `ENABLE_EXTENSION_API=true`. The `MAX_TEXT_*` limits have measured defaults (see `env.en.example`).
+2. Recreate the application container:
+   ```bash
+   docker compose up -d app
+   docker compose logs app | grep "API texte activée"
+   ```
+3. Check, once logged in through the browser: `https://anonymiseur.lab.local/api/v1/version` must return JSON
+   (`api_version`, available themes). Flag disabled: 404.
+
+Good to know:
+- The `/api/v1/` routes have their own Traefik router (`app-text`): **per-user** rate limiting (60 requests per minute, burst 20) and a
+  244,096-byte body cap. **If you change `MAX_TEXT_CHARS`**, recompute the `text-bodylimit` label in `docker-compose.yml`:
+  `12 x MAX_TEXT_CHARS + 4096`.
+- Prompt requests are recorded in a separate audit log, `/var/log/anonymiseur-audit/audit-extension.log` (metadata only: user, entity
+  types and counts, length, duration; never the text).
+- An unauthenticated request currently gets the sign-in page with a 302 status: fine for a browser, not yet for an extension
+  (options studied in `docs/DECISIONS.md`, D-010).
+- The Presidio analyzer has a single worker, shared with the document flow: a document being processed delays prompts, and the other
+  way round to a lesser extent (measurements in `benchmarks/results/`).
+
 ## Changing the domain later
 
 Four places to update if `APP_DOMAIN` changes after a working install:
