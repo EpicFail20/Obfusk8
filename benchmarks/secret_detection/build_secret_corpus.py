@@ -22,7 +22,7 @@ Every value is fictitious: provider documentation examples
 strings spelled FAKE/Fictif. Domains use the reserved .invalid TLD (RFC 2606)
 except where the format itself is the point.
 
-Usage: python3 benchmarks/secret_detection/build_corpus.py
+Usage: python3 benchmarks/secret_detection/build_secret_corpus.py
 """
 
 import json
