@@ -24,6 +24,9 @@ known-first-party = ["main", "metrics", "supervision", "antivirus", "branding", 
 # deliberately ambiguous Unicode (placeholders, typographic characters are
 # what is being tested).
 "**/tests/*" = ["S101", "PLR2004", "S105", "S106", "PLC0415", "PLR0917", "RUF001"]
+# End-to-end scripts: HTTP status literals and typographic characters are
+# exactly what they check.
+"**/e2e/*" = ["PLR2004", "RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -34,10 +37,16 @@ follow_imports = "silent"
 ignore_missing_imports = false
 
 [[tool.mypy.overrides]]
-module = ["main", "antivirus", "branding", "icap.*", "pymupdf.*", "fitz.*", "docx.*", "pytesseract.*"]
+module = ["main", "antivirus", "branding", "icap.*", "pymupdf", "pymupdf.*", "fitz.*", "docx.*", "pytesseract.*"]
 ignore_errors = true
 ignore_missing_imports = true
 
 [tool.coverage.run]
 branch = true
 data_file = "/tmp/.coverage"
+
+[[tool.mypy.overrides]]
+# Calls into PyMuPDF (untyped) to build a synthetic PDF.
+module = ["e2e_document_flow"]
+disallow_untyped_calls = false
+warn_return_any = false
