@@ -42,7 +42,8 @@ All routes go through the existing chain: Traefik → `oauth2-errors` → `oidc-
   "api_version": "1.0",
   "detection_config": "3f1c9a0b7e2d4c55",
   "analyzer_language": "fr",
-  "presidio_version": "2.2.364",
+  "analyzer_recognizers": "a41c07d29e5b3f18",
+  "presidio_version": null,
   "themes": [
     {"key": "compta", "label": "Accounting"},
     {"key": "it", "label": "IT / Infrastructure"},
@@ -55,7 +56,9 @@ All routes go through the existing chain: Traefik → `oauth2-errors` → `oidc-
 - `detection_config`: fingerprint (SHA-256 truncated to 16 hex characters) computed at startup over the canonical content of the themes,
   the common recognizers, the text-API-specific recognizers, `DEFAULT_SCORE_THRESHOLD` and the analysis language. It changes as soon as any
   of these changes. The extension can display or log it to know which configuration a text was checked with.
-- `presidio_version`: see open decision D-013 (Presidio's REST API does not expose its version). `null` when unknown.
+- `analyzer_recognizers`: fingerprint (16 hex characters) of the list of recognizers actually loaded by `presidio-analyzer` for the analysis
+  language, queried on the first call then cached; `null` if the analyzer does not answer (D-013).
+- `presidio_version`: always `null` for now, since Presidio's REST API does not expose its version (D-013).
 - `label`: label in the server's `UI_LANG` language (`app/i18n/themes.json`).
 
 ### 2.2 `POST /api/v1/text/analyze`
@@ -151,7 +154,7 @@ Same format as the application's existing errors (`detail` field), plus the corr
 |---|---|
 | 400 | Body not UTF-8, invalid JSON (including a lone surrogate in a `\u` escape) |
 | 401 | Missing or wrong gateway secret (request bypassing Traefik) — existing application response, without `request_id` |
-| 302 | Unauthenticated through Traefik: redirect to login by `oauth2-errors` (current behavior, unsuited to an extension, see §8) |
+| 302 | Unauthenticated through Traefik: `oauth2-errors` rewrites the 401 as a 302 **without a `Location` header**, with oauth2-proxy's HTML sign-in page as body (observed on 2026-10-02; current behavior of every route, unsuited to an extension, see §8) |
 | 404 | `ENABLE_EXTENSION_API=false` (standard FastAPI response `{"detail":"Not Found"}`, identical to today) |
 | 413 | Body beyond the cap (at the edge by Traefik, otherwise by the application), or `text` beyond `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` other than `application/json` (also protects against cross-site form posts, §6) |
@@ -259,8 +262,8 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
 
 ## 8. Options for the next phase (documented, not implemented)
 
-Today, an unauthenticated request gets a **302 redirect** to the login page (`oauth2-errors` rewrites the 401). That suits a browser, not an
-extension expecting JSON. The options and their consequences are detailed in `DECISIONS.md` (D-010). In short: (a) a router without `oauth2-errors`
+Today, an unauthenticated request gets a **302 without a `Location` header** whose body is the HTML sign-in page (`oauth2-errors`
+rewrites the 401). A browser displays that page; an extension expecting JSON cannot use it. The options and their consequences are detailed in `DECISIONS.md` (D-010). In short: (a) a router without `oauth2-errors`
 for `/api/v1/` (raw 401); (b) Bearer tokens accepted by oauth2-proxy (`skip_jwt_bearer_tokens`); (c) the extension reuses the browser's session
 cookie; (d) Obfusk8-specific API tokens.
 

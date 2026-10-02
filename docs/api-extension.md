@@ -42,7 +42,8 @@ Réponse 200 :
   "api_version": "1.0",
   "detection_config": "3f1c9a0b7e2d4c55",
   "analyzer_language": "fr",
-  "presidio_version": "2.2.364",
+  "analyzer_recognizers": "a41c07d29e5b3f18",
+  "presidio_version": null,
   "themes": [
     {"key": "compta", "label": "Comptabilité"},
     {"key": "it", "label": "IT / Infrastructure"},
@@ -55,7 +56,9 @@ Réponse 200 :
 - `detection_config` : empreinte (SHA-256 tronquée à 16 caractères hexadécimaux) calculée au démarrage sur le contenu canonique des thèmes,
   des reconnaisseurs communs, des reconnaisseurs propres à l'API texte, de `DEFAULT_SCORE_THRESHOLD` et de la langue d'analyse.
   Elle change dès qu'un de ces éléments change. L'extension peut l'afficher ou la journaliser pour savoir avec quelle configuration un texte a été vérifié.
-- `presidio_version` : voir la décision ouverte D-013 (l'API REST de Presidio n'expose pas sa version). `null` si elle n'est pas connue.
+- `analyzer_recognizers` : empreinte (16 caractères hexadécimaux) de la liste des reconnaisseurs effectivement chargés par `presidio-analyzer`
+  pour la langue d'analyse, interrogée au premier appel puis mise en cache ; `null` si l'analyseur ne répond pas (D-013).
+- `presidio_version` : toujours `null` pour l'instant, l'API REST de Presidio n'exposant pas sa version (D-013).
 - `label` : libellé dans la langue `UI_LANG` du serveur (`app/i18n/themes.json`).
 
 ### 2.2 `POST /api/v1/text/analyze`
@@ -152,7 +155,7 @@ Même format que les erreurs existantes de l'application (champ `detail`), plus 
 |---|---|
 | 400 | Corps non UTF-8, JSON invalide (y compris surrogate isolée dans une séquence `\u`) |
 | 401 | Secret de passerelle absent ou faux (requête qui contourne Traefik) — réponse existante de l'application, sans `request_id` |
-| 302 | Non authentifié via Traefik : redirection vers la connexion par `oauth2-errors` (comportement actuel, inadapté à une extension, voir §8) |
+| 302 | Non authentifié via Traefik : `oauth2-errors` réécrit le 401 en 302 **sans en-tête `Location`**, avec la page de connexion d'oauth2-proxy en HTML comme corps (observé le 2026-10-02 ; comportement actuel de toutes les routes, inadapté à une extension, voir §8) |
 | 404 | `ENABLE_EXTENSION_API=false` (réponse FastAPI standard `{"detail":"Not Found"}`, identique à aujourd'hui) |
 | 413 | Corps au-delà du plafond (en bordure par Traefik, sinon par l'application), ou `text` au-delà de `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` autre que `application/json` (protège aussi contre les envois de formulaire intersites, §6) |
@@ -261,8 +264,8 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
 
 ## 8. Options pour la phase suivante (documentées, non implémentées)
 
-Aujourd'hui, une requête non authentifiée reçoit une **redirection 302** vers la page de connexion (`oauth2-errors` réécrit le 401). C'est adapté
-à un navigateur, pas à une extension qui attend du JSON. Les options et leurs conséquences sont détaillées dans `DECISIONS.md` (D-010).
+Aujourd'hui, une requête non authentifiée reçoit un **302 sans en-tête `Location`** dont le corps est la page HTML de connexion
+(`oauth2-errors` réécrit le 401). Un navigateur affiche cette page ; une extension qui attend du JSON ne peut rien en faire. Les options et leurs conséquences sont détaillées dans `DECISIONS.md` (D-010).
 En résumé : (a) routeur sans `oauth2-errors` pour `/api/v1/` (401 brut) ; (b) jetons Bearer acceptés par oauth2-proxy (`skip_jwt_bearer_tokens`) ;
 (c) l'extension réutilise le cookie de session du navigateur ; (d) jetons d'API propres à Obfusk8.
 

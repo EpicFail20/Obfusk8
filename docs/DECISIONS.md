@@ -6,7 +6,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 
 ---
 
-## D-001 — Préfixe versionné `/api/v1/` — proposée
+## D-001 — Préfixe versionné `/api/v1/` — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : les routes existantes suivent le style `/api/<verbe>` sans version. L'extension sera publiée et mise à jour indépendamment du serveur ;
   elle doit détecter une incompatibilité.
@@ -17,7 +17,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Conséquences** : un seul routeur Traefik `PathPrefix(/api/v1/)` couvre toutes les routes de l'extension, y compris les futures.
   Aucune route existante ne commence par `/api/v1/` (vérifié dans `main.py`).
 
-## D-002 — Positions en points de code et en unités UTF-16 — proposée
+## D-002 — Positions en points de code et en unités UTF-16 — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : Python indexe les chaînes en points de code ; JavaScript (l'extension) en unités UTF-16. Ils divergent dès qu'un caractère hors
   plan de base (émoji…) précède l'entité. Une position fausse côté client fait masquer le mauvais passage : faux négatif silencieux.
@@ -26,14 +26,14 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   (inutilement complexe).
 - **Conséquences** : coût de calcul linéaire négligeable ; tests dédiés avec émojis et formes NFD.
 
-## D-003 — Pas de score dans les réponses — proposée
+## D-003 — Pas de score dans les réponses — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : doctrine §0.2, les scores ne sont pas calibrés (0,85 fixe pour spaCy). Un score exposé invite le client à filtrer.
 - **Décision** : aucun score dans `analyze`.
 - **Alternatives écartées** : renvoyer le score avec un avertissement dans la documentation — le risque d'usage est réel et le bénéfice nul pour l'extension.
 - **Conséquences** : le diagnostic des scores reste possible dans les journaux serveur (types et scores, jamais le texte, comme aujourd'hui).
 
-## D-004 — Marqueurs `⟦TYPE_N⟧`, fusion des chevauchements — proposée (format à confirmer)
+## D-004 — Marqueurs `⟦TYPE_N⟧`, fusion des chevauchements — validée (2026-10-02, format `⟦TYPE_N⟧` retenu)
 
 - **Contexte** : les marqueurs doivent être non ambigus, ne pas apparaître naturellement dans un texte, et survivre à l'aller-retour par un modèle d'IA.
 - **Décision** : `⟦` U+27E6 et `⟧` U+27E7, type d'entité en ASCII majuscule, numéro par type à partir de 1. Même valeur exacte, même marqueur.
@@ -44,13 +44,13 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Conséquences** : le banc d'essai ne peut pas mesurer la survie au modèle d'IA (hors ligne) ; à vérifier par l'extension. Alternative de repli
   documentée si le format pose problème : `[[TYPE_N]]` avec la même règle de non-collision.
 
-## D-005 — 503 (et non 502) quand Presidio est indisponible, sur les routes v1 — proposée
+## D-005 — 503 (et non 502) quand Presidio est indisponible, sur les routes v1 — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : le flux documents renvoie 502 avec un message codé en dur (EXT-17). Le prompt de phase demande 503.
 - **Décision** : 503 et `Retry-After` sur les routes v1, message traduit ; le flux documents n'est pas modifié.
 - **Conséquences** : deux codes différents pour la même panne selon le flux, documenté.
 
-## D-006 — Plafond de corps propre aux routes v1, dérivé de `MAX_TEXT_CHARS` — proposée
+## D-006 — Plafond de corps propre aux routes v1, dérivé de `MAX_TEXT_CHARS` — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : `MAX_REQUEST_BODY_BYTES` (27 Mio) est global. Le lever ou l'abaisser changerait le flux documents. De plus, une exception levée depuis
   `receive` est convertie en 400 par le middleware de `branding.py` (EXT-22).
@@ -67,7 +67,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Conséquences** : `GET /api/audit` ne montre pas les événements de prompts (consultation sur l'hôte) ; une route de consultation dédiée est hors
   périmètre (prompt de phase).
 
-## D-008 — Limitation de débit par utilisateur (`X-Auth-Request-User`) — proposée
+## D-008 — Limitation de débit par utilisateur (`X-Auth-Request-User`) — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : la clé par IP pénalise les utilisateurs derrière un même NAT ou proxy d'entreprise.
 - **Vérifié** (Traefik 3.7, documentation et code source) : `sourceCriterion.requestHeaderName` existe ; `forwardAuth` supprime puis repose les
@@ -78,7 +78,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   limitation applicative par utilisateur (état en mémoire supplémentaire, redondant avec Traefik).
 - **Conséquences** : stockage en mémoire de Traefik (une seule instance, pas de Redis) ; vérification de bout en bout à l'étape F.
 
-## D-009 — Analyse du corps dans la route, sans le 422 par défaut de FastAPI — proposée
+## D-009 — Analyse du corps dans la route, sans le 422 par défaut de FastAPI — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : le 422 par défaut de FastAPI renvoie un champ `input` qui recopie la valeur fautive, donc potentiellement le prompt.
   Remplacer le gestionnaire global modifierait aussi le flux documents.
@@ -86,7 +86,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   génériques traduits (400 pour JSON invalide, 422 sinon).
 - **Conséquences** : la documentation OpenAPI automatique ne décrit pas le corps ; le contrat de référence est `docs/api-extension.md`.
 
-## D-010 — Authentification de l'extension : options pour la phase suivante — ouverte
+## D-010 — Authentification de l'extension : options pour la phase suivante — ouverte (phase suivante)
 
 - **Contexte** : `oauth2-errors` transforme le 401 en 302 vers la connexion. Une extension qui attend du JSON ne sait pas traiter cette redirection.
 - **Options** :
@@ -108,31 +108,31 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Décision** : documenté dans le contrat. L'extension (phase ultérieure) affiche les détections et permet de corriger avant l'envoi.
 - **Conséquences** : l'API renvoie des positions exploitables (D-002) pour cet affichage.
 
-## D-012 — Propagation des valeurs exactes à tous les types (routes texte) — ouverte
+## D-012 — Propagation des valeurs exactes à tous les types (routes texte) — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : le flux documents ne propage que PERSON et LOCATION (avec variantes de casse et d'ordre). Pour un prompt pseudonymisé,
   une autre occurrence non détectée d'une valeur déjà détectée (courriel, identifiant…) fuirait en clair à côté de son marqueur.
 - **Proposition** : en plus de la propagation existante (réutilisée telle quelle), signaler toute autre occurrence exacte d'une valeur détectée,
   quel que soit son type, à partir de 3 caractères (même seuil que le flux documents).
 - **Risque** : quelques faux positifs (une année répétée détectée une fois comme date). Conforme à la doctrine §0.1.
-- **À valider** avant l'étape C.
+- **Validée** : recommandation retenue (frontières de mot, voir l'implémentation).
 
-## D-013 — Source de `presidio_version` — ouverte
+## D-013 — Source de `presidio_version` — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : l'API REST de Presidio n'expose pas sa version (`/health` renvoie un texte fixe).
 - **Options** : (a) variable d'environnement dans `docker-compose.yml`, à mettre à jour avec l'image (changement de Compose hors de la liste autorisée,
   accord requis ; risque de dérive) ; (b) `null` et `detection_config` seul ; (c) empreinte de `GET /recognizers?language=fr`, interrogée au premier appel
   (reflète les reconnaisseurs effectivement chargés, pas le numéro de version).
-- **Recommandation** : (c), exposée dans un champ distinct `analyzer_recognizers`, et `presidio_version: null` tant que (a) n'est pas autorisé.
+- **Décision** (recommandation retenue) : (c), exposée dans un champ distinct `analyzer_recognizers`, et `presidio_version: null` tant que (a) n'est pas autorisé.
 
-## D-014 — Normalisation Unicode supplémentaire — ouverte (après mesure)
+## D-014 — Normalisation Unicode supplémentaire — principe validé (2026-10-02) ; décision finale après la mesure de l'étape E
 
 - **Contexte** : la normalisation actuelle (majuscules, tirets) conserve la longueur. Espaces insécables, caractères de largeur nulle, formes NFD et
   apostrophes typographiques peuvent causer des faux négatifs, mais une normalisation qui change la longueur exige une table de correspondance des positions.
 - **Décision** : rien d'ajouté avant mesure ; le banc d'essai (étape E) quantifie chaque variante. Toute normalisation ajoutée conservera la correspondance
   des positions avec le texte reçu (`CLAUDE.md` §5) et sera testée.
 
-## D-015 — Reconnaisseurs propres à l'API texte dans `app/themes/extension/` — proposée
+## D-015 — Reconnaisseurs propres à l'API texte dans `app/themes/extension/` — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : secrets (validé : fichier séparé) et couverture d'EXT-08 (carte bancaire, NIR ; validé : à couvrir). `_load_themes` charge tout
   `app/themes/*.json` comme thème sélectionnable ; un nouveau répertoire à la racine d'`app/` exigerait de modifier le Dockerfile (accord requis).
@@ -142,7 +142,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Conséquences** : EXT-08 reste ouvert pour le flux documents (hors périmètre). Les reconnaisseurs de motif de Presidio ne valident pas la clé de Luhn ;
   la validation des numéros de carte est à trancher à l'étape D (faux positifs sur les longues suites de chiffres contre faux négatifs).
 
-## D-016 — Tests exécutés dans un conteneur jetable sous le profil seccomp — proposée
+## D-016 — Tests exécutés dans un conteneur jetable sous le profil seccomp — validée (2026-10-02, validation humaine de l'étape B)
 
 - **Contexte** : EXT-09, lancer `pytest` dans le conteneur de production écrit dans le vrai journal d'audit et le vrai répertoire de travail.
 - **Décision** : pendant la phase, tests unitaires dans un conteneur jetable (image de production, `--security-opt seccomp=seccomp/app-enforce.json`,
