@@ -114,5 +114,16 @@
   "home_page_heading": "Obfusk8 - Document Anonymizer (PDF, DOCX, CSV, image)",
   "home_page_intro": "Upload a document. You'll be able to review and adjust the detected zones before final redaction.",
   "theme_select_label": "Document type:",
-  "analyze_button": "Analyze"
+  "analyze_button": "Analyze",
+
+  "text_api_body_too_large": "The request exceeds the maximum allowed size ({max_bytes} bytes).",
+  "text_api_text_too_long": "The text exceeds the maximum allowed size ({max_chars} characters).",
+  "text_api_unsupported_media_type": "Unsupported content type: application/json (UTF-8) expected.",
+  "text_api_invalid_json": "Invalid request body: UTF-8 encoded JSON expected.",
+  "text_api_invalid_request": "Request does not match the API contract: missing, unknown, empty or wrongly typed field.",
+  "text_api_unknown_theme": "Unknown theme.",
+  "text_api_busy": "Too many text analyses waiting. Try again in a moment.",
+  "text_api_timeout": "The analysis exceeded the maximum allowed time ({max_seconds} s). Try again in a moment.",
+  "text_api_analyzer_unavailable": "Analysis engine unavailable. Try again later.",
+  "text_api_internal_error": "Unexpected internal error. Give the request identifier to the administrator."
 }

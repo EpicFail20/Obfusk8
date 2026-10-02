@@ -69,6 +69,7 @@ import pymupdf as fitz  # PyMuPDF — alias 'fitz' kept, 'import fitz' is deprec
 import pytesseract
 import requests
 import metrics
+import text_api
 from antivirus import AntivirusUnavailableError, get_scanner, is_av_enforced
 from docx import Document as WordDocument
 from docx.oxml import parse_xml
@@ -76,7 +77,7 @@ from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 from lxml import etree
 from PIL import Image, ImageDraw, ImageOps, ImageStat, UnidentifiedImageError as PILUnidentifiedImageError
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from branding import install_branding
 from supervision import Alert, AlertSeverity, get_alert_sink
@@ -1281,13 +1282,16 @@ def _normalize_dashes(text: str) -> str:
     return text.translate({ord(c): "-" for c in _DASH_VARIANTS})
 
 
-def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
+def _analyze_text(text: str, theme: dict | None = None, timeout: float = 30) -> list[dict]:
     """Calls presidio-analyzer on a chunk of text, returns the entities found.
 
     If a theme is provided, its custom recognizers (ad_hoc_recognizers),
     its exclusion list (allow_list) and its sensitivity threshold
     (score_threshold) are sent with the request — without ever touching
     the static config of the presidio-analyzer container.
+
+    `timeout`: 30 s for the document flow (unchanged); the text API
+    (text_api.py) passes its own, shorter budget (MAX_TEXT_ANALYSIS_SECONDS).
     """
     if not text.strip():
         return []
@@ -1311,7 +1315,7 @@ def _analyze_text(text: str, theme: dict | None = None) -> list[dict]:
     payload["score_threshold"] = score_threshold
 
     try:
-        resp = requests.post(f"{ANALYZER_URL}/analyze", json=payload, timeout=30)
+        resp = requests.post(f"{ANALYZER_URL}/analyze", json=payload, timeout=timeout)
         resp.raise_for_status()
         entities = resp.json()
     except requests.RequestException as exc:
@@ -2637,7 +2641,12 @@ def _csv_structural_entities(rows: list[list[str]], column_keywords: dict[str, s
     return detections
 
 
-def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_detections: list[dict] | None = None) -> list[dict]:
+def _detect_text_blocks(
+    block_texts: list,
+    theme: dict | None = None,
+    extra_detections: list[dict] | None = None,
+    timeout: float | None = None,
+) -> list[dict]:
     """
     Generic detection over a list of indexed text blocks (DOCX
     paragraphs or CSV cells) — same two-pass logic as _detect_pdf
@@ -2645,7 +2654,12 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
     to the rest of the document), but in 1D (character offsets) rather than
     PDF rectangles. See TEXT_CHUNK_MAX_CHARS above for why we
     group into batches.
+
+    `timeout` is only passed on by the text API (text_api.py); the document
+    flow leaves it to None, so its call to _analyze_text stays exactly
+    `_analyze_text(text, theme=theme)` as before.
     """
+    analyze_kwargs = {} if timeout is None else {"timeout": timeout}
     detections: list[dict] = list(extra_detections or [])
     already_covered: set[tuple] = {(d["block_id"], d["start"], d["end"]) for d in detections}
     propagate_candidates: dict[str, str] = {
@@ -2666,7 +2680,7 @@ def _detect_text_blocks(block_texts: list, theme: dict | None = None, extra_dete
 
         combined_text = "\n".join(combined_parts)
         normalized = _normalize_dashes(_normalize_allcaps(combined_text))
-        entities = _analyze_text(normalized, theme=theme)
+        entities = _analyze_text(normalized, theme=theme, **analyze_kwargs)
 
         for entity in entities:
             for block_id, start_in_combined, length in offsets:
@@ -4194,3 +4208,36 @@ def read_audit_log(n: int = 50):
             continue
 
     return JSONResponse({"entries": entries})
+
+
+# ---------------------------------------------------------------------------
+# Text API for the browser extension (phase 1, text_api.py)
+# ---------------------------------------------------------------------------
+# Disabled by default (ENABLE_EXTENSION_API=false): the router is then never
+# built — the /api/v1/ routes do not exist (FastAPI's usual 404), no audit
+# file is created, and the document flow is strictly unchanged. An invalid
+# value of one of its variables fails startup (TextApiConfigError), same
+# fail-fast choice as the antivirus configuration.
+TEXT_API_SETTINGS = text_api.TextApiSettings.from_env()
+
+
+def _build_text_api_router(settings: text_api.TextApiSettings) -> APIRouter:
+    deps = text_api.TextApiDeps(
+        detect_blocks=lambda blocks, theme, timeout: _detect_text_blocks(blocks, theme=theme, timeout=timeout),
+        themes=THEMES,
+        theme_labels=THEME_LABELS,
+        common_recognizers=COMMON_RECOGNIZERS,
+        strings=STRINGS,
+        send_alert=_send_alert,
+        request_user=_request_user,
+        audit_dir=AUDIT_DIR,
+        extension_dir=THEMES_DIR / "extension",
+        analyzer_url=ANALYZER_URL,
+        analyzer_language=LANGUAGE,
+        default_score_threshold=DEFAULT_SCORE_THRESHOLD,
+    )
+    return text_api.create_router(settings, deps)
+
+
+if TEXT_API_SETTINGS.enabled:
+    app.include_router(_build_text_api_router(TEXT_API_SETTINGS))

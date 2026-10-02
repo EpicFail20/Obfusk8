@@ -38,6 +38,9 @@ COPY antivirus.py .
 COPY metrics.py .
 COPY supervision.py .
 COPY branding.py .
+# Text API for the browser extension (phase 1), only active when
+# ENABLE_EXTENSION_API=true — see docs/api-extension.en.md.
+COPY text_api.py text_api_models.py ./
 COPY themes/ ./themes/
 COPY i18n/ ./i18n/
 COPY tests/ ./tests/

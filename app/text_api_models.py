@@ -27,7 +27,7 @@ The maximum text length is NOT a model constraint: exceeding it is a 413
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 # Same bound and same character set as a theme file stem (app/themes/*.json):
 # a legitimate theme key is a short identifier (medical/it/compta). Whether
@@ -37,7 +37,7 @@ ThemeKey = Annotated[str, StringConstraints(min_length=1, max_length=64, pattern
 
 # Major version in the URL (/api/v1/...); minor bumped for additive,
 # backward-compatible changes only (new optional response field).
-API_VERSION = "1.0"
+API_VERSION: Literal["1.0"] = "1.0"
 
 _STRICT_INPUT = ConfigDict(extra="forbid", strict=True, frozen=True)
 _OUTPUT = ConfigDict(extra="forbid", frozen=True)
@@ -48,20 +48,12 @@ class TextRequest(BaseModel):
 
     model_config = _STRICT_INPUT
 
+    # A lone UTF-16 surrogate (JSON "\ud800") is rejected by pydantic-core
+    # itself: by the JSON parser (json_invalid -> 400), and by the string
+    # constraints for any other input (string_unicode). Rejected, never
+    # repaired: positions would no longer match what the analyzer receives.
     text: Annotated[str, StringConstraints(min_length=1)]
     theme: ThemeKey | None = None
-
-    @field_validator("text")
-    @classmethod
-    def _reject_lone_surrogates(cls, value: str) -> str:
-        # JSON "\ud800" escapes decode to a lone surrogate, valid in a Python
-        # str and in a JS string but not encodable to UTF-8: positions would
-        # no longer match what the analyzer receives. Rejected, never repaired.
-        try:
-            value.encode("utf-8")
-        except UnicodeEncodeError as exc:
-            raise ValueError("lone surrogate") from exc
-        return value
 
 
 class Entity(BaseModel):
@@ -123,6 +115,9 @@ class VersionResponse(BaseModel):
     api_version: Literal["1.0"]
     detection_config: str
     analyzer_language: str
+    # D-013: Presidio's REST API exposes no version; fingerprint of the
+    # recognizers actually loaded by the analyzer instead (null if unreachable).
+    analyzer_recognizers: str | None
     presidio_version: str | None
     themes: list[ThemeInfo]
     max_text_chars: int = Field(gt=0)

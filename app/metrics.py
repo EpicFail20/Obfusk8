@@ -86,6 +86,22 @@ DISK_FREE_BYTES = Gauge(
 )
 
 
+# Text API for the browser extension (text_api.py) — closed categories only:
+# route in {"analyze", "pseudonymize"}; outcome in {"ok", "too_large",
+# "invalid", "busy", "timeout", "analyzer_unavailable", "error"}.
+TEXT_API_REQUESTS = Counter(
+    "anonymiseur_text_api_requests_total",
+    "Number of text API requests, by route and outcome",
+    ["route", "outcome"],
+)
+
+TEXT_API_DURATION_SECONDS = Histogram(
+    "anonymiseur_text_api_duration_seconds",
+    "Duration of text API requests (queue wait included), by route",
+    ["route"],
+)
+
+
 def metrics_response() -> tuple[bytes, str]:
     """Builds the body and content-type of the HTTP /metrics response."""
     return generate_latest(), CONTENT_TYPE_LATEST

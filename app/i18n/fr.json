@@ -114,5 +114,16 @@
   "home_page_heading": "Obfusk8 - Anonymiseur de documents (PDF, DOCX, CSV, image)",
   "home_page_intro": "Déposez un document. Vous pourrez vérifier et ajuster les zones détectées avant le caviardage final.",
   "theme_select_label": "Type de document :",
-  "analyze_button": "Analyser"
+  "analyze_button": "Analyser",
+
+  "text_api_body_too_large": "La requête dépasse la taille maximale autorisée ({max_bytes} octets).",
+  "text_api_text_too_long": "Le texte dépasse la taille maximale autorisée ({max_chars} caractères).",
+  "text_api_unsupported_media_type": "Type de contenu non pris en charge : application/json (UTF-8) attendu.",
+  "text_api_invalid_json": "Corps de requête invalide : JSON encodé en UTF-8 attendu.",
+  "text_api_invalid_request": "Requête non conforme au contrat de l'API : champ manquant, inconnu, vide ou de type incorrect.",
+  "text_api_unknown_theme": "Thème inconnu.",
+  "text_api_busy": "Trop d'analyses de texte en attente. Réessayez dans un instant.",
+  "text_api_timeout": "L'analyse a dépassé le délai maximal autorisé ({max_seconds} s). Réessayez dans un instant.",
+  "text_api_analyzer_unavailable": "Moteur d'analyse indisponible. Réessayez plus tard.",
+  "text_api_internal_error": "Erreur interne inattendue. Communiquez l'identifiant de requête à l'administrateur."
 }
