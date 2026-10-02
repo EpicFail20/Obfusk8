@@ -187,10 +187,13 @@ class TextApiDeps:
     default_score_threshold: float
 
 
-def load_extension_recognizers(extension_dir: Path) -> list[dict[str, Any]]:
-    """Loads app/themes/extension/*.json. Unlike the document themes (an
-    unreadable theme is skipped), an unreadable file here FAILS startup: a
-    silently missing secret recognizer is a silent false negative."""
+def load_extension_recognizers(extension_dir: Path, themes: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Loads app/themes/extension/*.json: their `ad_hoc_recognizers`, plus
+    the theme recognizers they reference by name in
+    `include_theme_recognizers` ({theme: [recognizer name, ...]}) — reused,
+    never copied, so a fix in the theme applies here too. Unlike the document
+    themes (an unreadable theme is skipped), any problem here FAILS startup:
+    a silently missing recognizer is a silent false negative."""
     recognizers: list[dict[str, Any]] = []
     for path in sorted(extension_dir.glob("*.json")):
         try:
@@ -201,8 +204,26 @@ def load_extension_recognizers(extension_dir: Path) -> list[dict[str, Any]]:
         entries = data.get("ad_hoc_recognizers") if isinstance(data, dict) else None
         if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
             raise TextApiConfigError(f"invalid extension recognizer file: {path.name}")
+        recognizers.extend(_included_theme_recognizers(data.get("include_theme_recognizers", {}), themes, path.name))
         recognizers.extend(entries)
     return recognizers
+
+
+def _included_theme_recognizers(
+    includes: object, themes: Mapping[str, Mapping[str, Any]], filename: str
+) -> list[dict[str, Any]]:
+    if not isinstance(includes, dict):
+        raise TextApiConfigError(f"invalid include_theme_recognizers in {filename}")
+    found: list[dict[str, Any]] = []
+    for theme_key, names in includes.items():
+        available = {r.get("name"): r for r in themes.get(theme_key, {}).get("ad_hoc_recognizers", [])}
+        if not isinstance(names, list):
+            raise TextApiConfigError(f"invalid include_theme_recognizers in {filename}")
+        for name in names:
+            if name not in available:
+                raise TextApiConfigError(f"{filename}: recognizer {name!r} not found in theme {theme_key!r}")
+            found.append(dict(available[name]))
+    return found
 
 
 def detection_config_fingerprint(deps: TextApiDeps, extension_recognizers: Sequence[Mapping[str, Any]]) -> str:
@@ -402,7 +423,7 @@ class _TextApi:
     def __init__(self, settings: TextApiSettings, deps: TextApiDeps) -> None:
         self.settings = settings
         self.deps = deps
-        self.extension_recognizers = load_extension_recognizers(deps.extension_dir)
+        self.extension_recognizers = load_extension_recognizers(deps.extension_dir, deps.themes)
         self.fingerprint = detection_config_fingerprint(deps, self.extension_recognizers)
         self.gate = AnalysisGate(settings.max_concurrency, settings.max_queue)
         self.thread_limiter = anyio.CapacityLimiter(settings.max_concurrency)

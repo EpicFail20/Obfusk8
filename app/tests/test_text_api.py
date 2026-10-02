@@ -36,9 +36,9 @@ import uvloop
 from fastapi import FastAPI, HTTPException
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-import main  # noqa: E402
-import text_api  # noqa: E402
-from supervision import Alert  # noqa: E402
+import main
+import text_api
+from supervision import Alert
 
 # A marker that must NEVER appear in a log, the audit log or an error body.
 CANARY = "Zébulon Canari-Témoin"
@@ -78,9 +78,18 @@ async def _call(app, method, path, body=b"", headers=None, chunks=None):
         sent.append(message)
 
     scope = {
-        "type": "http", "asgi": {"version": "3.0"}, "http_version": "1.1", "method": method,
-        "scheme": "http", "path": path, "raw_path": path.encode(), "query_string": b"",
-        "root_path": "", "headers": raw_headers, "client": ("127.0.0.1", 1234), "server": ("testserver", 80),
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode(),
+        "query_string": b"",
+        "root_path": "",
+        "headers": raw_headers,
+        "client": ("127.0.0.1", 1234),
+        "server": ("testserver", 80),
     }
     await app(scope, receive, send)
     start = next(m for m in sent if m["type"] == "http.response.start")
@@ -106,7 +115,7 @@ def _regex_detector(patterns):
 
     def detect(blocks, theme, timeout):
         calls.append({"blocks": blocks, "theme": theme, "timeout": timeout})
-        (block_id, text), = blocks
+        ((block_id, text),) = blocks
         found = []
         for entity_type, pattern in patterns.items():
             for m in re.finditer(pattern, text):
@@ -135,7 +144,9 @@ def audit_dir(tmp_path):
 def extension_dir(tmp_path):
     d = tmp_path / "extension"
     d.mkdir()
-    (d / "secrets.json").write_text(json.dumps({"ad_hoc_recognizers": [{"name": "FakeSecret", "supported_entity": "SECRET"}]}))
+    (d / "secrets.json").write_text(
+        json.dumps({"ad_hoc_recognizers": [{"name": "FakeSecret", "supported_entity": "SECRET"}]})
+    )
     return d
 
 
@@ -164,7 +175,11 @@ def _app(deps, **settings):
     return app
 
 
-DETECT = {"PERSON": r"Camille Martin|Zébulon Canari-Témoin", "PHONE_NUMBER": r"06 12 34 56 78", "EMAIL_ADDRESS": r"\S+@exemple\.invalid"}
+DETECT = {
+    "PERSON": r"Camille Martin|Zébulon Canari-Témoin",
+    "PHONE_NUMBER": r"06 12 34 56 78",
+    "EMAIL_ADDRESS": r"\S+@exemple\.invalid",
+}
 ANALYZE = "/api/v1/text/analyze"
 PSEUDO = "/api/v1/text/pseudonymize"
 
@@ -181,15 +196,26 @@ def _audit_lines(audit_dir):
 
 def test_reglages_par_defaut_desactives():
     s = text_api.TextApiSettings.from_env({})
-    assert (s.enabled, s.max_text_chars, s.max_analysis_seconds, s.max_concurrency, s.max_queue) == (False, 20000, 10, 1, 8)
+    assert (s.enabled, s.max_text_chars, s.max_analysis_seconds, s.max_concurrency, s.max_queue) == (
+        False,
+        20000,
+        10,
+        1,
+        8,
+    )
     # 12 bytes per code point + 4096 of envelope: must equal the Traefik label.
     assert s.max_body_bytes == 244096
 
 
 def test_reglages_lus_depuis_l_environnement():
     s = text_api.TextApiSettings.from_env(
-        {"ENABLE_EXTENSION_API": "TRUE", "MAX_TEXT_CHARS": "100", "MAX_TEXT_ANALYSIS_SECONDS": "3",
-         "MAX_TEXT_CONCURRENCY": "2", "MAX_TEXT_QUEUE": "4"}
+        {
+            "ENABLE_EXTENSION_API": "TRUE",
+            "MAX_TEXT_CHARS": "100",
+            "MAX_TEXT_ANALYSIS_SECONDS": "3",
+            "MAX_TEXT_CONCURRENCY": "2",
+            "MAX_TEXT_QUEUE": "4",
+        }
     )
     assert (s.enabled, s.max_text_chars, s.max_analysis_seconds, s.max_concurrency, s.max_queue) == (True, 100, 3, 2, 4)
     assert text_api.TextApiSettings.from_env({"ENABLE_EXTENSION_API": " "}).enabled is False
@@ -204,16 +230,47 @@ def test_reglage_invalide_echoue_au_demarrage(env):
         text_api.TextApiSettings.from_env(env)
 
 
-def test_fichier_de_reconnaisseurs_illisible_ou_invalide_echoue(tmp_path):
-    (tmp_path / "a.json").write_text("{not json")
+THEMES_FOR_INCLUDE = {
+    "medical": {"ad_hoc_recognizers": [{"name": "FrenchNirRecognizer", "supported_entity": "FR_NIR"}]}
+}
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        "{not json",
+        json.dumps({"ad_hoc_recognizers": "x"}),
+        json.dumps([1, 2]),
+        json.dumps({"ad_hoc_recognizers": [], "include_theme_recognizers": ["medical"]}),
+        json.dumps({"ad_hoc_recognizers": [], "include_theme_recognizers": {"medical": "FrenchNirRecognizer"}}),
+        json.dumps({"ad_hoc_recognizers": [], "include_theme_recognizers": {"medical": ["Inexistant"]}}),
+        json.dumps({"ad_hoc_recognizers": [], "include_theme_recognizers": {"inconnu": ["FrenchNirRecognizer"]}}),
+    ],
+)
+def test_fichier_de_reconnaisseurs_illisible_ou_invalide_echoue(tmp_path, content):
+    (tmp_path / "a.json").write_text(content)
     with pytest.raises(text_api.TextApiConfigError):
-        text_api.load_extension_recognizers(tmp_path)
-    (tmp_path / "a.json").write_text(json.dumps({"ad_hoc_recognizers": "x"}))
-    with pytest.raises(text_api.TextApiConfigError):
-        text_api.load_extension_recognizers(tmp_path)
-    (tmp_path / "a.json").write_text(json.dumps([1, 2]))
-    with pytest.raises(text_api.TextApiConfigError):
-        text_api.load_extension_recognizers(tmp_path)
+        text_api.load_extension_recognizers(tmp_path, THEMES_FOR_INCLUDE)
+
+
+def test_reconnaisseur_de_theme_inclus_par_reference_et_copie(tmp_path):
+    (tmp_path / "a.json").write_text(
+        json.dumps(
+            {"include_theme_recognizers": {"medical": ["FrenchNirRecognizer"]}, "ad_hoc_recognizers": [{"name": "X"}]}
+        )
+    )
+    loaded = text_api.load_extension_recognizers(tmp_path, THEMES_FOR_INCLUDE)
+    assert [r["name"] for r in loaded] == ["FrenchNirRecognizer", "X"]
+    loaded[0]["name"] = "modifié"
+    assert THEMES_FOR_INCLUDE["medical"]["ad_hoc_recognizers"][0]["name"] == "FrenchNirRecognizer"
+
+
+def test_fichiers_reels_de_l_extension_charges_avec_les_vrais_themes():
+    """The shipped app/themes/extension/ files load against the real themes
+    (a renamed theme recognizer would fail here, not in production)."""
+    loaded = text_api.load_extension_recognizers(main.THEMES_DIR / "extension", main.THEMES)
+    entities = {r["supported_entity"] for r in loaded}
+    assert {"SECRET", "CREDIT_CARD", "FR_NIR", "EMAIL_ADDRESS"} <= entities
 
 
 def test_empreinte_de_configuration_stable_et_sensible(audit_dir, extension_dir):
@@ -238,7 +295,7 @@ def test_propagation_valeurs_exactes_tous_types_avec_frontieres_de_mot():
     text = "Paul a écrit à paul.x@exemple.invalid ; Pauline aussi. Paul, encore. Contact : paul.x@exemple.invalid"
     spans = [text_api.Span(0, 4, "PERSON"), text_api.Span(15, 37, "EMAIL_ADDRESS")]
     result = text_api.propagate_exact_values(text, spans)
-    values = [(text[s.start:s.end], s.entity_type) for s in result]
+    values = [(text[s.start : s.end], s.entity_type) for s in result]
     assert values.count(("Paul", "PERSON")) == 2  # "Pauline" not touched
     assert values.count(("paul.x@exemple.invalid", "EMAIL_ADDRESS")) == 2
 
@@ -254,7 +311,8 @@ def test_pseudonymisation_meme_valeur_meme_marqueur():
     out, mapping = text_api.pseudonymize(text, spans)
     assert out == "⟦PERSON_1⟧ appelle ⟦PERSON_1⟧ au ⟦PHONE_NUMBER_1⟧."
     assert [(m.placeholder, m.original) for m in mapping] == [
-        ("⟦PERSON_1⟧", "Camille Martin"), ("⟦PHONE_NUMBER_1⟧", "06 12 34 56 78")
+        ("⟦PERSON_1⟧", "Camille Martin"),
+        ("⟦PHONE_NUMBER_1⟧", "06 12 34 56 78"),
     ]
 
 
@@ -301,7 +359,7 @@ def test_analyse_positions_sur_la_chaine_recue_et_en_utf16(audit_dir, extension_
     assert re.fullmatch(r"[0-9a-f]{32}", body["request_id"]) and headers["x-request-id"] == body["request_id"]
     assert body["text_length"] == len(text) and body["text_length_utf16"] == len(text) + 1
     person = body["entities"][0]
-    assert text[person["start"]:person["end"]] == "Camille Martin"
+    assert text[person["start"] : person["end"]] == "Camille Martin"
     assert person["start_utf16"] == person["start"] + 1  # one surrogate pair before
     assert all("score" not in e for e in body["entities"])
     assert [e["entity_type"] for e in body["entities"]] == ["PERSON", "PHONE_NUMBER"]
@@ -384,9 +442,18 @@ def test_version_analyseur_injoignable(audit_dir, extension_dir, monkeypatch):
 @pytest.mark.parametrize(
     "kwargs,status,outcome,key",
     [
-        ({"payload": {"text": CANARY}, "content_type": "text/plain"}, 415, "invalid", "text_api_unsupported_media_type"),
-        ({"payload": {"text": CANARY}, "content_type": "application/json; charset=latin-1"}, 415, "invalid",
-         "text_api_unsupported_media_type"),
+        (
+            {"payload": {"text": CANARY}, "content_type": "text/plain"},
+            415,
+            "invalid",
+            "text_api_unsupported_media_type",
+        ),
+        (
+            {"payload": {"text": CANARY}, "content_type": "application/json; charset=latin-1"},
+            415,
+            "invalid",
+            "text_api_unsupported_media_type",
+        ),
         ({"payload": {"text": CANARY}, "content_type": None}, 415, "invalid", "text_api_unsupported_media_type"),
         ({"raw": b'{"text": "\xff\xfe"}'}, 400, "invalid", "text_api_invalid_json"),
         ({"raw": b'{"text": "Zebulon'}, 400, "invalid", "text_api_invalid_json"),
@@ -431,7 +498,9 @@ def test_corps_declare_trop_grand_rejete_sans_lecture(audit_dir, extension_dir):
 def test_corps_chunke_trop_grand_interrompu_au_plafond(audit_dir, extension_dir):
     app = _app(_deps(audit_dir, extension_dir, _regex_detector({})), max_text_chars=10)
     chunks = [b"x" * 1024] * 20  # 20 KiB, cap = 12 * 10 + 4096 = 4216 bytes
-    status, _, _, consumed = _run(_call(app, "POST", ANALYZE, headers={"content-type": "application/json"}, chunks=chunks))
+    status, _, _, consumed = _run(
+        _call(app, "POST", ANALYZE, headers={"content-type": "application/json"}, chunks=chunks)
+    )
     assert status == 413
     assert consumed <= 5, consumed  # stopped right after the cap, not the whole body
 
@@ -520,7 +589,9 @@ def test_attente_au_dela_du_delai_503(audit_dir, extension_dir):
     release, started = threading.Event(), threading.Event()
     app = _app(
         _deps(audit_dir, extension_dir, _blocking_detector(release, started)),
-        max_concurrency=1, max_queue=1, max_analysis_seconds=1,
+        max_concurrency=1,
+        max_queue=1,
+        max_analysis_seconds=1,
     )
     body = json.dumps({"text": "abc"}).encode()
     headers = {"content-type": "application/json"}
@@ -577,7 +648,9 @@ def test_drapeau_desactive_routes_absentes_404_identique():
         main.GATEWAY_SECRET = ""
         for method, path in (("GET", "/api/v1/version"), ("POST", ANALYZE), ("POST", PSEUDO)):
             status, _, body, _ = _run(_call(asgi, method, path, b"{}", {"content-type": "application/json"}))
-            ref_status, _, ref_body, _ = _run(_call(asgi, method, "/api/nexistepas", b"{}", {"content-type": "application/json"}))
+            ref_status, _, ref_body, _ = _run(
+                _call(asgi, method, "/api/nexistepas", b"{}", {"content-type": "application/json"})
+            )
             assert (status, body) == (ref_status, ref_body) == (404, {"detail": "Not Found"})
     finally:
         main.GATEWAY_SECRET = secret
@@ -603,7 +676,9 @@ def test_chemin_reel_de_detection_de_main(audit_dir, monkeypatch):
     text = "CAMILLE MARTIN – né le 01–02–1990 ; Camille Martin rappelle."
     status, _, body, _ = _post(app, PSEUDO, {"text": text, "theme": "medical"})
     assert status == 200, body
-    assert seen[0]["text"] == "Camille Martin - né le 01-02-1990 ; Camille Martin rappelle."  # length-preserving normalization
+    assert (
+        seen[0]["text"] == "Camille Martin - né le 01-02-1990 ; Camille Martin rappelle."
+    )  # length-preserving normalization
     assert 0 < seen[0]["timeout"] <= 7
     names = [r.get("name") for r in seen[0]["theme"]["ad_hoc_recognizers"]]
     assert names[: len(main.THEMES["medical"]["ad_hoc_recognizers"])] == [

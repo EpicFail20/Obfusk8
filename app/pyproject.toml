@@ -14,8 +14,16 @@ line-length = 120
 select = ["E", "F", "W", "I", "B", "UP", "S", "BLE", "RUF", "SIM", "PL"]
 ignore = ["PLR0913"]  # dependency-injection constructors take many keyword arguments
 
+[tool.ruff.lint.isort]
+# The app's own modules (flat layout in app/): stable import order whatever
+# directory ruff is run from.
+known-first-party = ["main", "metrics", "supervision", "antivirus", "branding", "text_api", "text_api_models", "obfusk8_client"]
+
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "PLR2004", "S105", "S106"]
+# Tests: pytest asserts, literal expected values, local imports, and
+# deliberately ambiguous Unicode (placeholders, typographic characters are
+# what is being tested).
+"**/tests/*" = ["S101", "PLR2004", "S105", "S106", "PLC0415", "PLR0917", "RUF001"]
 
 [tool.mypy]
 python_version = "3.12"
