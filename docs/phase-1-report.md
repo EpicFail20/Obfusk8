@@ -22,18 +22,18 @@ Ce compte rendu sépare **observé** (exécuté, sortie lue) et **supposé** (no
 | `374654c` | `CLAUDE.md` |
 | `e202bc3` | Constats de reconnaissance EXT-01 à EXT-21 |
 | `42b9913` | Réparation des exécuteurs de tests existants (assertions inchangées) |
-| `e33c51c` | Contrat de l'API (étape B), décisions, modèles Pydantic |
-| `6721a00` | Outillage de développement isolé, `docs/DEPENDENCIES.md` |
-| `761924b` | Implémentation de l'API texte (étape C) |
-| `b397b78` | Drapeau, plafonds et routeur Traefik dans Compose et `env.*.example` |
-| `368eedb` | Contrat, décisions, constats après l'étape C |
-| `5a31484` | Détection des secrets et identifiants (étape D) |
-| `12a2b2e` | Décisions D-015, D-017, D-018 — **contient aussi**, par erreur d'enchaînement, `benchmarks/obfusk8_client.py` et un rapport de résultats (voir §7) |
-| `adb64cb` | Corpus et scripts du banc des secrets |
-| `ecf7af6` | Remplacement d'une valeur égale au mot de passe du compte de test (voir §7) |
-| `fe8a7b7` | Banc de qualité et de latence (étape E) |
-| `50d5c37` | Tests de bout en bout (étape F) |
-| `be55e29` | Documentation utilisateur et administrateur FR/EN, constats E/F |
+| `74c10d8` | Contrat de l'API (étape B), décisions, modèles Pydantic |
+| `ab8c791` | Outillage de développement isolé, `docs/DEPENDENCIES.md` |
+| `1a89f76` | Implémentation de l'API texte (étape C) |
+| `4ce8367` | Drapeau, plafonds et routeur Traefik dans Compose et `env.*.example` |
+| `f9f750a` | Contrat, décisions, constats après l'étape C |
+| `d0f28f0` | Détection des secrets et identifiants (étape D) |
+| `c3c6304` | Décisions D-015, D-017, D-018 — **contient aussi**, par erreur d'enchaînement, `benchmarks/obfusk8_client.py` et un rapport de résultats (voir §7) |
+| `dae7fb6` | Corpus et scripts du banc des secrets |
+| `50edba3` | Remplacement d'une valeur égale au mot de passe du compte de test (voir §7) |
+| `be33656` | Banc de qualité et de latence (étape E) |
+| `9509450` | Tests de bout en bout (étape F) |
+| `1bfefb9` | Documentation utilisateur et administrateur FR/EN, constats E/F |
 | *(dernier)* | Ce compte rendu, D-014, registre des dépendances |
 
 ## 3. Critères d'acceptation
@@ -131,12 +131,14 @@ face aux modèles d'IA (aller-retour réel, hors ligne ici).
 
 ## 7. Incidents, écarts et points à décider
 
-1. **Mot de passe du compte de test dans l'historique local.** J'ai repris le mot de passe réel du compte Keycloak de test comme exemple
-   « fictif » dans un test et dans le corpus des secrets (commits `5a31484` et `adb64cb`). Remplacé dans `ecf7af6`, mais **présent dans
-   l'historique non poussé**. À décider avant toute poussée : changer le mot de passe du compte de test, et/ou m'autoriser à réécrire
-   l'historique de la branche (interdit sans accord, `CLAUDE.md` §3).
-2. **Commit `12a2b2e` au message incomplet** : il contient aussi le client des bancs et un rapport (enchaînement interrompu par un `.gitignore`).
-   Correction possible par réécriture, sur accord.
+1. **Mot de passe du compte de test, retiré de l'historique avant la première poussée.** J'avais repris le mot de passe réel du compte
+   Keycloak de test comme exemple « fictif » dans un test et dans le corpus des secrets. Sur accord explicite, les 17 commits non publiés
+   ont été réécrits (`git filter-branch`, base `d833a2a` déjà publiée intacte) : 0 occurrence dans l'historique poussé, arbre final
+   identique à celui d'avant la réécriture, branche de sauvegarde locale `backup/feat-text-api-avant-nettoyage` conservée. Le mot de
+   passe a circulé en clair dans cette session de travail : **le changer reste recommandé**. Les identifiants de commit ont changé ;
+   les rapports `quality-…` et `latency-…` mentionnent `adb64cb`, devenu `dae7fb6` (mêmes fichiers mesurés, à cette valeur près).
+2. **Commit `c3c6304` (ancien `12a2b2e`) au message incomplet** : il contient aussi le client des bancs et un rapport (enchaînement interrompu par un `.gitignore`).
+   Laissé tel quel ; le commit suivant le signale.
 3. **Poussée vers GitHub** : le corpus et les tests contiennent des jetons fictifs au format réel (Stripe, Slack, GitHub…). La protection
    contre les secrets de GitHub peut bloquer la poussée. Options : autoriser ces valeurs dans GitHub, ou les générer à l'exécution.
 4. **Incident mémoire de mon fait** (EXT-25) : archive `docker save` et cache `trivy` écrits dans le tmpfs `/tmp` → trois OOM globaux qui
