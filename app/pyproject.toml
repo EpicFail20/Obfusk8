@@ -46,7 +46,7 @@ branch = true
 data_file = "/tmp/.coverage"
 
 [[tool.mypy.overrides]]
-# Calls into PyMuPDF (untyped) to build a synthetic PDF.
-module = ["e2e_document_flow"]
+# Calls into PyMuPDF (untyped) to build and read synthetic PDFs.
+module = ["e2e_document_flow", "doc_zones_snapshot", "pdf_localization_bench"]
 disallow_untyped_calls = false
 warn_return_any = false

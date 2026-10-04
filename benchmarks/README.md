@@ -18,6 +18,7 @@ faux négatifs observées sont consignées dans `docs/FINDINGS.md`.
 | `secret_detection/` | Détection des secrets (étape D) : faux positifs sur du texte et du code sans secret, rappel par format |
 | `quality/` | Qualité de détection (étape E) : corpus annoté de prompts et variantes adversariales |
 | `latency/` | Latence par taille de prompt, et effet croisé avec le flux documents |
+| `documents/` | Flux documents (phase 2) : `doc_zones_snapshot.py`, instantané des zones de caviardage proposées par `/api/detect` (PDF, DOCX, CSV, image, chaque thème) et comparaison de deux instantanés (aucune zone de la référence ne doit disparaître) ; `pdf_localization_bench.py`, détections PDF non localisées ou partiellement exposées après caviardage (EXT-35) |
 | `results/` | Rapports horodatés (JSON et Markdown) |
 
 ## Corpus : comment il est produit, pourquoi il est fictif

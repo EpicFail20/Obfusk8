@@ -18,6 +18,7 @@ in `docs/FINDINGS.md`.
 | `secret_detection/` | Secret detection (step D): false positives on text and code without secrets, recall per format |
 | `quality/` | Detection quality (step E): annotated prompt corpus and adversarial variants |
 | `latency/` | Latency per prompt size, and cross effect with the document flow |
+| `documents/` | Document flow (phase 2): `doc_zones_snapshot.py`, snapshot of the redaction zones offered by `/api/detect` (PDF, DOCX, CSV, image, each theme) and comparison of two snapshots (no reference zone may disappear); `pdf_localization_bench.py`, PDF detections not located or partially exposed after redaction (EXT-35) |
 | `results/` | Timestamped reports (JSON and Markdown) |
 
 ## Corpus: how it is produced, why it is fictitious
