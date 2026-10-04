@@ -1366,7 +1366,7 @@ def _analyze_text(text: str, theme: dict | None = None, timeout: float = 30) -> 
         entities = resp.json()
     except requests.RequestException as exc:
         log.error("Appel presidio-analyzer échoué: %s", exc)
-        raise HTTPException(status_code=502, detail="Moteur d'analyse indisponible") from exc
+        raise HTTPException(status_code=502, detail=STRINGS["analyzer_unavailable"]) from exc
 
     # Re-checked client-side (not just sent in the request): depending on the
     # presidio-analyzer version, the score_threshold parameter is not

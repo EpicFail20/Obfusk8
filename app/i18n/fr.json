@@ -63,6 +63,7 @@
   "pdf_password_protected": "Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
   "pdf_too_many_pages": "Ce PDF contient trop de pages ({page_count}, max {max_pages}) — une taille de fichier faible ne garantit pas un nombre de pages raisonnable.",
   "pdf_corrupt_structure": "Ce PDF est corrompu ou contient une structure invalide qui empêche son traitement.",
+  "analyzer_unavailable": "Moteur d'analyse indisponible",
   "pdf_localization_warning": "{count} valeur(s) détectée(s) n'ont pas pu être localisée(s) entièrement sur la page (types : {types}). Le caviardage automatique risque de les laisser lisibles en tout ou partie : vérifiez le document et ajoutez des zones manuelles si nécessaire.",
 
   "image_corrupt_truncated": "Image corrompue ou tronquée, impossible de la décoder entièrement.",
