@@ -216,7 +216,23 @@ def _survivors(pdf: bytes, page_number: int, value: list[tuple[str, Any]], rects
     return sum(1 for c, box in value if box is not None and not c.isspace() and _char_key(c, box) in remaining)
 
 
+def _app_rects(pdf: bytes, theme: dict[str, Any] | None) -> tuple[dict[int, list[Any]], dict[str, Any]]:
+    """Rectangles the application itself proposes (_detect_pdf: search,
+    D-026 fallback, propagation), per page, and its localization report."""
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        detections, report = main._detect_pdf(doc, theme=theme)
+    finally:
+        doc.close()
+    per_page: dict[int, list[Any]] = {}
+    for detection in detections:
+        per_page.setdefault(detection["page"], []).append(fitz.Rect(detection["page_rect"]))
+    return per_page, report
+
+
 def measure(pdf: bytes, theme: dict[str, Any] | None) -> dict[str, Any]:
+    app_rects, app_report = _app_rects(pdf, theme)
+    app_exposed: Counter[str] = Counter()
     doc = fitz.open(stream=pdf, filetype="pdf")
     detected: Counter[str] = Counter()
     lost: Counter[str] = Counter()
@@ -236,13 +252,16 @@ def measure(pdf: bytes, theme: dict[str, Any] | None) -> dict[str, Any]:
                     continue
                 entity_type = entity.get("entity_type", "UNKNOWN")
                 detected[entity_type] += 1
-                rects = page.search_for(entity_text)
+                value = list(zip(entity_text, boxes[start:end], strict=True))
+                if _survivors(pdf, page.number, value, app_rects.get(page.number, [])):
+                    app_exposed[entity_type] += 1
+                rects = page.search_for(entity_text) or []
                 detail = {"type": entity_type, "len": len(entity_text), "line_break": "\n" in entity_text.strip()}
                 if not rects:
                     lost[entity_type] += 1
                     lost_details.append(detail)
                     continue
-                left = _survivors(pdf, page.number, list(zip(entity_text, boxes[start:end], strict=True)), rects)
+                left = _survivors(pdf, page.number, value, rects)
                 if left:
                     partial[entity_type] += 1
                     partial_details.append({**detail, "chars_left": left})
@@ -263,6 +282,9 @@ def measure(pdf: bytes, theme: dict[str, Any] | None) -> dict[str, Any]:
         "partial_by_type": dict(sorted(partial.items())),
         "partial_with_line_break": sum(1 for d in partial_details if d["line_break"]),
         "partial_details": partial_details,
+        "app_exposed": sum(app_exposed.values()),
+        "app_exposed_by_type": dict(sorted(app_exposed.items())),
+        "app_report": app_report,
     }
 
 
@@ -279,9 +301,15 @@ def markdown(report: dict[str, Any]) -> str:
         "(`add_redact_annot` puis `apply_redactions`), au moins un caractère de la valeur est encore sur la page, "
         "au même endroit : le caviardage laisse fuir ce reste.",
         "",
+        "**Exposées avec l'application** : mêmes valeurs détectées, mais caviardées avec **toutes** les zones que "
+        "`_detect_pdf` propose (recherche, repli par boîtes de caractères D-026, propagation) ; une valeur est exposée "
+        "si l'un de ses caractères reste sur la page. Rapport de l'application : localisation absente, incomplète, "
+        "rattrapée par le repli.",
+        "",
         "| Scénario | Thème | Pages | Détectées | Perdues | Taux | Perdues avec saut de ligne | Perdues par type "
-        "| Partielles | Partielles avec saut de ligne | Partielles par type |",
-        "|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Partielles | Partielles avec saut de ligne | Partielles par type | Exposées avec l'application "
+        "| Rapport de l'application (absentes / incomplètes / rattrapées) |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for name, by_theme in report["scenarios"].items():
         for theme, r in by_theme.items():
@@ -289,7 +317,9 @@ def markdown(report: dict[str, Any]) -> str:
             lines.append(
                 f"| {name} | {theme} | {r['pages']} | {r['detected']} | {r['lost']} | {r['lost_rate']} | "
                 f"{r['lost_with_line_break']} | {per_type} | {r['partial']} | {r['partial_with_line_break']} | "
-                f"{', '.join(f'{k} {v}' for k, v in r['partial_by_type'].items()) or '—'} |"
+                f"{', '.join(f'{k} {v}' for k, v in r['partial_by_type'].items()) or '—'} | {r['app_exposed']} | "
+                f"{sum(r['app_report']['unlocated'].values())} / {sum(r['app_report']['incomplete'].values())} / "
+                f"{sum(r['app_report']['recovered'].values())} |"
             )
     return "\n".join(lines) + "\n"
 
@@ -304,7 +334,11 @@ if __name__ == "__main__":
         pdf = build()
         report["scenarios"][name] = {label: measure(pdf, theme) for label, theme in THEMES.items()}
         r = report["scenarios"][name]["aucun"]
-        print(f"{name:22} detected={r['detected']:4} lost={r['lost']:3} partial={r['partial']:3}", flush=True)
+        print(
+            f"{name:22} detected={r['detected']:4} lost={r['lost']:3} partial={r['partial']:3} "
+            f"app_exposed={r['app_exposed']} app_report={r['app_report']}",
+            flush=True,
+        )
     stamp = time.strftime("%Y%m%dT%H%M%S")
     RESULTS.mkdir(exist_ok=True)
     (RESULTS / f"pdf-localization-{stamp}.json").write_text(

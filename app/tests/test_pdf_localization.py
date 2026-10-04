@@ -21,8 +21,13 @@ be lost in silence.
 Unicode mapping, PyMuPDF extracts it as U+0000, and a NUL in the searched
 string TRUNCATES the search — "Chloé<NUL>Boyer" only gets a rectangle over
 "Chloé", and "Boyer" stays readable after redaction. A search returning no
-rectangle at all leaves no zone whatsoever. Both cases must be counted,
-reported to the reviewer and recorded (counts only) in the audit log.
+rectangle at all leaves no zone whatsoever.
+
+Decision D-026 (option R1): the missing rectangles are built from the
+boxes of the characters of the value; what still cannot be covered is
+counted, reported to the reviewer and recorded (counts only) in the audit
+log. EXT-37: `search_for` returns None (not an empty list) when the
+searched string starts with U+0000, which used to crash pass 2.
 """
 
 import html
@@ -39,22 +44,26 @@ MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
 # Synthetic name; U+200B is not in DejaVu Sans Mono, so it is extracted as U+0000.
 TEXT_WITH_UNMAPPED_GLYPH = "Docteur Chloé\u200bBoyer suivi."
 PLAIN_TEXT = "Docteur Chloé Boyer suivi."
+NO_ISSUE = {"unlocated": {}, "incomplete": {}, "recovered": {}}
 
 
-def _pdf(text: str) -> bytes:
+def _pdf(*pages: str) -> bytes:
     doc = fitz.open()
-    page = doc.new_page()
-    page.insert_font(fontname="mono", fontfile=MONO)
-    page.insert_text((50, 80), text, fontname="mono", fontsize=10)
+    for text in pages:
+        page = doc.new_page()
+        page.insert_font(fontname="mono", fontfile=MONO)
+        page.insert_text((50, 80), text, fontname="mono", fontsize=10)
     out: bytes = doc.tobytes()
     doc.close()
     return out
 
 
 def _person_entity(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Fake analyzer: one PERSON over "Chloé…Boyer" in the text it receives."""
+    """Fake analyzer: one PERSON over "Chloé…Boyer" in the text it receives, if any."""
 
     def fake_analyze(text: str, theme: dict | None = None) -> list[dict]:
+        if "Chlo" not in text:
+            return []
         start = text.index("Chlo")
         return [
             {"entity_type": "PERSON", "start": start, "end": start + len("Chloé") + 1 + len("Boyer"), "score": 0.85}
@@ -63,37 +72,95 @@ def _person_entity(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(main, "_analyze_text", fake_analyze)
 
 
-def test_le_texte_extrait_contient_bien_un_nul(monkeypatch):
-    """Precondition of the regression tests below (observed with PyMuPDF
-    1.28.2): the unmapped glyph is extracted as U+0000."""
-    doc = fitz.open(stream=_pdf(TEXT_WITH_UNMAPPED_GLYPH), filetype="pdf")
+def _redacted_texts(pdf: bytes, detections: list[dict]) -> list[str]:
+    """Page texts after the same redaction as finalization."""
+    doc = fitz.open(stream=pdf, filetype="pdf")
     try:
-        assert "Chloé\x00Boyer" in doc[0].get_text()
+        main._apply_selected_redactions(doc, detections, set())
+        return [page.get_text() for page in doc]
     finally:
         doc.close()
 
 
-def test_localisation_incomplete_comptee(monkeypatch):
-    _person_entity(monkeypatch)
+def test_le_texte_extrait_contient_bien_un_nul():
+    """Precondition of the regression tests below (observed with PyMuPDF
+    1.28.2): the unmapped glyph is extracted as U+0000, a NUL truncates the
+    search, and a search STARTING with a NUL returns None (EXT-37)."""
     doc = fitz.open(stream=_pdf(TEXT_WITH_UNMAPPED_GLYPH), filetype="pdf")
+    try:
+        page = doc[0]
+        assert "Chloé\x00Boyer" in page.get_text()
+        assert page.search_for("Chloé\x00Boyer") == page.search_for("Chloé")
+        assert page.search_for("\x00Boyer") is None
+    finally:
+        doc.close()
+
+
+def test_repli_couvre_la_valeur_tronquee_par_un_nul(monkeypatch):
+    _person_entity(monkeypatch)
+    pdf = _pdf(TEXT_WITH_UNMAPPED_GLYPH)
+    doc = fitz.open(stream=pdf, filetype="pdf")
     try:
         detections, issues = main._detect_pdf(doc)
     finally:
         doc.close()
-    assert detections, "the located part must still be offered for redaction"
-    assert issues == {"unlocated": {}, "incomplete": {"PERSON": 1}}
+    assert issues == {**NO_ISSUE, "recovered": {"PERSON": 1}}
+    remaining = _redacted_texts(pdf, detections)[0]
+    assert "Boyer" not in remaining and "Chlo" not in remaining
+    assert "Docteur" in remaining and "suivi" in remaining, "the fallback must not mask beyond the value"
 
 
-def test_localisation_absente_comptee(monkeypatch):
+def test_repli_quand_la_recherche_ne_trouve_rien(monkeypatch):
     _person_entity(monkeypatch)
     monkeypatch.setattr(fitz.Page, "search_for", lambda self, needle, **kwargs: [])
-    doc = fitz.open(stream=_pdf(PLAIN_TEXT), filetype="pdf")
+    pdf = _pdf(PLAIN_TEXT)
+    doc = fitz.open(stream=pdf, filetype="pdf")
     try:
         detections, issues = main._detect_pdf(doc)
     finally:
         doc.close()
-    assert detections == []
-    assert issues == {"unlocated": {"PERSON": 1}, "incomplete": {}}
+    assert issues == {**NO_ISSUE, "recovered": {"PERSON": 1}}
+    remaining = _redacted_texts(pdf, detections)[0]
+    assert "Boyer" not in remaining and "Chlo" not in remaining
+
+
+def test_ext37_recherche_renvoyant_none_ne_plante_pas(monkeypatch):
+    """EXT-37: None from search_for, in pass 1 and in pass 2 (propagation
+    to a second page), is an empty result, never a crash."""
+    _person_entity(monkeypatch)
+    monkeypatch.setattr(fitz.Page, "search_for", lambda self, needle, **kwargs: None)
+    pdf = _pdf(PLAIN_TEXT, "Rappel : Chloé Boyer.")
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        detections, issues = main._detect_pdf(doc)
+    finally:
+        doc.close()
+    assert issues["recovered"] == {"PERSON": 2}
+    assert all("Boyer" not in text for text in _redacted_texts(pdf, detections))
+
+
+def test_propagation_tronquee_par_un_nul_couverte(monkeypatch):
+    """Pass 2 searches the propagated name on every page: a NUL in it
+    truncates that search too. The other occurrence must be fully covered."""
+
+    def first_page_only(text: str, theme: dict | None = None) -> list[dict]:
+        if "Docteur" not in text:
+            return []
+        start = text.index("Chlo")
+        return [{"entity_type": "PERSON", "start": start, "end": start + 12, "score": 0.85}]
+
+    monkeypatch.setattr(main, "_analyze_text", first_page_only)
+    name = "Chloé\u200b Boyer"
+    pdf = _pdf(f"Docteur {name} suivi.", f"Rappel : {name} demain.")
+    doc = fitz.open(stream=pdf, filetype="pdf")
+    try:
+        assert "Chloé\x00 Boyer" in doc[1].get_text()
+        detections, _ = main._detect_pdf(doc)
+    finally:
+        doc.close()
+    page_two = _redacted_texts(pdf, detections)[1]
+    assert "Boyer" not in page_two and "Chlo" not in page_two
+    assert "Rappel" in page_two and "demain" in page_two
 
 
 def test_localisation_complete_sans_signalement(monkeypatch):
@@ -104,7 +171,46 @@ def test_localisation_complete_sans_signalement(monkeypatch):
     finally:
         doc.close()
     assert len(detections) == 1
-    assert issues == {"unlocated": {}, "incomplete": {}}
+    assert issues == NO_ISSUE
+
+
+def _no_char_boxes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Neither the search nor the character boxes locate anything: the
+    residual case the fallback cannot fix."""
+    monkeypatch.setattr(fitz.Page, "search_for", lambda self, needle, **kwargs: [])
+    monkeypatch.setattr(main, "_pdf_char_boxes", lambda page, text: [None] * len(text))
+
+
+def test_localisation_absente_comptee(monkeypatch):
+    _person_entity(monkeypatch)
+    _no_char_boxes(monkeypatch)
+    doc = fitz.open(stream=_pdf(PLAIN_TEXT), filetype="pdf")
+    try:
+        detections, issues = main._detect_pdf(doc)
+    finally:
+        doc.close()
+    assert detections == []
+    assert issues == {**NO_ISSUE, "unlocated": {"PERSON": 1}}
+
+
+def test_localisation_incomplete_comptee(monkeypatch):
+    """Part of the value located, the rest without a box: incomplete."""
+    _person_entity(monkeypatch)
+    real = main._pdf_char_boxes
+
+    def lose_last_box(page: fitz.Page, text: str) -> list:
+        boxes = real(page, text)
+        boxes[text.index("Boyer") + 4] = None
+        return boxes
+
+    monkeypatch.setattr(main, "_pdf_char_boxes", lose_last_box)
+    doc = fitz.open(stream=_pdf(TEXT_WITH_UNMAPPED_GLYPH), filetype="pdf")
+    try:
+        detections, issues = main._detect_pdf(doc)
+    finally:
+        doc.close()
+    assert detections
+    assert issues == {**NO_ISSUE, "incomplete": {"PERSON": 1}}
 
 
 def _detect_page(monkeypatch: pytest.MonkeyPatch, text: str) -> tuple[str, str]:
@@ -116,18 +222,21 @@ def _detect_page(monkeypatch: pytest.MonkeyPatch, text: str) -> tuple[str, str]:
     return job_id, bytes(response.body).decode("utf-8")
 
 
-def test_avertissement_au_relecteur(monkeypatch):
-    job_id, page = _detect_page(monkeypatch, TEXT_WITH_UNMAPPED_GLYPH)
+def test_avertissement_au_relecteur_si_perte_residuelle(monkeypatch):
+    _no_char_boxes(monkeypatch)
+    job_id, page = _detect_page(monkeypatch, PLAIN_TEXT)
     try:
         expected = html.escape(main.STRINGS["pdf_localization_warning"].format(count=1, types="PERSON (1)"))
         assert expected in page
-        assert "Boyer" not in page.split(expected)[0][-2000:], "the warning must not quote the value"
+        assert "Boyer" not in page, "the review page never quotes the value"
     finally:
         main.PENDING_JOBS.pop(job_id, None)
 
 
-def test_pas_d_avertissement_sans_perte(monkeypatch):
-    job_id, page = _detect_page(monkeypatch, PLAIN_TEXT)
+@pytest.mark.parametrize("text", [PLAIN_TEXT, TEXT_WITH_UNMAPPED_GLYPH])
+def test_pas_d_avertissement_sans_perte_residuelle(monkeypatch, text):
+    """Plain value, or value fully covered by the fallback: no warning."""
+    job_id, page = _detect_page(monkeypatch, text)
     try:
         assert "localization-warning" not in page
     finally:
@@ -166,10 +275,10 @@ def test_audit_et_journal_comptes_sans_contenu(monkeypatch, tmp_path, caplog):
             main.audit_log.addHandler(h)
         main.PENDING_JOBS.pop(job_id, None)
     event = json.loads(log_path.read_text(encoding="utf-8").strip().splitlines()[-1])
-    assert event["pdf_localization_issues"] == {"unlocated": {}, "incomplete": {"PERSON": 1}}
+    assert event["pdf_localization_issues"] == {**NO_ISSUE, "recovered": {"PERSON": 1}}
     assert "Boyer" not in log_path.read_text(encoding="utf-8")
     assert "Boyer" not in caplog.text and "Chlo" not in caplog.text
-    assert any("localis" in r.getMessage() and "PERSON" in r.getMessage() for r in caplog.records)
+    assert any("EXT-35" in r.getMessage() and "PERSON" in r.getMessage() for r in caplog.records)
 
 
 def test_audit_inchange_sans_perte(monkeypatch, tmp_path):
@@ -283,7 +392,7 @@ def test_deux_entites_sur_une_page(monkeypatch):
         _, issues = main._detect_pdf(doc)
     finally:
         doc.close()
-    assert issues == {"unlocated": {}, "incomplete": {}}
+    assert issues == NO_ISSUE
     assert calls == [1]
 
 
@@ -294,3 +403,17 @@ def test_caractere_invisible_de_largeur_nulle_sans_fausse_alerte():
     rect = fitz.Rect(0, 0, 10, 10)
     zero_width = fitz.Rect(5, 0, 5, 10)
     assert main._pdf_value_fully_covered("a\u200bb", [rect, zero_width, rect], [rect])
+
+
+def test_rectangles_de_repli_par_ligne():
+    """Runs of uncovered characters become one rectangle per line; a covered
+    character, a line break or a change of line ends a run; characters
+    without a box are left to the caller (reported, never guessed)."""
+    a, b = fitz.Rect(0, 0, 10, 10), fitz.Rect(10, 0, 20, 10)
+    c, d = fitz.Rect(30, 0, 40, 10), fitz.Rect(0, 20, 10, 30)
+    assert main._pdf_fallback_rects("ab", [a, b], []) == [fitz.Rect(0, 0, 20, 10)]
+    assert main._pdf_fallback_rects("a c", [a, None, c], []) == [fitz.Rect(0, 0, 40, 10)], "spaces do not split"
+    assert main._pdf_fallback_rects("abc", [a, b, c], [b]) == [a, c], "a covered character splits"
+    assert main._pdf_fallback_rects("a\nd", [a, None, d], []) == [a, d]
+    assert main._pdf_fallback_rects("ad", [a, d], []) == [a, d], "a change of line splits, even without a line break"
+    assert main._pdf_fallback_rects("ax", [a, None], []) == [a]

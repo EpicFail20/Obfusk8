@@ -12,20 +12,21 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-EXT-35 end to end, THROUGH THE FULL CHAIN (Traefik, oauth2-proxy, Keycloak,
-app under the enforcing seccomp profile, presidio-analyzer): a synthetic PDF
-whose name contains a glyph with no Unicode mapping must produce the
-reviewer warning; a plain PDF must not. Both are finalized, so audit.log
-gets one metadata line each: check them on the host afterwards (the job ids
-are printed), e.g. `grep <job_id> /var/log/anonymiseur-audit/audit.log`.
+EXT-35 / D-026 end to end, THROUGH THE FULL CHAIN (Traefik, oauth2-proxy,
+Keycloak, app under the enforcing seccomp profile, presidio-analyzer): a
+synthetic PDF whose name contains a glyph with no Unicode mapping is
+detected, the search for it is truncated by the NUL, and the D-026 fallback
+must still cover the whole name. Checked on the DOWNLOADED redacted PDF: the
+name must be gone, the surrounding words kept. No residual loss is expected,
+so no reviewer warning. Each case is finalized: audit.log gets one metadata
+line each (job ids printed; the first one carries pdf_localization_issues
+with a "recovered" count), check it on the host.
 
 Run it like e2e_document_flow.py (throwaway client container of the app
 image, BENCH_* variables, E2E_PACE under the upload rate limit). Exit code 1
 on any failure.
 """
 
-import html
-import json
 import os
 import re
 import sys
@@ -39,19 +40,15 @@ from obfusk8_client import BASE_URL as BASE
 from obfusk8_client import login
 
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
-STRINGS = json.loads(
-    (Path(__file__).resolve().parents[2] / "app" / "i18n" / f"{os.environ.get('UI_LANG', 'fr')}.json").read_text(
-        encoding="utf-8"
-    )
-)
 PACE = float(os.environ.get("E2E_PACE", "13"))
 # Synthetic name. U+200B has no glyph in DejaVu Sans Mono: extracted as U+0000. Followed by a
 # space, the analyzer still finds the whole name (measured in the EXT-35 bench, variant largeur_nulle),
 # but the NUL truncates page.search_for: only "Chloé" gets a rectangle.
 CASES = {
-    "glyphe_non_mappe": ("Compte rendu. Le patient Louis Gauthier est suivi par le Dr Chloé\u200b Boyer.", True),
-    "texte_ordinaire": ("Compte rendu. Le patient Louis Gauthier est suivi par le Dr Chloé Boyer.", False),
+    "glyphe_non_mappe": "Compte rendu. Le patient Louis Gauthier est suivi par le Dr Chloé\u200b Boyer.",
+    "texte_ordinaire": "Compte rendu. Le patient Louis Gauthier est suivi par le Dr Chloé Boyer.",
 }
+HTTP_OK = 200
 
 
 def make_pdf(text: str) -> bytes:
@@ -66,31 +63,28 @@ def make_pdf(text: str) -> bytes:
 
 session = login()
 failures = 0
-marker = html.escape(STRINGS["pdf_localization_warning"].split("{types}")[1])
-for name, (text, expect_warning) in CASES.items():
+for name, text in CASES.items():
     time.sleep(PACE)
     response = session.post(
         f"{BASE}/api/detect", files={"file": (f"{name}.pdf", make_pdf(text))}, data={"theme": ""}, timeout=120
     )
     job = re.search(r'name="job_id" value="([0-9a-f]{32})"', response.text)
-    warned = "localization-warning" in response.text and marker in response.text
-    # The PDF review page shows page images, never the document text: the
-    # name must appear nowhere in it (warning included).
-    leaked = "Boyer" in response.text
+    warned = "localization-warning" in response.text
     time.sleep(PACE)
     final = session.post(
         f"{BASE}/api/finalize", data={"job_id": job.group(1) if job else "", "format": "json"}, timeout=120
     )
-    ok = (
-        response.status_code == 200
-        and bool(job)
-        and warned == expect_warning
-        and not leaked
-        and final.status_code == 200
-    )
+    redacted = ""
+    if final.status_code == HTTP_OK:
+        download = session.get(f"{BASE}{final.json()['download_url']}", timeout=60)
+        doc = fitz.open(stream=download.content, filetype="pdf")
+        redacted = "".join(page.get_text() for page in doc)
+        doc.close()
+    covered = "Boyer" not in redacted and "Chlo" not in redacted and "Compte rendu" in redacted
+    ok = response.status_code == HTTP_OK and bool(job) and not warned and covered
     failures += not ok
     print(
-        f"{name:18} detect={response.status_code} warning={warned} (expected {expect_warning}) "
-        f"finalize={final.status_code} job_id={job.group(1) if job else '-'} {'OK' if ok else 'FAIL'}"
+        f"{name:18} detect={response.status_code} warning={warned} finalize={final.status_code} "
+        f"name_gone={covered} job_id={job.group(1) if job else '-'} {'OK' if ok else 'FAIL'}"
     )
 sys.exit(1 if failures else 0)

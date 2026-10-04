@@ -1456,8 +1456,15 @@ def _name_variants(name: str) -> set[str]:
 # and a NUL in the searched string truncates the search — "Chloé<NUL>Boyer"
 # only got a rectangle over "Chloé", and "Boyer" stayed readable after
 # redaction (6 names out of 229 detections). A search returning nothing leaves
-# no zone at all. Both used to go unnoticed; they are now counted per entity
-# type (never the value), shown to the reviewer and recorded in the audit log.
+# no zone at all. Both used to go unnoticed.
+#
+# Decision D-026 (option R1): the rectangles missing after the search are
+# built from the boxes of the characters of the value (_pdf_fallback_rects).
+# What still cannot be covered (a character without a box) is counted per
+# entity type (never the value), shown to the reviewer and recorded in the
+# audit log; values recovered by the fallback are counted too (audit, log).
+# EXT-37: search_for returns None, not an empty list, when the searched string
+# STARTS with U+0000 — it used to crash pass 2 (valid PDF rejected as corrupt).
 #
 # A character counts as covered when at least half of its box lies inside a
 # found rectangle. Measured: apply_redactions removes a character as soon as
@@ -1504,12 +1511,60 @@ def _pdf_value_fully_covered(text: str, boxes: list, rects: list) -> bool:
             continue
         if box is None:
             return False
-        area = box.get_area()
-        if area == 0:
-            continue
-        if not any((box & rect).get_area() >= PDF_COVERED_CHAR_FRACTION * area for rect in rects):
+        if not _pdf_char_covered(box, rects):
             return False
     return True
+
+
+def _pdf_char_covered(box: "fitz.Rect", rects: list) -> bool:
+    """A zero-area box (zero-width character) shows nothing: covered."""
+    area = box.get_area()
+    return area == 0 or any((box & rect).get_area() >= PDF_COVERED_CHAR_FRACTION * area for rect in rects)
+
+
+def _pdf_fallback_rects(text: str, boxes: list, rects: list) -> list:
+    """D-026 (R1): rectangles over the characters of the value that `rects`
+    leave uncovered, one per run of consecutive uncovered characters on the
+    same line (a covered character, a line break or a change of line ends a
+    run). Characters without a box cannot be placed: the caller reports them."""
+    out: list = []
+    current = None
+    for c, box in zip(text, boxes, strict=True):
+        if c == "\n" or (not c.isspace() and (box is None or _pdf_char_covered(box, rects))):
+            if current is not None:
+                out.append(current)
+                current = None
+            continue
+        if c.isspace():
+            continue
+        same_line = current is not None and current.y0 <= (box.y0 + box.y1) / 2 <= current.y1
+        if same_line:
+            current |= box
+        else:
+            if current is not None:
+                out.append(current)
+            current = fitz.Rect(box)
+    if current is not None:
+        out.append(current)
+    return out
+
+
+def _pdf_complete_rects(text: str, boxes: list, rects: list | None) -> tuple[list, str]:
+    """Rectangles covering the value: those found by search_for (None is an
+    empty result, EXT-37), completed by _pdf_fallback_rects. Status: "ok"
+    (search alone was enough), "recovered" (the fallback added rectangles and
+    the value is now covered), "incomplete" (part still uncovered) or
+    "unlocated" (no rectangle at all)."""
+    rects = list(rects or [])
+    if rects and _pdf_value_fully_covered(text, boxes, rects):
+        return rects, "ok"
+    extra = _pdf_fallback_rects(text, boxes, rects)
+    rects += extra
+    if not rects:
+        return rects, "unlocated"
+    if not _pdf_value_fully_covered(text, boxes, rects):
+        return rects, "incomplete"
+    return rects, "recovered" if extra else "ok"
 
 
 def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dict], dict[str, dict[str, int]]]:
@@ -1525,15 +1580,30 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dic
     NER may have missed an identical occurrence (dense context,
     form, different page) — see PROPAGATED_ENTITY_TYPES.
 
-    Also returns the pass-1 localization issues (EXT-35), counts per entity
-    type: {"unlocated": {...}, "incomplete": {...}} — entities with no
-    rectangle at all, and entities whose rectangles leave part of the value
-    uncovered. Pass 2 is not counted: a propagated name absent from a page
-    is the normal case.
+    Also returns the localization report (EXT-35, D-026), counts per entity
+    type: {"unlocated": {...}, "incomplete": {...}, "recovered": {...}} —
+    detected values with no rectangle at all, values still partly uncovered
+    after the fallback, and values the fallback completed. In pass 2, only
+    the occurrences actually present in the page text are counted: a
+    propagated name absent from a page is the normal case.
     """
     matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
     detections: list[dict] = []
-    issues: dict[str, dict[str, int]] = {"unlocated": {}, "incomplete": {}}
+    issues: dict[str, dict[str, int]] = {"unlocated": {}, "incomplete": {}, "recovered": {}}
+    char_boxes: dict[int, list] = {}  # per page, computed only when needed
+    # Text intervals already located, per page: a pass-2 occurrence that
+    # overlaps one (the pass-1 value itself, or the same occurrence matched by
+    # another case variant of the name) is not counted again.
+    handled_spans: dict[int, list[tuple[int, int]]] = {}
+
+    def boxes_of(page_index: int, page: "fitz.Page") -> list:
+        if page_index not in char_boxes:
+            char_boxes[page_index] = _pdf_char_boxes(page, page_texts[page_index])
+        return char_boxes[page_index]
+
+    def count(status: str, entity_type: str) -> None:
+        if status != "ok":
+            issues[status][entity_type] = issues[status].get(entity_type, 0) + 1
 
     page_texts: list[str] = []
     propagate_candidates: dict[str, str] = {}
@@ -1547,7 +1617,6 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dic
         page_texts.append(page_text)
         normalized_text = _normalize_dashes(_normalize_allcaps(page_text))
         entities = _analyze_text(normalized_text, theme=theme)
-        page_boxes = None  # computed once per page, only if an entity needs it
 
         for entity in entities:
             entity_text = page_text[entity["start"] : entity["end"]]
@@ -1556,16 +1625,13 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dic
                 continue
 
             entity_type = entity.get("entity_type", "UNKNOWN")
-            rects = page.search_for(entity_text)
-            if not rects:
-                issues["unlocated"][entity_type] = issues["unlocated"].get(entity_type, 0) + 1
-            else:
-                if page_boxes is None:
-                    page_boxes = _pdf_char_boxes(page, page_text)
-                if not _pdf_value_fully_covered(
-                    entity_text, page_boxes[entity["start"] : entity["end"]], rects
-                ):
-                    issues["incomplete"][entity_type] = issues["incomplete"].get(entity_type, 0) + 1
+            rects, status = _pdf_complete_rects(
+                entity_text,
+                boxes_of(page_index, page)[entity["start"] : entity["end"]],
+                page.search_for(entity_text),
+            )
+            count(status, entity_type)
+            handled_spans.setdefault(page_index, []).append((entity["start"], entity["end"]))
             # An isolated last name is too ambiguous to propagate without
             # risk, but an isolated city name (e.g. "Ajaccio") is a good
             # candidate even alone — hence the different rule per type.
@@ -1606,7 +1672,22 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dic
     for name, propagated_entity_type in propagate_candidates.items():
         for variant in _name_variants(name):
             for page_index, page in enumerate(doc):
-                for rect in page.search_for(variant):
+                rects = page.search_for(variant) or []  # EXT-37: None is an empty result
+                # The same NUL truncation hits the propagated name: every
+                # occurrence present in the page text gets the D-026 fallback,
+                # checked against the rectangles already placed on the page
+                # (pass 1 included) so that nothing is counted twice.
+                placed = [fitz.Rect(d["page_rect"]) for d in detections if d["page"] == page_index]
+                for match in re.finditer(re.escape(variant), page_texts[page_index], re.IGNORECASE):
+                    spans = handled_spans.setdefault(page_index, [])
+                    if any(match.start() < end and start < match.end() for start, end in spans):
+                        continue
+                    spans.append((match.start(), match.end()))
+                    occurrence_boxes = boxes_of(page_index, page)[match.start() : match.end()]
+                    completed, status = _pdf_complete_rects(match.group(), occurrence_boxes, placed + rects)
+                    rects += completed[len(placed) + len(rects) :]
+                    count(status, propagated_entity_type)
+                for rect in rects:
                     key = (page_index, (rect.x0, rect.y0, rect.x1, rect.y1))
                     if key in already_covered:
                         continue
@@ -3204,17 +3285,21 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         job_id, filename_hash, len(detections), len(clusters), theme or "aucun",
     )
 
+    # EXT-35 / D-026: the reviewer is warned only about what is still not
+    # covered; values completed by the fallback are logged (and audited at
+    # finalization). Metadata only (entity types and counts), never the value.
     issue_counts: dict[str, int] = {}
-    for per_type in localization_issues.values():
-        for entity_type, count in per_type.items():
+    for status in ("unlocated", "incomplete"):
+        for entity_type, count in localization_issues[status].items():
             issue_counts[entity_type] = issue_counts.get(entity_type, 0) + count
-    warning_html = ""
-    if issue_counts:
-        # EXT-35: metadata only (entity types and counts), never the value.
-        log.warning(
-            "Job %s: détection(s) PDF non localisée(s) entièrement sur la page (EXT-35) : %s",
+    if any(localization_issues.values()):
+        log.log(
+            logging.WARNING if issue_counts else logging.INFO,
+            "Job %s: localisation PDF (EXT-35, D-026) : %s",
             job_id, json.dumps(localization_issues, sort_keys=True),
         )
+    warning_html = ""
+    if issue_counts:
         types = ", ".join(f"{entity_type} ({count})" for entity_type, count in sorted(issue_counts.items()))
         message = STRINGS["pdf_localization_warning"].format(count=sum(issue_counts.values()), types=types)
         warning_html = (

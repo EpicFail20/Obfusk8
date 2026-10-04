@@ -260,3 +260,15 @@ relève des règles d'usage, du blocage réseau et de la formation. Tout choix d
 - Après validation de la phase 2, l'humain avance `feat/text-api` par `git merge --ff-only feat/pilote-serveur` et pousse `feat/text-api`.
 - La fusion dans `main` se fera à la fin, en une fois ; les commits de `origin/main` absents de la branche (`ca3c50c`, licence AGPL-3.0 ;
   `7a7908e`, icône) y seront intégrés à ce moment, ce qui résoudra EXT-05. Ils ne sont pas intégrés avant.
+
+## D-026 — Repli de localisation PDF par positions de caractères (EXT-35) et correction d'EXT-37 — validée (décision humaine du 2026-10-04)
+
+- **Contexte** : EXT-35, mesuré à l'étape B (`benchmarks/results/pdf-localization-20261004T134306.md`) : un glyphe sans correspondance Unicode
+  est extrait en U+0000, qui tronque la chaîne recherchée par `page.search_for` ; 6 noms partiellement exposés après caviardage. EXT-37 : une
+  chaîne qui commence par U+0000 fait renvoyer `None` à `search_for`, d'où un plantage de la passe 2 et un PDF valide refusé.
+- **Décision** : option R1. Quand `search_for` ne renvoie rien, ou laisse un caractère de la valeur non couvert, les rectangles manquants sont
+  construits à partir des boîtes des caractères de la valeur (`get_text("rawdict")`, alignées sur `get_text()`), regroupées par ligne. Le
+  comportement est inchangé quand `search_for` couvre toute la valeur. Ce qui reste non couvert après le repli (caractère sans boîte) reste
+  signalé (avertissement, audit). EXT-37 corrigé : `None` traité comme une liste vide.
+- **Alternatives écartées** : R2, découpage de la chaîne recherchée aux U+0000 (fragments courts trouvés ailleurs sur la page, une seule cause
+  traitée) ; R3, caviardage de la ligne entière (masque bien plus que la valeur).
