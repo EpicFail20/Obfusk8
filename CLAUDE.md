@@ -24,17 +24,19 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026. **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
-(FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`) et `presidio-anonymizer`, appelés en HTTP
-sur le réseau interne `backend`.
+(FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
+`presidio-anonymizer` n'est **pas** appelé pour anonymiser : `_anonymize_text` est du code mort, le service ne sert qu'au contrôle de santé (EXT-20).
+Le caviardage est fait par `app` elle-même.
 
 **Secret de passerelle** (audit 3.7) : `_GatewaySecretMiddleware` vérifie un secret injecté par Traefik (`gateway-secret@file`).
 Toute route de l'application doit rester derrière ce mécanisme et derrière `oidc-auth`. Ne crée jamais de contournement.
 
 **Routage Traefik par labels** : des routeurs dédiés existent pour `/api/detect` et `/api/finalize` (limitation de débit + plafond de corps),
-`/api/preview_image` (limitation de débit) et `/metrics` (liste d'IP autorisées). **Toute autre route tombe dans le routeur `app` par défaut :
+`/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, limitation de débit **par utilisateur**
+sur `X-Auth-Request-User`, plafond de corps dérivé de `MAX_TEXT_CHARS`, voir `docs/api-extension.md` §7) et `/metrics` (liste d'IP autorisées). **Toute autre route tombe dans le routeur `app` par défaut :
 authentifiée, mais sans limitation de débit ni plafond de corps en bordure.** Toute nouvelle route exposée exige donc son propre routeur.
 
 **Plafonds en double** : la taille des requêtes est bornée en bordure (Traefik) **et** dans l'application (`MAX_REQUEST_BODY_BYTES` dans `main.py`).
@@ -44,12 +46,20 @@ Les deux valeurs doivent rester cohérentes et leur lien doit être commenté.
 Un nouveau chemin de code ou une nouvelle dépendance peut déclencher un appel système bloqué, avec des erreurs `EPERM` difficiles à interpréter.
 Tous les tests de bout en bout se font **sous ce profil**. En cas de besoin, suis la méthode de `seccomp/README.md`
 (profil `app-audit.json`, `dmesg | grep 'audit: type=1326'`) et documente chaque appel système ajouté.
+**Dépendance implicite à uvloop** (EXT-11) : le profil autorise `epoll_pwait` mais ni `epoll_wait`, ni `select`, ni `shutdown`. La boucle asyncio
+standard est donc inutilisable sous ce profil ; la production fonctionne parce qu'uvicorn choisit uvloop (`uvicorn[standard]`). Tout code ou test
+qui crée sa propre boucle ou son propre sélecteur doit être exécuté sous le profil.
 
 **Ressources contraintes** : `app` dispose d'un CPU, 1 Go de RAM, 256 processus et d'un worker unique. Un traitement bloquant ou coûteux pénalise
 **tous** les utilisateurs, y compris le flux documents. `presidio-analyzer` : 1,5 CPU, 2 Go.
 
 **Seuils et thèmes** : `DEFAULT_SCORE_THRESHOLD=0.4` pour le flux sans thème ; chaque thème (médical, informatique, comptabilité)
 définit ses propres valeurs et reconnaisseurs. Réutilise ce mécanisme, ne crée pas de chemin de détection parallèle.
+Les reconnaisseurs ponctuels sont envoyés à Presidio à chaque requête (`ad_hoc_recognizers`) : `app/themes/common.json` pour tous les flux,
+`app/themes/<thème>.json` pour un thème, `app/themes/extension/*.json` pour les seules routes `/api/v1/` (D-015 ; sous-répertoire non parcouru
+par `_load_themes`). Un reconnaisseur réutilisé est **repris par référence** (`include_theme_recognizers`), jamais recopié.
+Presidio compile ces motifs avec le module `regex` (et non `re`), drapeaux `IGNORECASE | DOTALL | MULTILINE` : teste-les avec la version
+de `regex` de l'image de l'analyseur (D-017).
 
 **Internationalisation** : les messages visibles par l'utilisateur passent par `app/i18n/` (`fr`, `en`, sélection par `UI_LANG`,
 voir `docs/traduire-interface.md`). Aucun message utilisateur codé en dur.
@@ -60,11 +70,28 @@ ou administrateurs est mise à jour **dans les deux langues**.
 **Style des commentaires** : le code et la configuration sont commentés en anglais et expliquent le *pourquoi* (incident observé, mesure réalisée,
 référence d'audit). Garde ce style : une valeur ou un choix non évident est justifié par un commentaire, avec la mesure qui l'appuie.
 
-**Volumes sur chemins absolus de l'hôte** : `/var/lib/anonymiseur/workdir` (fichiers de travail) et `/var/log/anonymiseur-audit` (journal d'audit).
+**Volumes sur chemins absolus de l'hôte** : `/var/lib/anonymiseur/workdir` (fichiers de travail) et `/var/log/anonymiseur-audit` (journaux d'audit :
+`audit.log` pour les documents, `audit-extension.log` pour l'API texte, rotation indépendante, D-007).
 Le nom du projet Compose est supposé être `obfusk8` (label `traefik.docker.network=obfusk8_app-internal`) et les ports 80, 443 et 8080 sont fixes.
 **Ne lance jamais une seconde pile sur le même hôte** : elle partagerait le journal d'audit et les fichiers de travail, et casserait le routage.
 
-**Modules existants à réutiliser** : `antivirus.py` (ICAP), `supervision.py` (alertes, syslog), journal d'audit, `branding.py`.
+**Modules existants à réutiliser** : `antivirus.py` (ICAP), `supervision.py` (alertes, syslog), journal d'audit, `branding.py`,
+`text_api.py` (API texte, limiteur et file bornée).
+
+**Tests** : `pytest` est présent dans l'image de production et `tests/` y est copié (EXT-09, non corrigé). **Ne lance jamais la suite dans le
+conteneur `app`** : elle écrirait dans le vrai journal d'audit et les vrais fichiers de travail. Méthode (D-016) : conteneur jetable de l'image de
+production, `--security-opt seccomp=seccomp/app-enforce.json`, `--read-only`, `--network none`, `tmpfs` à la place des volumes, outils de
+`app/requirements-dev.txt` installés hors de l'image et montés en lecture seule. La couverture se mesure hors seccomp (base SQLite de `coverage`
+bloquée), la suite fonctionnelle sous seccomp.
+
+**Mémoire de l'hôte** (EXT-25) : `/tmp` est un tmpfs qui consomme la RAM de la VM, sans swap. Aucun fichier volumineux dedans (archive d'image,
+cache d'outil) ; vérifie `free -m` avant un outil lourd ; conteneurs d'outils avec limite mémoire et cache sur disque. Un OOM global tue en priorité
+le worker unique de l'analyseur.
+
+**Données fictives** : n'utilise **jamais** une valeur trouvée dans l'environnement (mot de passe, jeton, identifiant de compte) comme exemple
+« fictif ». Les jetons de test au format réel (Stripe, Slack, GitHub…) sont **générés à l'exécution** (préfixe + remplissage déterministe), jamais
+écrits en littéral dans le dépôt, **sans exception** : les exemples publiés par les fournisseurs (`AKIA…EXAMPLE`, clé Azurite…) suivent
+la même règle (décision humaine du 2026-10-04). Les comptes de test sont lus à l'exécution depuis `~/.obfusk8-test-accounts`, hors dépôt, et désignés par un libellé.
 
 ---
 
@@ -77,6 +104,9 @@ Le nom du projet Compose est supposé être `obfusk8` (label `traefik.docker.net
 4. **Périmètre strict.** Ce qui est hors périmètre va dans `docs/FINDINGS.md` (§7), pas dans le code.
 5. **Existant d'abord.** Suis les conventions en place (structure, nommage, variables `MAX_*`, `try/finally`, i18n, style de commentaires).
 6. **Compatibilité ascendante.** Fonction nouvelle désactivée : comportement strictement identique à la version précédente.
+7. **Langue** (décision humaine du 2026-10-04) : réponses, comptes rendus, messages de commit et documents de travail en **français**.
+   Les identifiants du code et les commentaires du code restent en anglais ; la documentation destinée aux utilisateurs et aux administrateurs
+   reste bilingue FR/EN.
 
 ---
 
