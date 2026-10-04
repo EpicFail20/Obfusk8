@@ -1,0 +1,6359 @@
+{
+  "generated_at": "2026-10-04T06:28:01+0000",
+  "api": {
+    "api_version": "1.0",
+    "detection_config": "52983e3c972a01ed",
+    "analyzer_language": "fr",
+    "analyzer_recognizers": "51fa36bee769596e"
+  },
+  "themes": [
+    "compta",
+    "it",
+    "medical"
+  ],
+  "stack": {
+    "git_commit": "89e5132",
+    "app_files_modified_since_commit": 0,
+    "images": {
+      "app": "ghcr.io/epicfail20/obfusk8-app:main@sha256:be5cd3495e063f74a421bee6ad8a34705f58eb58cbd274501d61f2f77f103d53",
+      "presidio_analyzer": "ghcr.io/epicfail20/obfusk8-presidio-analyzer:latest@sha256:ce18c22c451a92f70478edeaffafbb35c986ade900dd60f7372382cda63425a8",
+      "traefik": "traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0"
+    },
+    "analyzer": {
+      "presidio_analyzer": "2.2.364",
+      "spacy": "3.8.13",
+      "fr_core_news_md": "3.8.0",
+      "en_core_web_lg": "3.8.0",
+      "regex": "2026.7.10"
+    },
+    "app": {
+      "python": "3.12.15",
+      "fastapi": "0.141.1",
+      "starlette": "1.7.0",
+      "pydantic": "2.13.5",
+      "anyio": "4.15.1",
+      "uvicorn": "0.35.0",
+      "requests": "2.33.1"
+    },
+    "theme_files_sha256_16": {
+      "app/themes/common.json": "73c4731980d07a5c",
+      "app/themes/compta.json": "c4414dd9b5b28f1c",
+      "app/themes/it.json": "4253f78a9eec958f",
+      "app/themes/medical.json": "7f0b665770b65d31",
+      "app/themes/extension/identifiers.json": "a63cf5a319ee3331",
+      "app/themes/extension/secrets.json": "5f5cee0606d053fe"
+    },
+    "seccomp": "filter (app-enforce.json)"
+  },
+  "corpus": {
+    "prompts": 257,
+    "entities": 1018,
+    "variants": {
+      "base": 66,
+      "typographique": 26,
+      "espaces_insecables": 32,
+      "largeur_nulle": 33,
+      "nfd": 29,
+      "chiffres_espaces": 22,
+      "majuscules": 32,
+      "adresse_multiligne": 17
+    }
+  },
+  "results": {
+    "aucun": {
+      "strict": {
+        "global": {
+          "tp": 768,
+          "fp": 283,
+          "fn": 250,
+          "precision": 0.731,
+          "recall": 0.754,
+          "f1": 0.742
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 25,
+            "fp": 122,
+            "fn": 37,
+            "precision": 0.354,
+            "recall": 0.403,
+            "f1": 0.377
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 63,
+            "fp": 4,
+            "fn": 10,
+            "precision": 0.94,
+            "recall": 0.863,
+            "f1": 0.9
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 42,
+            "fp": 116,
+            "fn": 7,
+            "precision": 0.266,
+            "recall": 0.857,
+            "f1": 0.406
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 0,
+            "fp": 25,
+            "fn": 25,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "PERSON": {
+            "tp": 353,
+            "fp": 119,
+            "fn": 133,
+            "precision": 0.748,
+            "recall": 0.726,
+            "f1": 0.737
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 920,
+          "fp": 120,
+          "fn": 98,
+          "precision": 0.886,
+          "recall": 0.904,
+          "f1": 0.895
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 62,
+            "fp": 78,
+            "fn": 0,
+            "precision": 0.587,
+            "recall": 1.0,
+            "f1": 0.74
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 67,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.918,
+            "f1": 0.957
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 43,
+            "fp": 78,
+            "fn": 6,
+            "precision": 0.506,
+            "recall": 0.878,
+            "f1": 0.642
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 25,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "PERSON": {
+            "tp": 438,
+            "fp": 29,
+            "fn": 48,
+            "precision": 0.939,
+            "recall": 0.901,
+            "f1": 0.92
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 861,
+          "leaked": 157,
+          "recall": 0.846
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 25,
+            "leaked": 37,
+            "recall": 0.403
+          },
+          "CARD": {
+            "covered": 7,
+            "leaked": 2,
+            "recall": 0.778
+          },
+          "DATE": {
+            "covered": 46,
+            "leaked": 25,
+            "recall": 0.648
+          },
+          "EMAIL": {
+            "covered": 64,
+            "leaked": 9,
+            "recall": 0.877
+          },
+          "IBAN": {
+            "covered": 19,
+            "leaked": 6,
+            "recall": 0.76
+          },
+          "LOCATION": {
+            "covered": 43,
+            "leaked": 6,
+            "recall": 0.878
+          },
+          "NIR": {
+            "covered": 41,
+            "leaked": 5,
+            "recall": 0.891
+          },
+          "PATIENT_ID": {
+            "covered": 25,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "PERSON": {
+            "covered": 419,
+            "leaked": 67,
+            "recall": 0.862
+          },
+          "PHONE": {
+            "covered": 124,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "SECRET": {
+            "covered": 48,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_multiligne": {
+            "covered": 66,
+            "leaked": 8,
+            "recall": 0.892
+          },
+          "base": {
+            "covered": 228,
+            "leaked": 20,
+            "recall": 0.919
+          },
+          "chiffres_espaces": {
+            "covered": 77,
+            "leaked": 14,
+            "recall": 0.846
+          },
+          "espaces_insecables": {
+            "covered": 101,
+            "leaked": 27,
+            "recall": 0.789
+          },
+          "largeur_nulle": {
+            "covered": 84,
+            "leaked": 46,
+            "recall": 0.646
+          },
+          "majuscules": {
+            "covered": 115,
+            "leaked": 13,
+            "recall": 0.898
+          },
+          "nfd": {
+            "covered": 94,
+            "leaked": 22,
+            "recall": 0.81
+          },
+          "typographique": {
+            "covered": 96,
+            "leaked": 7,
+            "recall": 0.932
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "URL": 176,
+        "ORGANIZATION": 28
+      },
+      "leaks": [
+        {
+          "id": "q-0002",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0004",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0007",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0016",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0017",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0021",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0024",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0031",
+          "variant": "base",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0033",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0036",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0038",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0039",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0041",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0050",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0052",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0054",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0057",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0066",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0069",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0074",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0075",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0078",
+          "variant": "typographique",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0080",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0081",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0088",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0095",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0099",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0100",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0105",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0106",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0111",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0118",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0119",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0121",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0123",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0127",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0129",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0132",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0135",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0138",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0139",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "code",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0140",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0141",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0144",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0146",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0152",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0160",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0161",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0173",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0175",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0181",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0183",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0184",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0188",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0194",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0195",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0204",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0212",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0217",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0219",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0220",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0222",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0224",
+          "variant": "majuscules",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0228",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0235",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0236",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0243",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0246",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0249",
+          "variant": "adresse_multiligne",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0251",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0252",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0256",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        }
+      ]
+    },
+    "compta": {
+      "strict": {
+        "global": {
+          "tp": 768,
+          "fp": 283,
+          "fn": 250,
+          "precision": 0.731,
+          "recall": 0.754,
+          "f1": 0.742
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 25,
+            "fp": 122,
+            "fn": 37,
+            "precision": 0.354,
+            "recall": 0.403,
+            "f1": 0.377
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 63,
+            "fp": 4,
+            "fn": 10,
+            "precision": 0.94,
+            "recall": 0.863,
+            "f1": 0.9
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 42,
+            "fp": 116,
+            "fn": 7,
+            "precision": 0.266,
+            "recall": 0.857,
+            "f1": 0.406
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 0,
+            "fp": 25,
+            "fn": 25,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "PERSON": {
+            "tp": 353,
+            "fp": 119,
+            "fn": 133,
+            "precision": 0.748,
+            "recall": 0.726,
+            "f1": 0.737
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 920,
+          "fp": 120,
+          "fn": 98,
+          "precision": 0.886,
+          "recall": 0.904,
+          "f1": 0.895
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 62,
+            "fp": 78,
+            "fn": 0,
+            "precision": 0.587,
+            "recall": 1.0,
+            "f1": 0.74
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 67,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.918,
+            "f1": 0.957
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 43,
+            "fp": 78,
+            "fn": 6,
+            "precision": 0.506,
+            "recall": 0.878,
+            "f1": 0.642
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 25,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "PERSON": {
+            "tp": 438,
+            "fp": 29,
+            "fn": 48,
+            "precision": 0.939,
+            "recall": 0.901,
+            "f1": 0.92
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 861,
+          "leaked": 157,
+          "recall": 0.846
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 25,
+            "leaked": 37,
+            "recall": 0.403
+          },
+          "CARD": {
+            "covered": 7,
+            "leaked": 2,
+            "recall": 0.778
+          },
+          "DATE": {
+            "covered": 46,
+            "leaked": 25,
+            "recall": 0.648
+          },
+          "EMAIL": {
+            "covered": 64,
+            "leaked": 9,
+            "recall": 0.877
+          },
+          "IBAN": {
+            "covered": 19,
+            "leaked": 6,
+            "recall": 0.76
+          },
+          "LOCATION": {
+            "covered": 43,
+            "leaked": 6,
+            "recall": 0.878
+          },
+          "NIR": {
+            "covered": 41,
+            "leaked": 5,
+            "recall": 0.891
+          },
+          "PATIENT_ID": {
+            "covered": 25,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "PERSON": {
+            "covered": 419,
+            "leaked": 67,
+            "recall": 0.862
+          },
+          "PHONE": {
+            "covered": 124,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "SECRET": {
+            "covered": 48,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_multiligne": {
+            "covered": 66,
+            "leaked": 8,
+            "recall": 0.892
+          },
+          "base": {
+            "covered": 228,
+            "leaked": 20,
+            "recall": 0.919
+          },
+          "chiffres_espaces": {
+            "covered": 77,
+            "leaked": 14,
+            "recall": 0.846
+          },
+          "espaces_insecables": {
+            "covered": 101,
+            "leaked": 27,
+            "recall": 0.789
+          },
+          "largeur_nulle": {
+            "covered": 84,
+            "leaked": 46,
+            "recall": 0.646
+          },
+          "majuscules": {
+            "covered": 115,
+            "leaked": 13,
+            "recall": 0.898
+          },
+          "nfd": {
+            "covered": 94,
+            "leaked": 22,
+            "recall": 0.81
+          },
+          "typographique": {
+            "covered": 96,
+            "leaked": 7,
+            "recall": 0.932
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "URL": 176,
+        "ORGANIZATION": 28
+      },
+      "leaks": [
+        {
+          "id": "q-0002",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0004",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0007",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0016",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0017",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0021",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0024",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0031",
+          "variant": "base",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0033",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0036",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0038",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0039",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0041",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0050",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0052",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0054",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0057",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0066",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0069",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0074",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0075",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0078",
+          "variant": "typographique",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0080",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0081",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0088",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0095",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0099",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0100",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0105",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0106",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0111",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0118",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0119",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0121",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0123",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0127",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0129",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0132",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0135",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0138",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0139",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "code",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0140",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0141",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0144",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0146",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0152",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0160",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0161",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0173",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0175",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0181",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0183",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0184",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0188",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0194",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0195",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0204",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0212",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0217",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0219",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0220",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0222",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0224",
+          "variant": "majuscules",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0228",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0235",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0236",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0243",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0246",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0249",
+          "variant": "adresse_multiligne",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0251",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0252",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0256",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        }
+      ]
+    },
+    "it": {
+      "strict": {
+        "global": {
+          "tp": 768,
+          "fp": 283,
+          "fn": 250,
+          "precision": 0.731,
+          "recall": 0.754,
+          "f1": 0.742
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 25,
+            "fp": 122,
+            "fn": 37,
+            "precision": 0.354,
+            "recall": 0.403,
+            "f1": 0.377
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 63,
+            "fp": 4,
+            "fn": 10,
+            "precision": 0.94,
+            "recall": 0.863,
+            "f1": 0.9
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 42,
+            "fp": 116,
+            "fn": 7,
+            "precision": 0.266,
+            "recall": 0.857,
+            "f1": 0.406
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 0,
+            "fp": 25,
+            "fn": 25,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "PERSON": {
+            "tp": 353,
+            "fp": 119,
+            "fn": 133,
+            "precision": 0.748,
+            "recall": 0.726,
+            "f1": 0.737
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 920,
+          "fp": 120,
+          "fn": 98,
+          "precision": 0.886,
+          "recall": 0.904,
+          "f1": 0.895
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 62,
+            "fp": 78,
+            "fn": 0,
+            "precision": 0.587,
+            "recall": 1.0,
+            "f1": 0.74
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 67,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.918,
+            "f1": 0.957
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 43,
+            "fp": 78,
+            "fn": 6,
+            "precision": 0.506,
+            "recall": 0.878,
+            "f1": 0.642
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 25,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "PERSON": {
+            "tp": 438,
+            "fp": 29,
+            "fn": 48,
+            "precision": 0.939,
+            "recall": 0.901,
+            "f1": 0.92
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 861,
+          "leaked": 157,
+          "recall": 0.846
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 25,
+            "leaked": 37,
+            "recall": 0.403
+          },
+          "CARD": {
+            "covered": 7,
+            "leaked": 2,
+            "recall": 0.778
+          },
+          "DATE": {
+            "covered": 46,
+            "leaked": 25,
+            "recall": 0.648
+          },
+          "EMAIL": {
+            "covered": 64,
+            "leaked": 9,
+            "recall": 0.877
+          },
+          "IBAN": {
+            "covered": 19,
+            "leaked": 6,
+            "recall": 0.76
+          },
+          "LOCATION": {
+            "covered": 43,
+            "leaked": 6,
+            "recall": 0.878
+          },
+          "NIR": {
+            "covered": 41,
+            "leaked": 5,
+            "recall": 0.891
+          },
+          "PATIENT_ID": {
+            "covered": 25,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "PERSON": {
+            "covered": 419,
+            "leaked": 67,
+            "recall": 0.862
+          },
+          "PHONE": {
+            "covered": 124,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "SECRET": {
+            "covered": 48,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_multiligne": {
+            "covered": 66,
+            "leaked": 8,
+            "recall": 0.892
+          },
+          "base": {
+            "covered": 228,
+            "leaked": 20,
+            "recall": 0.919
+          },
+          "chiffres_espaces": {
+            "covered": 77,
+            "leaked": 14,
+            "recall": 0.846
+          },
+          "espaces_insecables": {
+            "covered": 101,
+            "leaked": 27,
+            "recall": 0.789
+          },
+          "largeur_nulle": {
+            "covered": 84,
+            "leaked": 46,
+            "recall": 0.646
+          },
+          "majuscules": {
+            "covered": 115,
+            "leaked": 13,
+            "recall": 0.898
+          },
+          "nfd": {
+            "covered": 94,
+            "leaked": 22,
+            "recall": 0.81
+          },
+          "typographique": {
+            "covered": 96,
+            "leaked": 7,
+            "recall": 0.932
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "URL": 176,
+        "ORGANIZATION": 28
+      },
+      "leaks": [
+        {
+          "id": "q-0002",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0004",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0007",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0016",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0017",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0021",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0024",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0031",
+          "variant": "base",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0033",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0036",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0038",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0039",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0041",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0050",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0052",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0054",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0057",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0066",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0069",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0074",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0075",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0078",
+          "variant": "typographique",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0080",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0081",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0088",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0095",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0099",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0100",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0105",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0106",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0111",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0118",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0119",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0121",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0123",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0127",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0129",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0132",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0135",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0138",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0139",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "code",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0140",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0141",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0144",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0146",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0152",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0160",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0161",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0173",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0175",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0181",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0183",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0184",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0188",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0194",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0195",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0204",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0212",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0217",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0219",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0220",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0222",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0224",
+          "variant": "majuscules",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0228",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0235",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0236",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0243",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0246",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0249",
+          "variant": "adresse_multiligne",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0251",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0252",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0256",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        }
+      ]
+    },
+    "medical": {
+      "strict": {
+        "global": {
+          "tp": 768,
+          "fp": 283,
+          "fn": 250,
+          "precision": 0.731,
+          "recall": 0.754,
+          "f1": 0.742
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 25,
+            "fp": 122,
+            "fn": 37,
+            "precision": 0.354,
+            "recall": 0.403,
+            "f1": 0.377
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 63,
+            "fp": 4,
+            "fn": 10,
+            "precision": 0.94,
+            "recall": 0.863,
+            "f1": 0.9
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 42,
+            "fp": 116,
+            "fn": 7,
+            "precision": 0.266,
+            "recall": 0.857,
+            "f1": 0.406
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 0,
+            "fp": 25,
+            "fn": 25,
+            "precision": 0.0,
+            "recall": 0.0,
+            "f1": 0.0
+          },
+          "PERSON": {
+            "tp": 353,
+            "fp": 119,
+            "fn": 133,
+            "precision": 0.748,
+            "recall": 0.726,
+            "f1": 0.737
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 920,
+          "fp": 120,
+          "fn": 98,
+          "precision": 0.886,
+          "recall": 0.904,
+          "f1": 0.895
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 62,
+            "fp": 78,
+            "fn": 0,
+            "precision": 0.587,
+            "recall": 1.0,
+            "f1": 0.74
+          },
+          "CARD": {
+            "tp": 7,
+            "fp": 13,
+            "fn": 2,
+            "precision": 0.35,
+            "recall": 0.778,
+            "f1": 0.483
+          },
+          "DATE": {
+            "tp": 46,
+            "fp": 0,
+            "fn": 25,
+            "precision": 1.0,
+            "recall": 0.648,
+            "f1": 0.786
+          },
+          "EMAIL": {
+            "tp": 67,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.918,
+            "f1": 0.957
+          },
+          "IBAN": {
+            "tp": 19,
+            "fp": 0,
+            "fn": 6,
+            "precision": 1.0,
+            "recall": 0.76,
+            "f1": 0.864
+          },
+          "LOCATION": {
+            "tp": 43,
+            "fp": 78,
+            "fn": 6,
+            "precision": 0.506,
+            "recall": 0.878,
+            "f1": 0.642
+          },
+          "NIR": {
+            "tp": 41,
+            "fp": 0,
+            "fn": 5,
+            "precision": 1.0,
+            "recall": 0.891,
+            "f1": 0.943
+          },
+          "PATIENT_ID": {
+            "tp": 25,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "PERSON": {
+            "tp": 438,
+            "fp": 29,
+            "fn": 48,
+            "precision": 0.939,
+            "recall": 0.901,
+            "f1": 0.92
+          },
+          "PHONE": {
+            "tp": 124,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "SECRET": {
+            "tp": 48,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 859,
+          "leaked": 159,
+          "recall": 0.844
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 25,
+            "leaked": 37,
+            "recall": 0.403
+          },
+          "CARD": {
+            "covered": 7,
+            "leaked": 2,
+            "recall": 0.778
+          },
+          "DATE": {
+            "covered": 46,
+            "leaked": 25,
+            "recall": 0.648
+          },
+          "EMAIL": {
+            "covered": 63,
+            "leaked": 10,
+            "recall": 0.863
+          },
+          "IBAN": {
+            "covered": 19,
+            "leaked": 6,
+            "recall": 0.76
+          },
+          "LOCATION": {
+            "covered": 43,
+            "leaked": 6,
+            "recall": 0.878
+          },
+          "NIR": {
+            "covered": 41,
+            "leaked": 5,
+            "recall": 0.891
+          },
+          "PATIENT_ID": {
+            "covered": 25,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "PERSON": {
+            "covered": 418,
+            "leaked": 68,
+            "recall": 0.86
+          },
+          "PHONE": {
+            "covered": 124,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "SECRET": {
+            "covered": 48,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_multiligne": {
+            "covered": 66,
+            "leaked": 8,
+            "recall": 0.892
+          },
+          "base": {
+            "covered": 228,
+            "leaked": 20,
+            "recall": 0.919
+          },
+          "chiffres_espaces": {
+            "covered": 77,
+            "leaked": 14,
+            "recall": 0.846
+          },
+          "espaces_insecables": {
+            "covered": 101,
+            "leaked": 27,
+            "recall": 0.789
+          },
+          "largeur_nulle": {
+            "covered": 82,
+            "leaked": 48,
+            "recall": 0.631
+          },
+          "majuscules": {
+            "covered": 115,
+            "leaked": 13,
+            "recall": 0.898
+          },
+          "nfd": {
+            "covered": 94,
+            "leaked": 22,
+            "recall": 0.81
+          },
+          "typographique": {
+            "covered": 96,
+            "leaked": 7,
+            "recall": 0.932
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "URL": 176
+      },
+      "leaks": [
+        {
+          "id": "q-0002",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0004",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0007",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0016",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0017",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0019",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0021",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0024",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0031",
+          "variant": "base",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0033",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0036",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0038",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0039",
+          "variant": "base",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0041",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0050",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0052",
+          "variant": "base",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0054",
+          "variant": "base",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0057",
+          "variant": "base",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0066",
+          "variant": "base",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0069",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0074",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0075",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0078",
+          "variant": "typographique",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0080",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0081",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0088",
+          "variant": "typographique",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0095",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0096",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0099",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0100",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0101",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0102",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0103",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0105",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0106",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0108",
+          "variant": "espaces_insecables",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0111",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0112",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0118",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0119",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0120",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0121",
+          "variant": "espaces_insecables",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0123",
+          "variant": "espaces_insecables",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0125",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0126",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0127",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0128",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0129",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0131",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0132",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "notes",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0133",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0134",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0135",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0137",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0138",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0139",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "code",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0140",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0141",
+          "variant": "largeur_nulle",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0142",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0143",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0144",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0145",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0146",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0148",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0150",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0152",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0153",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0154",
+          "variant": "largeur_nulle",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0156",
+          "variant": "largeur_nulle",
+          "lang": "en",
+          "category": "email",
+          "type": "EMAIL",
+          "partial": true
+        },
+        {
+          "id": "q-0160",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0161",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0165",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0166",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0167",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0172",
+          "variant": "nfd",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0173",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0175",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0176",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0181",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "notes",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0183",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0184",
+          "variant": "nfd",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0188",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0189",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0194",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0195",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "CARD",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0196",
+          "variant": "chiffres_espaces",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0198",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0199",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0204",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "NIR",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0205",
+          "variant": "chiffres_espaces",
+          "lang": "fr",
+          "category": "rh",
+          "type": "IBAN",
+          "partial": true
+        },
+        {
+          "id": "q-0212",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0217",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0218",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0219",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0220",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": true
+        },
+        {
+          "id": "q-0221",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0222",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "ticket",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0224",
+          "variant": "majuscules",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0228",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0235",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0236",
+          "variant": "majuscules",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0243",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "LOCATION",
+          "partial": false
+        },
+        {
+          "id": "q-0245",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "courriel",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0246",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "contrat",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0249",
+          "variant": "adresse_multiligne",
+          "lang": "mixte",
+          "category": "clinique",
+          "type": "ADDRESS",
+          "partial": true
+        },
+        {
+          "id": "q-0251",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "clinique",
+          "type": "PERSON",
+          "partial": false
+        },
+        {
+          "id": "q-0252",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        },
+        {
+          "id": "q-0256",
+          "variant": "adresse_multiligne",
+          "lang": "fr",
+          "category": "rh",
+          "type": "DATE",
+          "partial": false
+        }
+      ]
+    }
+  }
+}
