@@ -94,7 +94,11 @@ Any other field (for instance `score_threshold`, `entities`, `ad_hoc_recognizers
 - **Offsets on the string exactly as received**, given twice (D-002): in Unicode code points (`start`/`end`, Python indexing) and in UTF-16
   code units (`start_utf16`/`end_utf16`, JavaScript indexing: `text.slice(start_utf16, end_utf16)`). The two differ as soon as a character outside
   the Basic Multilingual Plane (emoji, some ideographs) precedes the entity. `end` is exclusive.
-- The normalization applied before detection (capitals, typographic dashes) preserves length, hence offsets.
+- Before detection, the server normalizes the text (D-014): format characters removed (zero-width, bidirectional controls, soft hyphen),
+  special spaces and control characters replaced by a space, ligatures expanded, typographic apostrophes, NFC recomposition, then capitals
+  and typographic dashes as before. **Returned offsets always refer to the text received**: a value containing an invisible character is
+  returned with it ("Camille\u200bMartin" also covers the zero-width character), it is never cut in two. An invisible character right
+  before or right after a value is not part of it.
 - Entities are sorted by `start`, then `end`. **They may overlap** (two recognizers on the same passage): the client must not assume disjoint intervals.
 - Entities include those found by **propagation**: every other exact occurrence of an already detected value is reported too (D-012).
 - **No score** (D-003): Presidio scores are not calibrated; a client filtering on them would create false negatives.
@@ -221,7 +225,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 bytes (238 KiB) by de
 | Cross-site request (CSRF) with the session cookie | `Content-Type: application/json` required (415 otherwise): a cross-site form cannot send it, and a cross-site `fetch` with that type triggers a CORS preflight the server refuses (no CORS headers, no allowed origin). `SameSite=Lax` cookie on top. |
 | Giant input | Body cap at the edge and in the application (reading interrupted), `MAX_TEXT_CHARS`, maximum duration. |
 | Malicious JSON (deep nesting, duplicates) | Pydantic's JSON parser, bounded by the body cap; strict schema, unknown fields refused. |
-| Tricky Unicode (lone surrogates, zero-width, NFD, non-breaking spaces, bidirectional controls) | Lone surrogates rejected. The others are accepted as is; their effect on detection is **measured** by the benchmark (step E), and any added normalization will have to preserve offsets. The text is never written to a log, so no visual log spoofing risk. |
+| Tricky Unicode (lone surrogates, zero-width, NFD, non-breaking spaces, bidirectional controls) | Lone surrogates rejected. The others are accepted, then normalized before detection with a position map (D-014, phase 2): offsets and pseudonymization refer to the text received, inner invisible characters included. The text is never written to a log, so no visual log spoofing risk. |
 | Denial of service, starving the document flow | Per-user rate limiting at the edge; bounded queue and a single text analysis at a time in the application; maximum duration. Known limitation: the document flow itself blocks the event loop (EXT-07, out of scope); text requests then wait for the document processing to finish. |
 | Client weakening detection | No threshold, entity or recognizer parameter; unknown fields refused (422); unknown theme refused. |
 | Enumeration (themes, users) | Themes are public to an authenticated user (`/version`). No other user's data is reachable: no state, no job identifier. |
@@ -271,4 +275,4 @@ cookie; (d) Obfusk8-specific API tokens.
 ## 9. Open decisions
 
 See `DECISIONS.md`, "Open decisions" section: source of `presidio_version` (D-013), final placeholder format (D-004), propagation of exact values
-to every type (D-012), additional Unicode normalization (D-014, after measurement).
+to every type (D-012), additional Unicode normalization (D-014, implemented in phase 2).

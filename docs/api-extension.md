@@ -94,7 +94,11 @@ Réponse 200 :
 - **Positions sur la chaîne reçue telle quelle**, données deux fois (D-002) : en points de code Unicode (`start`/`end`, indexation Python)
   et en unités UTF-16 (`start_utf16`/`end_utf16`, indexation JavaScript : `text.slice(start_utf16, end_utf16)`). Les deux diffèrent dès qu'un caractère
   hors du plan multilingue de base (émoji, certains idéogrammes) précède l'entité. `end` est exclusif.
-- La normalisation appliquée avant détection (majuscules, tirets typographiques) conserve la longueur, donc les positions.
+- Avant détection, le serveur normalise le texte (D-014) : caractères de format supprimés (largeur nulle, contrôles bidirectionnels, trait d'union
+  conditionnel), espaces spéciales et caractères de contrôle remplacés par une espace, ligatures développées, apostrophes typographiques,
+  recomposition NFC, puis majuscules et tirets typographiques comme avant. **Les positions renvoyées portent toujours sur le texte reçu** :
+  une valeur qui contient un caractère invisible est renvoyée avec lui (« Camille\u200bMartin » couvre aussi le caractère de largeur nulle),
+  elle n'est jamais coupée en deux. Un caractère invisible juste avant ou juste après une valeur n'en fait pas partie.
 - Les entités sont triées par `start`, puis par `end`. **Elles peuvent se chevaucher** (deux reconnaisseurs sur le même passage) : le client ne doit pas
   supposer des intervalles disjoints.
 - Les entités incluent celles trouvées par **propagation** : toute autre occurrence exacte d'une valeur déjà détectée est signalée aussi (D-012).
@@ -223,7 +227,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 octets (238 Kio) par 
 | Requête intersites (CSRF) avec le cookie de session | `Content-Type: application/json` exigé (415 sinon) : un formulaire intersites ne peut pas l'envoyer, et un `fetch` intersites avec ce type déclenche un prévol CORS que le serveur refuse (aucun en-tête CORS, aucune origine autorisée). Cookie `SameSite=Lax` en plus. |
 | Entrée géante | Plafond de corps en bordure et dans l'application (lecture interrompue), `MAX_TEXT_CHARS`, délai maximal. |
 | JSON piégé (imbrication profonde, doublons) | Parseur JSON de Pydantic, borné par le plafond de corps ; schéma strict, champs inconnus refusés. |
-| Unicode piégeux (surrogates isolées, largeur nulle, NFD, espaces insécables, contrôle bidirectionnel) | Surrogates isolées rejetées. Les autres sont acceptées telles quelles ; leur effet sur la détection est **mesuré** par le banc d'essai (étape E), et toute normalisation ajoutée devra conserver les positions. Le texte n'est jamais écrit dans un journal, donc pas de risque d'usurpation visuelle des journaux. |
+| Unicode piégeux (surrogates isolées, largeur nulle, NFD, espaces insécables, contrôle bidirectionnel) | Surrogates isolées rejetées. Les autres sont acceptées, puis normalisées avant détection avec une table de correspondance (D-014, phase 2) : positions et pseudonymisation portent sur le texte reçu, invisibles intérieurs compris. Le texte n'est jamais écrit dans un journal, donc pas de risque d'usurpation visuelle des journaux. |
 | Déni de service, famine du flux documents | Limitation de débit par utilisateur en bordure ; file bornée et une seule analyse de texte à la fois dans l'application ; délai maximal. Limite connue : le flux documents bloque lui-même la boucle d'événements (EXT-07, hors périmètre) ; les requêtes de texte attendent alors la fin du traitement du document. |
 | Affaiblissement de la détection par le client | Aucun paramètre de seuil, d'entités ni de reconnaisseur ; champs inconnus refusés (422) ; thème inconnu refusé. |
 | Énumération (thèmes, utilisateurs) | Les thèmes sont publics pour un utilisateur authentifié (`/version`). Aucune donnée d'autres utilisateurs n'est accessible : pas d'état, pas d'identifiant de tâche. |
@@ -273,4 +277,4 @@ En résumé : (a) routeur sans `oauth2-errors` pour `/api/v1/` (401 brut) ; (b) 
 ## 9. Décisions ouvertes
 
 Voir `DECISIONS.md`, section « Décisions ouvertes » : source de `presidio_version` (D-013), format définitif du marqueur (D-004),
-propagation des valeurs exactes à tous les types (D-012), normalisation Unicode supplémentaire (D-014, après mesure).
+propagation des valeurs exactes à tous les types (D-012), normalisation Unicode supplémentaire (D-014, mise en œuvre en phase 2).

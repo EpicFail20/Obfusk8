@@ -81,6 +81,7 @@ from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from branding import install_branding
 from supervision import Alert, AlertSeverity, get_alert_sink
+from text_normalization import normalize_for_analysis
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("anonymiseur")
@@ -1356,6 +1357,28 @@ def _analyze_text(text: str, theme: dict | None = None, timeout: float = 30) -> 
     return entities
 
 
+def _analyze_normalized(text: str, theme: dict | None = None, **analyze_kwargs) -> list[dict]:
+    """The single entry point of every flow (PDF, image, DOCX/CSV blocks and,
+    through _detect_text_blocks, the text API) towards the analyzer.
+
+    The analyzer receives the text normalized by text_normalization (format
+    characters removed, special spaces, NFC... — D-014, see that module for
+    the measurements), then by the existing length-preserving normalizations
+    (upper-case words, typographic dashes). The entities returned have their
+    positions mapped back onto `text`, the text actually received: callers
+    slice and redact `text` exactly as before, and an invisible character
+    inside a value is covered by it. A text with nothing to normalize takes
+    the identity path: the analyzer receives exactly what it received before
+    phase 2."""
+    normalized = normalize_for_analysis(text)
+    entities = _analyze_text(_normalize_dashes(_normalize_allcaps(normalized.text)), theme=theme, **analyze_kwargs)
+    remapped = []
+    for entity in entities:
+        start, end = normalized.to_original(entity["start"], entity["end"])
+        remapped.append({**entity, "start": start, "end": end})
+    return remapped
+
+
 def _anonymize_text(text: str, entities: list[dict]) -> str:
     """Calls presidio-anonymizer to produce an anonymized text version (audit)."""
     if not entities:
@@ -1615,8 +1638,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dic
         _check_detection_deadline(detection_start)
         page_text = page.get_text()
         page_texts.append(page_text)
-        normalized_text = _normalize_dashes(_normalize_allcaps(page_text))
-        entities = _analyze_text(normalized_text, theme=theme)
+        entities = _analyze_normalized(page_text, theme=theme)
 
         for entity in entities:
             entity_text = page_text[entity["start"] : entity["end"]]
@@ -2047,12 +2069,9 @@ def _detect_image(img: "Image.Image", theme: dict | None = None) -> list[dict]:
     _check_detection_deadline(detection_start)
 
     text, spans = _build_ocr_text(words)
-    # Same normalizations as for the PDF (helps NER on all-uppercase
-    # words and typographic dashes) — preserve the text's length
-    # character for character, so the offsets remain valid for
-    # remapping onto the spans computed on the original text.
-    normalized_text = _normalize_dashes(_normalize_allcaps(text))
-    entities = _analyze_text(normalized_text, theme=theme)
+    # Same normalizations as for the PDF; the offsets returned refer to
+    # `text`, so they remain valid for remapping onto its word spans.
+    entities = _analyze_normalized(text, theme=theme)
     return _map_entities_to_word_boxes(entities, spans)
 
 
@@ -2840,8 +2859,7 @@ def _detect_text_blocks(
             pos += len(text) + 1  # +1 for the "\n" separator inserted below
 
         combined_text = "\n".join(combined_parts)
-        normalized = _normalize_dashes(_normalize_allcaps(combined_text))
-        entities = _analyze_text(normalized, theme=theme, **analyze_kwargs)
+        entities = _analyze_normalized(combined_text, theme=theme, **analyze_kwargs)
 
         for entity in entities:
             for block_id, start_in_combined, length in offsets:

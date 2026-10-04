@@ -22,6 +22,7 @@ set of synthetic documents, and compares two snapshots.
 
   snapshot:  python benchmarks/documents/doc_zones_snapshot.py
   compare:   python benchmarks/documents/doc_zones_snapshot.py --compare REF.json NEW.json
+             (exit code 1 if a reference zone is lost)
 
 Documents (rebuilt identically on every run, nothing stored): 24 prompts of
 the quality corpus (the first 3 of each variant, excluding the `code`
@@ -33,6 +34,9 @@ A zone is identified by its position and its entity types:
   - PDF/image: page and rectangle in preview pixels (rounded);
   - DOCX/CSV: rendered block (DOCX paragraph or CSV cell) number and
     character interval within it.
+A reference zone missing from a new snapshot is "extended" when a current
+zone still masks all of it, "lost" otherwise; only lost zones fail the
+comparison.
 The detected text itself is NEVER written to the report: only its length
 and a truncated SHA-256 (the corpus contains synthetic secrets).
 
@@ -235,20 +239,48 @@ def _key(zone: dict[str, Any]) -> str:
     return json.dumps(zone, sort_keys=True, ensure_ascii=False)
 
 
+# Rounding of the preview rectangles (whole pixels) between two snapshots.
+PIXEL_TOLERANCE = 1
+
+
+def _covers(outer: dict[str, Any], inner: dict[str, Any]) -> bool:
+    """True when zone `outer` masks everything zone `inner` masked (same
+    block or page), whatever their entity types."""
+    if "block" in inner:
+        return outer["block"] == inner["block"] and outer["start"] <= inner["start"] and inner["end"] <= outer["end"]
+    if outer["page"] != inner["page"]:
+        return False
+    (ol, ot, ow, oh), (il, it, iw, ih) = outer["rect"], inner["rect"]
+    tol = PIXEL_TOLERANCE
+    return ol - tol <= il and ot - tol <= it and il + iw <= ol + ow + tol and it + ih <= ot + oh + tol
+
+
 def compare(reference: dict[str, Any], current: dict[str, Any]) -> int:
-    """Prints removed and added zones per case; exit code 1 if any reference
-    zone is missing (the only regression the phase forbids)."""
-    removed_total = 0
+    """Prints, per case, the reference zones that disappeared — "extended"
+    when a current zone still masks all of it (a larger zone), "lost"
+    otherwise — and the zones added. Exit code 1 if any zone is lost (the
+    only regression the phase forbids)."""
+    lost_total = 0
     for case in sorted(set(reference["cases"]) | set(current["cases"])):
-        before = {_key(z) for z in reference["cases"].get(case, [])}
-        after = {_key(z) for z in current["cases"].get(case, [])}
-        removed, added = sorted(before - after), sorted(after - before)
-        removed_total += len(removed)
-        print(f"{case:16} reference={len(before)} current={len(after)} removed={len(removed)} added={len(added)}")
-        for label, items in (("  - removed", removed), ("  + added", added)):
+        ref_zones, cur_zones = reference["cases"].get(case, []), current["cases"].get(case, [])
+        before, after = {_key(z) for z in ref_zones}, {_key(z) for z in cur_zones}
+        gone = [z for z in ref_zones if _key(z) not in after]
+        extended = [z for z in gone if any(_covers(c, z) for c in cur_zones)]
+        lost = [z for z in gone if not any(_covers(c, z) for c in cur_zones)]
+        added = sorted(after - before)
+        lost_total += len(lost)
+        print(
+            f"{case:16} reference={len(before)} current={len(after)} lost={len(lost)} "
+            f"extended={len(extended)} added={len(added)}"
+        )
+        for label, items in (
+            ("  - lost", [_key(z) for z in lost]),
+            ("  ~ extended", [_key(z) for z in extended]),
+            ("  + added", added),
+        ):
             for item in items:
                 print(f"{label} {item}")
-    return 1 if removed_total else 0
+    return 1 if lost_total else 0
 
 
 if __name__ == "__main__":

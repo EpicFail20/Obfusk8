@@ -125,7 +125,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   (reflète les reconnaisseurs effectivement chargés, pas le numéro de version).
 - **Décision** (recommandation retenue) : (c), exposée dans un champ distinct `analyzer_recognizers`, et `presidio_version: null` tant que (a) n'est pas autorisé.
 
-## D-014 — Normalisation Unicode supplémentaire — principe validé (2026-10-02) ; décision finale après la mesure de l'étape E
+## D-014 — Normalisation Unicode supplémentaire — validée (2026-10-04, décision humaine de l'étape A de la phase 2) ; mise en œuvre en phase 2, étape B
 
 - **Contexte** : la normalisation actuelle (majuscules, tirets) conserve la longueur. Espaces insécables, caractères de largeur nulle, formes NFD et
   apostrophes typographiques peuvent causer des faux négatifs, mais une normalisation qui change la longueur exige une table de correspondance des positions.
@@ -136,6 +136,17 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Proposition pour la phase suivante (à valider)** : avant analyse, supprimer les caractères de format (largeur nulle, contrôles bidirectionnels),
   remplacer les espaces insécables par une espace et recomposer en NFC, **avec une table de correspondance** des positions vers le texte reçu ;
   appliquer au flux documents comme au flux texte (même fonction), tests de non-régression sur chaque variante du corpus.
+- **Mise en œuvre (phase 2, étape B)** : `app/text_normalization.py`, module séparé (réponse Q2 du 2026-10-04, ligne `COPY` explicite dans
+  `app/Dockerfile`). Caractères de format supprimés ; espaces spéciales (Zs) et contrôles hors tabulation et sauts de ligne (dont U+0000,
+  EXT-38) remplacés par une espace ; séparateurs de ligne et de paragraphe remplacés par un saut de ligne ; ligatures U+FB00-FB06
+  développées (observées dans les PDF à l'étape B) ; apostrophes typographiques ; recomposition NFC par grappe. Chaque caractère du résultat
+  connaît son intervalle d'origine ; un intervalle détecté couvre les caractères supprimés entre son premier et son dernier caractère.
+  Point d'entrée unique `main._analyze_normalized`, utilisé par le PDF, l'image, le DOCX, le CSV et, via `_detect_text_blocks`, l'API texte ;
+  les normalisations existantes (majuscules, tirets) s'appliquent ensuite. Texte sans rien à normaliser : chemin identité, l'analyseur reçoit
+  exactement le même texte qu'avant.
+- **Alternatives écartées** : NFKC complète (change des chiffres, exposants et lettres compatibles au-delà du besoin mesuré, et rend la
+  correspondance plus coûteuse) ; suppression des caractères de contrôle (U+0000 entre deux mots doit séparer les mots, EXT-38) ;
+  normalisation par l'analyseur (positions perdues côté application).
 
 ## D-015 — Reconnaisseurs propres à l'API texte dans `app/themes/extension/` — validée (2026-10-02, validation humaine de l'étape B)
 

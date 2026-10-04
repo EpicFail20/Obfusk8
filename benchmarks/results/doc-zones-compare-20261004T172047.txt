@@ -1,0 +1,180 @@
+csv/aucun        reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+csv/compta       reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+csv/it           reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+csv/medical      reference=120 current=119 lost=1 extended=6 added=6
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+docx/aucun       reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/compta      reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/it          reference=115 current=114 lost=1 extended=6 added=6
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/medical     reference=120 current=119 lost=1 extended=6 added=6
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+image/aucun      reference=74 current=74 lost=0 extended=0 added=0
+image/compta     reference=74 current=74 lost=0 extended=0 added=0
+image/it         reference=74 current=74 lost=0 extended=0 added=0
+image/medical    reference=81 current=81 lost=0 extended=0 added=0
+pdf/aucun        reference=119 current=116 lost=1 extended=8 added=6
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+pdf/compta       reference=119 current=116 lost=1 extended=8 added=6
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+pdf/it           reference=119 current=116 lost=1 extended=8 added=6
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+pdf/medical      reference=127 current=124 lost=1 extended=8 added=6
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}

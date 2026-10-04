@@ -41,6 +41,8 @@ COPY branding.py .
 # Text API for the browser extension (phase 1), only active when
 # ENABLE_EXTENSION_API=true — see docs/api-extension.en.md.
 COPY text_api.py text_api_models.py ./
+# Unicode normalization before detection (phase 2, D-014).
+COPY text_normalization.py ./
 COPY themes/ ./themes/
 COPY i18n/ ./i18n/
 COPY tests/ ./tests/

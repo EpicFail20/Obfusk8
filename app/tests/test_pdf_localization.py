@@ -267,7 +267,7 @@ def test_audit_et_journal_comptes_sans_contenu(monkeypatch, tmp_path, caplog):
             )
         )
         assert response.status_code == 200
-        (main.WORKDIR / f"{job_id}--anonymise.pdf").unlink(missing_ok=True)
+        (main.WORKDIR / f"{job_id}-document-anonymise.pdf").unlink(missing_ok=True)
     finally:
         main.audit_log.removeHandler(handler)
         handler.close()
@@ -302,7 +302,7 @@ def test_audit_inchange_sans_perte(monkeypatch, tmp_path):
                 response_format="json",
             )
         )
-        (main.WORKDIR / f"{job_id}--anonymise.pdf").unlink(missing_ok=True)
+        (main.WORKDIR / f"{job_id}-document-anonymise.pdf").unlink(missing_ok=True)
     finally:
         main.audit_log.removeHandler(handler)
         handler.close()
