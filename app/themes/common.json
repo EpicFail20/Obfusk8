@@ -16,8 +16,8 @@
       "supported_language": "fr",
       "patterns": [
         {
-          "name": "adresse postale française (numéro + type de voie + nom de rue)",
-          "regex": "\\b\\d{1,4}\\s?(?:bis|ter)?,?\\s+(?:rue|avenue|av\\.?|boulevard|bd\\.?|impasse|all[ée]e|chemin|place|route|quai|cours|square)\\s+[A-ZÀ-Ýa-zà-ÿ][A-ZÀ-Ýa-zà-ÿ'\\- ]{1,60}",
+          "name": "adresse postale française (numéro + type de voie + nom de rue), suivie le cas échéant du code postal et de la ville sur la même ligne, après une virgule ou à la ligne suivante (EXT-29)",
+          "regex": "\\b\\d{1,4}\\s?(?:bis|ter)?,?\\s+(?:rue|avenue|av\\.?|boulevard|bd\\.?|impasse|all[ée]e|chemin|place|route|quai|cours|square)\\s+[A-ZÀ-Ýa-zà-ÿ][A-ZÀ-Ýa-zà-ÿ'\\- ]{1,60}(?:[ \\t]*,?[ \\t]*\\n?[ \\t]*(?:(?:0[1-9]|[1-8]\\d|9[0-8])\\d{3}|2[AB]\\d{3})[ \\t]+(?-i:[A-ZÀ-Ý])[a-zà-ÿ'\\-]+(?:[ \\-](?-i:[A-ZÀ-Ý])[a-zà-ÿ'\\-]+){0,3})?",
           "score": 0.7
         }
       ],
@@ -46,6 +46,11 @@
           "name": "payment card number, same regex as Presidio 2.2.364 CreditCardRecognizer (predefined_recognizers/generic/credit_card_recognizer.py, registered for 'en' only, EXT-08); no Luhn check possible in an ad hoc recognizer: false positives accepted (doctrine 0.1), measured; score 0.6 keeps a margin above every threshold, including the code default DEFAULT_SCORE_THRESHOLD=0.5 (EXT-15)",
           "regex": "\\b(?!1\\d{12}(?!\\d))((4\\d{3})|(5[0-5]\\d{2})|(6\\d{3})|(1\\d{3})|(3\\d{3}))[- ]?(\\d{3,4})[- ]?(\\d{3,4})[- ]?(\\d{3,5})\\b",
           "score": 0.6
+        },
+        {
+          "name": "payment card number written one digit at a time with a single separator between digits (EXT-30: '4 9 7 0 ...' was never detected, the regex above expects groups); 13 to 19 digits, same leading digits as above; a 15-digit sequence starting with 1 or 2 has the NIR shape and is left to the NIR recognizer",
+          "regex": "\\b(?!(?:[12])(?:[ .\\-]\\d){14}\\b)(?:[3-6]|1)(?:[ .\\-]\\d){12,18}\\b",
+          "score": 0.6
         }
       ],
       "context": [
@@ -68,6 +73,69 @@
           "name": "email address with any domain, including internal ones (.local, .lan, .internal) rejected by Presidio's EmailRecognizer TLD check (EXT-23); simplified dot-atom addr-spec (RFC 5322 s.3.4.1)",
           "regex": "\\b[A-Za-z0-9._%+\\-]{1,64}+@[A-Za-z0-9\\-]{1,63}+(?:\\.[A-Za-z0-9\\-]{1,63}+){1,10}+",
           "score": 0.7
+        }
+      ]
+    },
+    {
+      "name": "FrenchPostalCodeCityRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "STREET_ADDRESS",
+      "patterns": [
+        {
+          "name": "postal code followed by a capitalized city name, alone or after a street (EXT-29: '21000 Dijon' was left in clear next to its detected street, 12 of 24 addresses partly exposed in the base variant, phase 1); metropolitan departments 01-95 and overseas 97-98 (98 included for Monaco and the Pacific), Corsica 2A/2B; case-sensitive initial (?-i:) because presidio compiles with IGNORECASE, so that '12345 euros' or '75011 en attente' do not match",
+          "regex": "\\b(?:(?:0[1-9]|[1-8]\\d|9[0-8])\\d{3}|2[AB]\\d{3})[ \\t]+(?-i:[A-ZÀ-Ý])[a-zà-ÿ'\\-]+(?:[ \\-](?-i:[A-ZÀ-Ý])[a-zà-ÿ'\\-]+){0,3}\\b",
+          "score": 0.6
+        }
+      ],
+      "context": [
+        "adresse",
+        "domicile",
+        "demeurant",
+        "résidant",
+        "cedex"
+      ]
+    },
+    {
+      "name": "IbanAnySeparatorRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "IBAN_CODE",
+      "patterns": [
+        {
+          "name": "IBAN with any or no single separator between characters (EXT-30: 'F R 2 9 7 5 ...' one character at a time was partly exposed, Presidio's IbanRecognizer expects groups of 4); ISO 13616 shape: 2 upper-case letters, 2 check digits, 11 to 30 upper-case letters or digits; no checksum possible in an ad hoc recognizer (false positives accepted, doctrine 0.1); letters case-sensitive (?-i:) so that ordinary words do not start a match",
+          "regex": "\\b(?-i:[A-Z])[\\s.\\-]?(?-i:[A-Z])[\\s.\\-]?\\d[\\s.\\-]?\\d(?:[\\s.\\-]?(?-i:[A-Z0-9])){11,30}\\b",
+          "score": 0.6
+        }
+      ],
+      "context": [
+        "iban",
+        "rib",
+        "virement",
+        "bancaire",
+        "bank",
+        "transfer"
+      ]
+    },
+    {
+      "name": "FrenchDateInLettersRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "DATE_TIME",
+      "patterns": [
+        {
+          "name": "French date with the month in letters, optional weekday, '1er', abbreviated months, optional year (EXT-31: '14 mai 1981' was never detected, 25 dates exposed out of 71 in phase 1); a day number is required so that 'mars' or 'mai' alone never match",
+          "regex": "\\b(?:(?:lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)\\s+)?(?:1er|0?[1-9]|[12]\\d|3[01])\\s+(?:janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[uû]t|septembre|octobre|novembre|d[ée]cembre|janv\\.|f[ée]vr?\\.|avr\\.|juil\\.|sept\\.|oct\\.|nov\\.|d[ée]c\\.)(?:\\s+\\d{4})?(?!\\w)",
+          "score": 0.6
+        }
+      ]
+    },
+    {
+      "name": "EnglishDateInLettersRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "DATE_TIME",
+      "patterns": [
+        {
+          "name": "English date with the month in letters: 'March 3, 2025', 'Monday, March 3, 2025', '3rd of March 2025', '3 March 2025' (EXT-31; the analyzer always runs in French, EXT-19, so English dates in prompts were missed); abbreviations need their dot ('Jan' alone is a first name) and a day number is required ('May I help' does not match)",
+          "regex": "\\b(?:(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\\s+)?(?:(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.|Feb\\.|Mar\\.|Apr\\.|Jun\\.|Jul\\.|Aug\\.|Sept?\\.|Oct\\.|Nov\\.|Dec\\.)\\s+(?:0?[1-9]|[12]\\d|3[01])(?:st|nd|rd|th)?(?:,?\\s+\\d{4})?|(?:0?[1-9]|[12]\\d|3[01])(?:st|nd|rd|th)?(?:\\s+of)?\\s+(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan\\.|Feb\\.|Mar\\.|Apr\\.|Jun\\.|Jul\\.|Aug\\.|Sept?\\.|Oct\\.|Nov\\.|Dec\\.)(?:,?\\s+\\d{4})?)(?!\\w)",
+          "score": 0.6
         }
       ]
     }

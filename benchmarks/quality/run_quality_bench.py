@@ -30,7 +30,8 @@ No success threshold (prompt of phase 1): the first run is the baseline.
 Writes a timestamped JSON and Markdown report in benchmarks/results/.
 
 Usage: python3 benchmarks/quality/run_quality_bench.py   (environment: see benchmarks/obfusk8_client.py;
-       BENCH_STACK_INFO=<file> adds the versions collected by benchmarks/collect_stack_info.sh)
+       BENCH_STACK_INFO=<file> adds the versions collected by benchmarks/collect_stack_info.sh;
+       BENCH_CORPUS=supplementary measures the phase 2 supplementary corpus instead of corpus.jsonl)
 """
 
 import json
@@ -45,7 +46,14 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from obfusk8_client import HTTP_OK, TextApi, login  # noqa: E402
 
+sys.path.insert(0, str(HERE))
+from build_supplementary_corpus import build as build_supplementary  # noqa: E402
+
 RESULTS = HERE.parent / "results"
+# BENCH_CORPUS: "main" (default, corpus.jsonl, the phase 1 baseline) or
+# "supplementary" (build_supplementary_corpus.py, built in memory: families
+# EXT-29 to EXT-31 with >= 30 examples each, phase 2).
+CORPUS = os.environ.get("BENCH_CORPUS", "main")
 
 # Annotated type -> predicted types that count as a correct detection.
 ACCEPTED: dict[str, set[str]] = {
@@ -168,10 +176,18 @@ def evaluate(docs: list[dict[str, Any]], predictions: dict[str, list[dict[str, A
     }
 
 
+def _corpus() -> list[dict[str, Any]]:
+    if CORPUS == "supplementary":
+        return build_supplementary()
+    if CORPUS != "main":
+        raise SystemExit(f"unknown BENCH_CORPUS: {CORPUS}")
+    return [json.loads(line) for line in (HERE / "corpus.jsonl").read_text(encoding="utf-8").splitlines() if line]
+
+
 def run() -> dict[str, Any]:
     api = TextApi(login())
     version = api.version()
-    docs = [json.loads(line) for line in (HERE / "corpus.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    docs = _corpus()
     results = {}
     for theme in [None, *(t["key"] for t in version["themes"])]:
         predictions = {}
@@ -192,6 +208,7 @@ def run() -> dict[str, Any]:
         "themes": [t["key"] for t in version["themes"]],
         "stack": stack,
         "corpus": {
+            "name": CORPUS,
             "prompts": len(docs),
             "entities": sum(len(d["entities"]) for d in docs),
             "variants": dict(Counter(d["variant"] for d in docs)),
@@ -210,7 +227,8 @@ def markdown(report: dict[str, Any]) -> str:
         "",
         f"Configuration `{report['api']['detection_config']}`, reconnaisseurs de l'analyseur "
         f"`{report['api']['analyzer_recognizers']}`, langue `{report['api']['analyzer_language']}`, "
-        f"thèmes {', '.join(report['themes'])}. Corpus : {report['corpus']['prompts']} prompts, "
+        f"thèmes {', '.join(report['themes'])}. Corpus {report['corpus'].get('name', 'main')} : "
+        f"{report['corpus']['prompts']} prompts, "
         f"{report['corpus']['entities']} entités annotées. Versions de la pile : voir le JSON (`stack`).",
         "",
         "Pas de seuil de réussite : cette exécution fixe la référence.",
@@ -252,6 +270,8 @@ if __name__ == "__main__":
     report = run()
     RESULTS.mkdir(exist_ok=True)
     stamp = time.strftime("%Y%m%dT%H%M%S")
+    if CORPUS != "main":
+        stamp = f"{CORPUS}-{stamp}"
     (RESULTS / f"quality-{stamp}.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
     )

@@ -26,8 +26,8 @@
       "supported_language": "fr",
       "patterns": [
         {
-          "name": "NIR / numéro de sécurité sociale",
-          "regex": "\\b[12]\\s?\\d{2}\\s?(0[1-9]|1[0-2])\\s?(\\d{2}|2[AB])\\s?\\d{3}\\s?\\d{3}\\s?\\d{2}\\b",
+          "name": "NIR / numéro de sécurité sociale, groupes séparés ou non par une espace, un point ou un tiret, y compris un chiffre à la fois (EXT-30 : '1 8 4 0 5 ...' n'était jamais détecté)",
+          "regex": "\\b[12](?:[\\s.\\-]?\\d){2}[\\s.\\-]?(?:0[\\s.\\-]?[1-9]|1[\\s.\\-]?[0-2])[\\s.\\-]?(?:\\d[\\s.\\-]?\\d|2[\\s.\\-]?[AB])(?:[\\s.\\-]?\\d){6}(?:[\\s.\\-]?\\d){2}\\b",
           "score": 0.7
         }
       ],
