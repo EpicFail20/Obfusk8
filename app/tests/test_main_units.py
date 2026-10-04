@@ -925,15 +925,14 @@ def test_image_exif_gps_et_miniature_ne_survivent_pas_au_caviardage():
 # gap on `manual_zones`. Tests calling the REAL endpoints (async
 # functions), not isolated internal functions.
 #
-# Coroutines are driven manually (`_drive`) rather than via
-# `asyncio.run()`: creating a new event loop calls a selector syscall
-# (epoll) absent from the service's real enforcing seccomp profile
-# (`app-enforce.json`), which would make these tests fail inside the
-# hardened container — the rest of the suite never uses asyncio. Neither
-# endpoint has a real suspension point (finalize: zero `await`; detect:
-# only `await file.read()`, resolved here by a synchronously-read
-# upload), so a single `.send(None)` drives them to completion without a
-# loop.
+# Coroutines are driven by `_drive` rather than `asyncio.run()`: the
+# stdlib event loop calls a selector syscall (epoll_wait) absent from the
+# service's real enforcing seccomp profile (`app-enforce.json`, EXT-11).
+# Until phase 2 neither endpoint had a real suspension point, and a single
+# `.send(None)` drove them without any loop. Since phase 2 (EXT-07, D-019)
+# detection, preview and finalization await the document thread: `_drive`
+# now runs them on a uvloop loop, as production does (uvicorn[standard]).
+# The assertions of the tests using it are unchanged.
 # ---------------------------------------------------------------------------
 import time as _time  # noqa: E402
 import unicodedata  # noqa: E402
@@ -942,14 +941,13 @@ import uvloop  # noqa: E402
 
 
 def _drive(coro):
-    """Runs a coroutine with no real suspension point through to its
-    return, without creating an event loop (see section header)."""
+    """Runs a coroutine to completion on a uvloop event loop (see section
+    header)."""
+    loop = uvloop.new_event_loop()
     try:
-        coro.send(None)
-    except StopIteration as stop:
-        return stop.value
-    coro.close()
-    raise AssertionError("the coroutine did not complete in one step (unexpected real await)")
+        return loop.run_until_complete(coro)
+    finally:
+        loop.close()
 
 
 class _FakeRequest:
@@ -1354,10 +1352,10 @@ def test_preview_image_refuse_le_job_d_un_autre_utilisateur():
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
         with pytest.raises(HTTPException) as exc:
-            main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"}))
+            _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"})))
         assert exc.value.status_code == 404
         assert job_id in main.PENDING_JOBS, "the owner's job was removed by a third party's attempt"
-        resp = main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}))
+        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice@hopital.fr"})))
         assert resp.status_code == 200 and resp.media_type == "image/png"
     finally:
         main.PENDING_JOBS.pop(job_id, None)
@@ -1400,7 +1398,7 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
     job_id = "99999999aaaaaaaabbbbbbbbcccccccc"
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
-        resp = main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice‮@hopital.fr"}))
+        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice‮@hopital.fr"})))
         assert resp.status_code == 200
     finally:
         main.PENDING_JOBS.pop(job_id, None)

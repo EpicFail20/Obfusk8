@@ -42,6 +42,7 @@ minimal error handling. Sufficient to validate functionality before a
 possible hardening pass.
 """
 
+import asyncio
 import csv
 import hashlib
 import base64
@@ -56,6 +57,7 @@ import re
 import shutil
 import struct
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
 import unicodedata
 import uuid
@@ -3169,6 +3171,39 @@ def upload_form():
     """
 
 
+# ---------------------------------------------------------------------------
+# EXT-07 / EXT-34, decision D-019: the document thread
+# ---------------------------------------------------------------------------
+# Detection, preview and finalization are synchronous (PyMuPDF, python-docx,
+# Tesseract, HTTP calls to Presidio). Run as before directly in the async
+# routes, they blocked the event loop of the single worker for the whole
+# processing (up to MAX_DETECTION_SECONDS): measured in phase 2 step A, a
+# 2,000-character text API request waited p95 732 ms during a document
+# detection, against 70 ms otherwise; /health waited too. They now run on ONE
+# dedicated thread:
+#  - one, not a pool: the official PyMuPDF documentation states "PyMuPDF does
+#    not support running on multiple threads - doing so may cause incorrect
+#    behaviour or even crash Python itself" (recipes-multiprocessing), and
+#    the preview route used to render pages from Starlette's thread pool,
+#    possibly concurrently (EXT-34). python-docx documents nothing on threads:
+#    serialized too. Throughput is unchanged (one document at a time, as when
+#    the loop was blocked); the multiprocess option the PyMuPDF documentation
+#    recommends for parallelism is deferred (D-019);
+#  - deadlines stay cooperative (MAX_DETECTION_SECONDS checks, Tesseract
+#    timeout, Presidio HTTP timeout): a Python thread cannot be killed, so
+#    the request waits for the thread instead of abandoning it — no orphaned
+#    processing, and finalization schedules its own file purge as before;
+#  - waiting requests are bounded by the existing limits (Traefik rate limits
+#    on upload/finalize and preview, MAX_PENDING_JOBS).
+_DOCUMENT_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="document")
+
+
+async def _run_document_work(function, *args):
+    """Runs `function(*args)` on the document thread without blocking the
+    event loop; its return value or exception is the route's."""
+    return await asyncio.get_running_loop().run_in_executor(_DOCUMENT_EXECUTOR, function, *args)
+
+
 @app.post("/api/detect")
 async def detect_document(
     request: Request,
@@ -3183,8 +3218,16 @@ async def detect_document(
     DOCX/CSV — see _build_text_review_page). The file's actual type is
     determined from its binary content (_detect_file_kind), never from the
     Content-Type declared by the client, which is forgeable.
+
+    The processing itself runs on the document thread (EXT-07, D-019, see
+    _run_document_work); only reading the upload stays on the event loop.
     """
     raw = await file.read()
+    return await _run_document_work(_detect_document_sync, request, raw, file.filename, theme)
+
+
+def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | None, theme: str):
+    """Body of detect_document, on the document thread (unchanged)."""
 
     size_mb = len(raw) / (1024 * 1024)
     if size_mb > MAX_UPLOAD_MB:
@@ -3193,9 +3236,9 @@ async def detect_document(
             detail=STRINGS["upload_too_large"].format(size_mb=f"{size_mb:.1f}", max_mb=MAX_UPLOAD_MB),
         )
 
-    filename_hash = _filename_hash(file.filename or "")
+    filename_hash = _filename_hash(upload_filename or "")
 
-    _run_antivirus_scan(raw, file.filename or "", filename_hash)
+    _run_antivirus_scan(raw, upload_filename or "", filename_hash)
 
     kind = _detect_file_kind(raw)
 
@@ -3794,7 +3837,15 @@ def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> di
 
 
 @app.get("/api/preview_image/{job_id}/{page_index}")
-def preview_image(job_id: str, page_index: int, request: Request):
+async def preview_image(job_id: str, page_index: int, request: Request):
+    """Runs _preview_image_sync on the document thread: PyMuPDF rendering is
+    never done anywhere else (EXT-34, D-019). Before phase 2 this route was
+    synchronous, so FastAPI ran it in its thread pool, possibly on several
+    threads at once."""
+    return await _run_document_work(_preview_image_sync, job_id, page_index, request)
+
+
+def _preview_image_sync(job_id: str, page_index: int, request: Request):
     """Renders a page of the PDF (or the whole image, for an image job) that is
     pending review — only for the job's owner (preview of the
     ORIGINAL document, see _get_pending_job_for)."""
@@ -4178,7 +4229,23 @@ async def finalize_document(
     _apply_docx_image_redactions, not offered for CSV, a pure text format
     with no image container), produces the final file in its
     original format.
+
+    Runs on the document thread (EXT-07, D-019, see _run_document_work).
     """
+    return await _run_document_work(
+        _finalize_document_sync, request, job_id, excluded_ids, manual_zones, redacted_image_ids, response_format
+    )
+
+
+def _finalize_document_sync(
+    request: Request,
+    job_id: str,
+    excluded_ids: str,
+    manual_zones: str,
+    redacted_image_ids: str,
+    response_format: str,
+):
+    """Body of finalize_document, on the document thread (unchanged)."""
     # Ownership checked BEFORE removing the job from the queue (see
     # _get_pending_job_for): a third party can neither finalize nor destroy
     # another user's job under review.
