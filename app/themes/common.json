@@ -43,7 +43,7 @@
       "supported_entity": "CREDIT_CARD",
       "patterns": [
         {
-          "name": "payment card number, same regex as Presidio 2.2.364 CreditCardRecognizer (predefined_recognizers/generic/credit_card_recognizer.py, registered for 'en' only, EXT-08); no Luhn check possible in an ad hoc recognizer: false positives accepted (doctrine 0.1), measured; score 0.6 keeps a margin above every threshold, including the code default DEFAULT_SCORE_THRESHOLD=0.5 (EXT-15)",
+          "name": "payment card number, same regex as Presidio 2.2.364 CreditCardRecognizer (predefined_recognizers/generic/credit_card_recognizer.py, registered for 'en' only, EXT-08); no Luhn check possible in an ad hoc recognizer: false positives accepted (doctrine 0.1), measured; score 0.6 keeps a margin above every threshold (0.4 everywhere, code default included since EXT-15 was fixed in phase 2)",
           "regex": "\\b(?!1\\d{12}(?!\\d))((4\\d{3})|(5[0-5]\\d{2})|(6\\d{3})|(1\\d{3})|(3\\d{3}))[- ]?(\\d{3,4})[- ]?(\\d{3,4})[- ]?(\\d{3,5})\\b",
           "score": 0.6
         },

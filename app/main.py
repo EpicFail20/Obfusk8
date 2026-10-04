@@ -110,17 +110,16 @@ MAX_DOCX_IMAGES = int(os.environ.get("MAX_DOCX_IMAGES", "100"))
 # the visual preview is skipped, to avoid excessively bloating the page.
 MAX_DOCX_IMAGE_PREVIEW_BYTES = int(os.environ.get("MAX_DOCX_IMAGE_PREVIEW_BYTES", str(500 * 1024)))
 LANGUAGE = os.environ.get("ANALYZER_LANGUAGE", "fr")
-# Minimum confidence threshold applied by default when the theme does not
-# define one explicitly. Until now, in the absence of a theme (or with a
-# theme silent on this point), NO filtering took place: Presidio returned
-# all of its hypotheses, including the most uncertain ones — an isolated
-# capitalized word at the start of a bullet/title, with no surrounding
-# sentence, typically gets a lower NER confidence score than a real name
-# in a full sentence; this threshold filters out those weak hypotheses.
-# Reasonable starting value, to be adjusted (env var or per-theme
-# score_threshold) based on the actual observed false positive/negative
-# rate.
-DEFAULT_SCORE_THRESHOLD = float(os.environ.get("DEFAULT_SCORE_THRESHOLD", "0.5"))
+# Minimum confidence threshold applied when no theme is selected (each
+# theme defines its own). The scores are NOT calibrated: Presidio's spaCy
+# recognizer gives a fixed 0.85 to every PERSON/LOCATION, so a threshold is
+# not a confidence level (CLAUDE.md, doctrine 0.2). docker-compose.yml sets
+# 0.4 after a higher value let confidential information through on a real
+# PDF; the themes use 0.4 too. The code default was still 0.5, with an
+# older reasoning (EXT-15): any run without Compose (tests, another
+# deployment) used a different threshold from production. Aligned on 0.4
+# in phase 2; Compose keeps setting it explicitly.
+DEFAULT_SCORE_THRESHOLD = float(os.environ.get("DEFAULT_SCORE_THRESHOLD", "0.4"))
 
 # --- DOCX thresholds ---
 # Same product reasoning as MAX_CSV_CELLS: finalization remains a human
