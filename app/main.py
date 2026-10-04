@@ -1144,17 +1144,51 @@ class _RequestBodyLimitMiddleware:
             return
 
         received = 0
+        exceeded = False
+        response_started = False
 
         async def limited_receive():
-            nonlocal received
+            nonlocal received, exceeded
             message = await receive()
             if message["type"] == "http.request":
                 received += len(message.get("body", b""))
                 if received > limit:
+                    exceeded = True
                     raise RequestBodyTooLarge()
             return message
 
-        await self.asgi_app(scope, limited_receive, send)
+        # EXT-22: the exception raised above does not always reach the client
+        # as a 413. The branding middleware (BaseHTTPMiddleware) wraps
+        # `receive` in an anyio task group, so FastAPI gets an ExceptionGroup,
+        # not an HTTPException, and answers 400 "There was an error parsing
+        # the body". Reading still stopped at the cap (the resource barrier
+        # held); only the status was wrong. Once the cap is exceeded, whatever
+        # the inner layers send is replaced by the 413 this middleware owes.
+        async def guarded_send(message):
+            nonlocal response_started
+            if not exceeded:
+                if message["type"] == "http.response.start":
+                    response_started = True
+                await send(message)
+                return
+            if message["type"] == "http.response.start" and not response_started:
+                await self._send_too_large(scope, send)
+                response_started = True
+
+        try:
+            await self.asgi_app(scope, limited_receive, guarded_send)
+        except Exception:
+            if not exceeded or response_started:
+                raise
+            await self._send_too_large(scope, send)
+
+    @staticmethod
+    async def _send_too_large(scope, send) -> None:
+        async def no_body():
+            return {"type": "http.disconnect"}
+
+        response = await http_exception_handler(Request(scope), RequestBodyTooLarge())
+        await response(scope, no_body, send)
 
 
 # ---------------------------------------------------------------------------
