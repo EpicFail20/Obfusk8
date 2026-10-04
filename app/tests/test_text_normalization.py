@@ -183,3 +183,25 @@ def test_cout_lineaire_au_plafond():
     t_small, t_large = _timed(small), _timed(large)
     assert t_large < 0.25, f"{t_large:.3f}s at 20 000 characters"
     assert t_large < 3 * t_small, f"not linear: {t_small:.4f}s -> {t_large:.4f}s"
+
+
+@pytest.mark.parametrize(
+    "original, expected",
+    [
+        ("Dr Chloé\x00 Boyer", "Dr Chloé Boyer"),
+        ("Dr Chloé \x00Boyer", "Dr Chloé Boyer"),
+        ("Camille\u00a0\u00a0Martin", "Camille Martin"),
+        ("Camille \u202fMartin", "Camille Martin"),
+        ("Camille\u00a0\nMartin", "Camille\nMartin"),
+        ("a\x00b", "a b"),
+    ],
+)
+def test_pas_d_espace_double_creee_par_la_normalisation(original, expected):
+    """Regression (phase 2, end-to-end EXT-35 test): "Chloé<NUL> Boyer"
+    became "Chloé  Boyer" (two spaces) and the real NER no longer found the
+    name, while it finds "Chloé Boyer". A character turned into a space is
+    dropped when it touches white space already; the value still maps back
+    over the whole original span."""
+    result = normalize_for_analysis(original)
+    assert result.text == expected
+    assert _original(result, original, 0, len(result.text)) == original

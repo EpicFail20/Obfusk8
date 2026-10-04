@@ -103,12 +103,25 @@ def normalize_for_analysis(text: str) -> NormalizedText:
     if _NOTHING_TO_DO.fullmatch(text):
         return NormalizedText(text, len(text))
 
+    replacements = [_replacement(char) for char in text]
+    # following[i]: first character of the next non-empty replacement after
+    # position i ("" at the end) — one backward pass, so the whole function
+    # stays linear.
+    following = [""] * len(text)
+    for index in range(len(text) - 2, -1, -1):
+        following[index] = replacements[index + 1][:1] or following[index + 1]
     chars: list[str] = []
     starts: list[int] = []
     ends: list[int] = []
-    for index, char in enumerate(text):
-        for out in _replacement(char):
-            chars.append(out)
+    for index, out in enumerate(replacements):
+        # A space replacing a character is dropped when it would sit next to
+        # white space already. Measured in phase 2 (end-to-end EXT-35 test):
+        # "Chloé<NUL> Boyer" became "Chloé  Boyer" (two spaces), and the real
+        # NER no longer found the name it finds in "Chloé Boyer".
+        if out == " " and text[index] != " " and ((chars and chars[-1].isspace()) or following[index].isspace()):
+            continue
+        for out_char in out:
+            chars.append(out_char)
             starts.append(index)
             ends.append(index + 1)
 
