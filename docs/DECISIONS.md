@@ -86,7 +86,7 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   génériques traduits (400 pour JSON invalide, 422 sinon).
 - **Conséquences** : la documentation OpenAPI automatique ne décrit pas le corps ; le contrat de référence est `docs/api-extension.md`.
 
-## D-010 — Authentification de l'extension : options pour la phase suivante — ouverte (phase suivante)
+## D-010 — Authentification de l'extension : options pour la phase suivante — option 1 retenue pour la phase 2 (D-020) ; options 2 et 3 ouvertes (début de phase 3)
 
 - **Contexte** : `oauth2-errors` transforme le 401 en 302 vers la connexion. Une extension qui attend du JSON ne sait pas traiter cette redirection.
 - **Options** :
@@ -179,3 +179,84 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
   mesurés de bout en bout (3 sur 30 textes au premier passage), chacun couvert par un test.
 - **Risque accepté par construction** : une vraie valeur secrète qui commencerait par `$` ou serait suivie de `(` ne serait pas marquée par cette
   règle (elle peut l'être par une autre : préfixe de fournisseur, URI). Le corpus de l'étape E sert de contrôle indépendant.
+
+---
+
+# Phase 2 — serveur prêt pour un pilote
+
+Décisions humaines du 2026-10-04 (validation de l'étape A et suite du projet). Celles qui concernent les phases suivantes sont
+**consignées sans être implémentées**.
+
+## D-019 — Un fil d'exécution unique pour tout usage de PyMuPDF — validée (décision humaine du 2026-10-04)
+
+- **Contexte** : la documentation officielle de PyMuPDF indique « PyMuPDF does not support running on multiple threads - doing so may cause
+  incorrect behaviour or even crash Python itself » (`recipes-multiprocessing`). Or `preview_image`, route synchrone, utilise déjà PyMuPDF dans
+  le groupe de fils de Starlette, potentiellement en parallèle (EXT-34) ; et sortir le flux documents de la boucle d'événements (EXT-07) ajoute
+  un second usage hors du fil principal.
+- **Décision** : un seul fil d'exécution dédié exécute **tout** le traitement qui touche PyMuPDF (détection, finalisation et `preview_image`
+  compris). Le débit reste celui d'aujourd'hui (un document à la fois), PyMuPDF n'est jamais utilisé par deux fils, et la boucle d'événements
+  reste libre pour les autres requêtes (API texte, `/health`).
+- **Alternatives écartées** : verrou global autour des appels PyMuPDF depuis le groupe de fils de Starlette (plusieurs fils différents
+  utiliseraient PyMuPDF à tour de rôle, ce que la documentation ne garantit pas) ; plusieurs fils en parallèle (interdit par la documentation).
+- **Reportée** : la piste **multiprocessus**, recommandée par la documentation de PyMuPDF pour paralléliser, est reportée à une phase ultérieure
+  (coût mémoire avec 1 Go et un CPU, revalidation du profil seccomp).
+- **Conséquences** : corrige EXT-34 ; la modification de `preview_image` est autorisée par cette décision.
+
+## D-020 — Authentification de l'extension en phase 2 : 401 en texte brut — validée (décision humaine du 2026-10-04)
+
+- **Contexte** : D-010, option 1. Mesuré à l'étape A : sans `oauth2-errors`, oauth2-proxy v7.15.4 répond `401`, `Content-Type: text/plain`,
+  corps `Unauthorized\n`, quel que soit l'en-tête `Accept`, et Traefik v3.7.13 relaie cette réponse telle quelle (`forward.go`, branche non 2xx).
+  Le prompt de phase demandait un 401 en JSON.
+- **Décision** : le 401 en texte brut est accepté ; le client se fie **au code HTTP seul**. Seule l'option 1 de D-010 est mise en œuvre en phase 2 ;
+  elle est nécessaire quelle que soit la suite. Le choix entre les options 2 et 3 de D-010 se fera au début de la phase 3.
+- **Alternatives écartées** : middleware `errors` de Traefik vers un service ou une route qui fabrique du JSON — surface d'attaque ajoutée pour un
+  gain cosmétique.
+- **Conséquences** : contrat FR/EN mis à jour (étape F).
+
+## D-021 — Priorité et ordre des phases — consignée (décision humaine du 2026-10-04)
+
+La sécurité de l'application et du serveur est la **priorité absolue**. Ordre retenu :
+1. phase 2 (en cours) : serveur prêt pour un pilote (détection, boucle d'événements, 401, mesures) ;
+2. phase 2 bis : chaîne d'approvisionnement et durcissement des images (EXT-01, EXT-09, EXT-11, EXT-12, EXT-13, EXT-16, EXT-21, EXT-24, EXT-33) ;
+3. phase 3 : extension de navigateur en panneau latéral, dépôt séparé ;
+4. phase « mode forcé » : blocage des dépôts et collages directs sur les sites d'IA (D-024) ;
+5. pentest externe avant toute donnée réelle.
+
+Justification : l'extension ne vaut que ce que vaut la détection, et son contrat d'authentification doit être stable avant d'écrire le client.
+
+## D-022 — Modèle de menace de l'extension — consignée (décision humaine du 2026-10-04)
+
+On se protège de **l'erreur humaine** et d'un **contournement trop aisé** par l'utilisateur (sauter l'étape par habitude ou par commodité).
+On ne prétend pas arrêter un initié déterminé : capture d'écran, téléphone ou poste personnel restent hors de portée d'une extension ; ce périmètre
+relève des règles d'usage, du blocage réseau et de la formation. Tout choix de conception de l'extension se justifie par rapport à ce modèle.
+
+## D-023 — Documents : l'extension redirige vers l'interface existante — consignée (décision humaine du 2026-10-04)
+
+- **Décision** : l'extension ne traite **aucun** document. Son panneau ne gère que le texte (analyse, pseudonymisation, restauration locale).
+  Pour un document, un bouton ouvre l'interface web obfusk8 existante dans un nouvel onglet, avec la même session ; l'utilisateur y dépose,
+  révise, finalise et télécharge son fichier caviardé, puis le dépose lui-même dans l'IA.
+- **Justification** : la révision humaine existante est éprouvée ; une seconde interface de révision doublerait les bugs et la maintenance.
+- **Conséquence** : les corrections serveur de la phase 2 (EXT-07, EXT-34, EXT-35) bénéficient directement à ce parcours.
+
+## D-024 — Mode forcé : contrôle des dépôts de fichiers par suivi des téléchargements — consignée (décision humaine du 2026-10-04)
+
+- **Retenu** : l'extension observe les téléchargements du navigateur (API `chrome.downloads`). Un fichier caviardé téléchargé **depuis l'origine
+  du serveur obfusk8** est noté localement (nom, taille, heure). Lors d'un dépôt sur un site d'IA, nom, taille et date de modification du fichier
+  déposé sont comparés à cette liste : correspondance, le dépôt passe ; sinon il est bloqué et le panneau propose d'ouvrir obfusk8.
+- **Justification** : décision **synchrone** (nom, taille et date lisibles immédiatement dans l'événement de dépôt) ; seuls les mauvais fichiers
+  sont bloqués, les bons passent sans réinjection par script (fragile, refusée par certains sites) ; aucun registre côté serveur.
+- **Écartés** : préfixe ou clé dans le nom non liée au contenu (un renommage le contourne) ; clé liée au contenu ou registre d'empreintes côté
+  serveur (sûr, mais exige de lire le fichier : décision asynchrone, donc blocage puis réinjection fragile).
+- **Option reportée** : double vérification par empreinte (premier dépôt bloqué, empreinte vérifiée et mémorisée, second dépôt accepté), si un usage
+  exige une garantie plus forte.
+- **À valider par un prototype** avant engagement, sur deux ou trois sites d'IA : interception synchrone du dépôt (glisser-déposer, sélection de
+  fichier, collage), fiabilité de la date de modification du fichier téléchargé selon les systèmes, permission `downloads`.
+- **Préparation en phase 2, sans implémentation** : relever comment la finalisation livre le fichier (URL, `Content-Disposition`, nom produit)
+  et signaler ce qui rendrait le suivi fragile (compte rendu de phase).
+
+## D-025 — Gestion des branches — consignée (décision humaine du 2026-10-04)
+
+- `feat/pilote-serveur` reste **locale**, créée depuis `feat/text-api` ; aucun commit sur `feat/text-api` ni réécriture de son historique pendant la phase.
+- Après validation de la phase 2, l'humain avance `feat/text-api` par `git merge --ff-only feat/pilote-serveur` et pousse `feat/text-api`.
+- La fusion dans `main` se fera à la fin, en une fois ; les commits de `origin/main` absents de la branche (`ca3c50c`, licence AGPL-3.0 ;
+  `7a7908e`, icône) y seront intégrés à ce moment, ce qui résoudra EXT-05. Ils ne sont pas intégrés avant.
