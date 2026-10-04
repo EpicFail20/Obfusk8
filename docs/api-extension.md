@@ -30,8 +30,8 @@ Préfixe versionné **`/api/v1/`** (D-001). Une incompatibilité future prendra 
 | `POST` | `/api/v1/text/analyze` | Détection : liste des entités avec leurs positions |
 | `POST` | `/api/v1/text/pseudonymize` | Texte pseudonymisé et table de correspondance |
 
-Toutes les routes passent par la chaîne existante : Traefik → `oauth2-errors` → `oidc-auth` (oauth2-proxy) → limitation de débit → plafond de corps →
-`gateway-secret@file` → application. Elles ont leur **propre routeur Traefik** (§7).
+Toutes les routes passent par la chaîne existante : Traefik → `oidc-auth` (oauth2-proxy) → limitation de débit → plafond de corps →
+`gateway-secret@file` → application. Elles ont leur **propre routeur Traefik** (§7), sans `oauth2-errors` depuis la phase 2 (§8).
 
 ### 2.1 `GET /api/v1/version`
 
@@ -161,7 +161,7 @@ Même format que les erreurs existantes de l'application (champ `detail`), plus 
 |---|---|
 | 400 | Corps non UTF-8, JSON invalide (y compris surrogate isolée dans une séquence `\u`) |
 | 401 | Secret de passerelle absent ou faux (requête qui contourne Traefik) — réponse existante de l'application, sans `request_id` |
-| 302 | Non authentifié via Traefik : `oauth2-errors` réécrit le 401 en 302 **sans en-tête `Location`**, avec la page de connexion d'oauth2-proxy en HTML comme corps (observé le 2026-10-02 ; comportement actuel de toutes les routes, inadapté à une extension, voir §8) |
+| 401 | **Non authentifié** (pas de session, session expirée) : réponse d'oauth2-proxy relayée telle quelle par Traefik, `Content-Type: text/plain`, corps `Unauthorized`, **sans redirection ni JSON ni `request_id`** (D-020). Le client se fie au **code HTTP seul** ; conduite attendue au §8 |
 | 404 | `ENABLE_EXTENSION_API=false` (réponse FastAPI standard `{"detail":"Not Found"}`, identique à aujourd'hui) |
 | 413 | Corps au-delà du plafond (en bordure par Traefik, sinon par l'application), ou `text` au-delà de `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` autre que `application/json` (protège aussi contre les envois de formulaire intersites, §6) |
@@ -245,7 +245,7 @@ face à des corpus de fuzzing, attaques temporelles sur le secret de passerelle 
 ```
 traefik.http.routers.app-text.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/v1/`)
 traefik.http.routers.app-text.priority=100
-traefik.http.routers.app-text.middlewares=oauth2-errors,oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file
+traefik.http.routers.app-text.middlewares=oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file
 traefik.http.middlewares.text-ratelimit.ratelimit.average=60
 traefik.http.middlewares.text-ratelimit.ratelimit.period=1m
 traefik.http.middlewares.text-ratelimit.ratelimit.burst=20
@@ -268,12 +268,18 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
   - Le comportement réel sera **vérifié de bout en bout** à l'étape F (deux comptes, même IP : seaux distincts).
 - **Plafond de corps** : `buffering` met tout le corps en mémoire jusqu'à `memRequestBodyBytes` ; au plafond de 238 Kio, le tampon disque n'est jamais utilisé.
 
-## 8. Options pour la phase suivante (documentées, non implémentées)
+## 8. Authentification de l'extension
 
-Aujourd'hui, une requête non authentifiée reçoit un **302 sans en-tête `Location`** dont le corps est la page HTML de connexion
-(`oauth2-errors` réécrit le 401). Un navigateur affiche cette page ; une extension qui attend du JSON ne peut rien en faire. Les options et leurs conséquences sont détaillées dans `DECISIONS.md` (D-010).
-En résumé : (a) routeur sans `oauth2-errors` pour `/api/v1/` (401 brut) ; (b) jetons Bearer acceptés par oauth2-proxy (`skip_jwt_bearer_tokens`) ;
-(c) l'extension réutilise le cookie de session du navigateur ; (d) jetons d'API propres à Obfusk8.
+**Phase 2 (D-010, option 1 ; D-020)** : le routeur `/api/v1/` n'utilise plus `oauth2-errors`. Une requête non authentifiée reçoit le **401**
+d'oauth2-proxy, relayé tel quel : corps `Unauthorized` en texte brut, sans redirection. Le corps n'est **pas** du JSON : seul le code compte.
+`oidc-auth` et le secret de passerelle restent exigés ; les autres routes (interface web) gardent la redirection vers la connexion.
+
+Ce que doit faire le client sur un 401 : ne pas réessayer en boucle ; proposer à l'utilisateur d'**ouvrir la page de connexion** d'Obfusk8
+dans un onglet (`https://<domaine>/oauth2/start?rd=%2F`), puis renvoyer la requête une fois la session ouverte. Aucun texte n'a été
+analysé ni conservé côté serveur.
+
+Phase 3 : choix entre les options 2 (jetons Bearer acceptés par oauth2-proxy, `skip_jwt_bearer_tokens`) et 3 (réutilisation du cookie de
+session du navigateur) de D-010 ; l'option 4 (jetons d'API propres à Obfusk8) reste écartée.
 
 ## 9. Décisions ouvertes
 

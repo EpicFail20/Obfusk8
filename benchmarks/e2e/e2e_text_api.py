@@ -141,11 +141,29 @@ for label, t in [
 # --- unauthenticated ---------------------------------------------------------
 anon = requests.Session()
 anon.verify = s.verify
-r = anon.post(f"{BASE}/api/v1/text/analyze", json={"text": CANARY}, allow_redirects=False, timeout=30)
+# Phase 2 (D-010 option 1, D-020): no oauth2-errors on the /api/v1/ router.
+# oauth2-proxy's 401 is relayed as is: plain text, no redirect, nothing that
+# discloses configuration (no Server/version header, no internal URL).
+for path in ("/api/v1/text/analyze", "/api/v1/version"):
+    method = anon.post if path.endswith("analyze") else anon.get
+    r = method(f"{BASE}{path}", json={"text": CANARY}, allow_redirects=False, timeout=30)
+    leaky = [h for h in ("server", "x-powered-by", "location") if h in r.headers] + [
+        w for w in ("oauth2-proxy", "keycloak", "4180", "http://") if w in r.text.lower()
+    ]
+    check(
+        f"non authentifié -> 401 texte brut sans redirection ({path})",
+        r.status_code == 401
+        and r.text.strip() == "Unauthorized"
+        and r.headers.get("content-type", "").startswith("text/plain")
+        and CANARY not in r.text
+        and not leaky,
+        f"{r.status_code} {r.headers.get('content-type')} {sorted(r.headers)} fuites={leaky}",
+    )
+r = anon.get(f"{BASE}/", allow_redirects=False, timeout=30)
 check(
-    "non authentifié -> 302 + page de connexion (sans Location)",
-    r.status_code == 302 and "Sign In" in r.text and CANARY not in r.text,
-    f"{r.status_code} {r.headers.get('location')}",
+    "interface web non authentifiée -> 302 + page de connexion (inchangé)",
+    r.status_code == 302 and "Sign In" in r.text,
+    f"{r.status_code}",
 )
 
 # --- app-side concurrency: 20k-char texts in parallel ------------------------

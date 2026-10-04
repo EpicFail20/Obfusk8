@@ -162,8 +162,9 @@ Good to know:
   `12 x MAX_TEXT_CHARS + 4096`.
 - Prompt requests are recorded in a separate audit log, `/var/log/anonymiseur-audit/audit-extension.log` (metadata only: user, entity
   types and counts, length, duration; never the text).
-- An unauthenticated request currently gets the sign-in page with a 302 status: fine for a browser, not yet for an extension
-  (options studied in `docs/DECISIONS.md`, D-010).
+- An unauthenticated request on `/api/v1/` gets a plain text **401** (`Unauthorized`), without redirect: the `app-text` router does not
+  use `oauth2-errors` (D-010 option 1, D-020). The web interface keeps the redirect to the sign-in page. `oidc-auth` and the gateway
+  secret are still required.
 - The Presidio analyzer has a single worker, shared with the document flow: a document being processed delays prompts, and the other
   way round to a lesser extent (measurements in `benchmarks/results/`).
 

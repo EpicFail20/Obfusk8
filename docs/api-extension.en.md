@@ -30,8 +30,8 @@ Versioned prefix **`/api/v1/`** (D-001). A future incompatible change will take 
 | `POST` | `/api/v1/text/analyze` | Detection: list of entities with their offsets |
 | `POST` | `/api/v1/text/pseudonymize` | Pseudonymized text and mapping table |
 
-All routes go through the existing chain: Traefik → `oauth2-errors` → `oidc-auth` (oauth2-proxy) → rate limiting → body cap →
-`gateway-secret@file` → application. They have their **own Traefik router** (§7).
+All routes go through the existing chain: Traefik → `oidc-auth` (oauth2-proxy) → rate limiting → body cap →
+`gateway-secret@file` → application. They have their **own Traefik router** (§7), without `oauth2-errors` since phase 2 (§8).
 
 ### 2.1 `GET /api/v1/version`
 
@@ -160,7 +160,7 @@ Same format as the application's existing errors (`detail` field), plus the corr
 |---|---|
 | 400 | Body not UTF-8, invalid JSON (including a lone surrogate in a `\u` escape) |
 | 401 | Missing or wrong gateway secret (request bypassing Traefik) — existing application response, without `request_id` |
-| 302 | Unauthenticated through Traefik: `oauth2-errors` rewrites the 401 as a 302 **without a `Location` header**, with oauth2-proxy's HTML sign-in page as body (observed on 2026-10-02; current behavior of every route, unsuited to an extension, see §8) |
+| 401 | **Unauthenticated** (no session, expired session): oauth2-proxy's response relayed as is by Traefik, `Content-Type: text/plain`, body `Unauthorized`, **no redirect, no JSON, no `request_id`** (D-020). The client relies on the **HTTP status alone**; expected behavior in §8 |
 | 404 | `ENABLE_EXTENSION_API=false` (standard FastAPI response `{"detail":"Not Found"}`, identical to today) |
 | 413 | Body beyond the cap (at the edge by Traefik, otherwise by the application), or `text` beyond `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` other than `application/json` (also protects against cross-site form posts, §6) |
@@ -243,7 +243,7 @@ gateway secret from the internal network.
 ```
 traefik.http.routers.app-text.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/v1/`)
 traefik.http.routers.app-text.priority=100
-traefik.http.routers.app-text.middlewares=oauth2-errors,oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file
+traefik.http.routers.app-text.middlewares=oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file
 traefik.http.middlewares.text-ratelimit.ratelimit.average=60
 traefik.http.middlewares.text-ratelimit.ratelimit.period=1m
 traefik.http.middlewares.text-ratelimit.ratelimit.burst=20
@@ -266,12 +266,17 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
   - The real behavior will be **checked end to end** in step F (two accounts, same IP: separate buckets).
 - **Body cap**: `buffering` keeps the whole body in memory up to `memRequestBodyBytes`; at the 238 KiB cap, the disk buffer is never used.
 
-## 8. Options for the next phase (documented, not implemented)
+## 8. Authentication of the extension
 
-Today, an unauthenticated request gets a **302 without a `Location` header** whose body is the HTML sign-in page (`oauth2-errors`
-rewrites the 401). A browser displays that page; an extension expecting JSON cannot use it. The options and their consequences are detailed in `DECISIONS.md` (D-010). In short: (a) a router without `oauth2-errors`
-for `/api/v1/` (raw 401); (b) Bearer tokens accepted by oauth2-proxy (`skip_jwt_bearer_tokens`); (c) the extension reuses the browser's session
-cookie; (d) Obfusk8-specific API tokens.
+**Phase 2 (D-010, option 1; D-020)**: the `/api/v1/` router no longer uses `oauth2-errors`. An unauthenticated request gets oauth2-proxy's
+**401**, relayed as is: plain text body `Unauthorized`, no redirect. The body is **not** JSON: only the status matters. `oidc-auth` and the
+gateway secret are still required; the other routes (web interface) keep the redirect to the sign-in page.
+
+What the client must do on a 401: not retry in a loop; offer the user to **open the Obfusk8 sign-in page** in a tab
+(`https://<domain>/oauth2/start?rd=%2F`), then send the request again once the session is open. No text was analyzed or kept by the server.
+
+Phase 3: choice between options 2 (Bearer tokens accepted by oauth2-proxy, `skip_jwt_bearer_tokens`) and 3 (reuse of the browser's session
+cookie) of D-010; option 4 (Obfusk8-specific API tokens) remains rejected.
 
 ## 9. Open decisions
 

@@ -162,8 +162,9 @@ Désactivée par défaut. Elle permet à une future extension de navigateur d'an
   `text-bodylimit` dans `docker-compose.yml` : `12 × MAX_TEXT_CHARS + 4096`.
 - Les requêtes de prompts sont journalisées dans un journal d'audit séparé, `/var/log/anonymiseur-audit/audit-extension.log`
   (métadonnées seulement : utilisateur, types et nombres d'entités, longueur, durée ; jamais le texte).
-- Une requête non authentifiée reçoit aujourd'hui la page de connexion avec un code 302 : adapté au navigateur, pas encore à une extension
-  (options étudiées dans `docs/DECISIONS.md`, D-010).
+- Une requête non authentifiée sur `/api/v1/` reçoit un **401** en texte brut (`Unauthorized`), sans redirection : le routeur `app-text`
+  n'utilise pas `oauth2-errors` (D-010 option 1, D-020). L'interface web garde la redirection vers la page de connexion.
+  `oidc-auth` et le secret de passerelle restent exigés.
 - L'analyseur Presidio n'a qu'un worker, partagé avec le flux documents : un traitement de document en cours retarde les prompts, et
   inversement dans une moindre mesure (mesures dans `benchmarks/results/`).
 

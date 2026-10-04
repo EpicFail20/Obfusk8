@@ -448,11 +448,17 @@ services:
       # app/text_api.py, docs/api-extension.en.md §7). Same authentication
       # chain as every other route. The routes only exist in the app when
       # ENABLE_EXTENSION_API=true; otherwise this router just leads to a 404.
+      # No oauth2-errors here (phase 2, D-010 option 1, D-020): an
+      # unauthenticated request gets oauth2-proxy's own 401 (text/plain body
+      # "Unauthorized", relayed as is by forwardAuth) instead of the 302 to
+      # the HTML sign-in page, which an extension expecting JSON cannot use.
+      # oidc-auth and the gateway secret are still required; every other
+      # router keeps oauth2-errors and the browser redirect.
       - "traefik.http.routers.app-text.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/v1/`)"
       - "traefik.http.routers.app-text.entrypoints=websecure"
       - "traefik.http.routers.app-text.tls=true"
       - "traefik.http.routers.app-text.priority=100"
-      - "traefik.http.routers.app-text.middlewares=oauth2-errors,oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-text.middlewares=oidc-auth,text-ratelimit,text-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-text.service=app"
       # Per USER rather than per IP: a per-IP key penalizes everyone behind
       # the same NAT/corporate proxy. text-ratelimit MUST stay after
