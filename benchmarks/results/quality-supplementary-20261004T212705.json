@@ -1,0 +1,795 @@
+{
+  "generated_at": "2026-10-04T21:27:05+0000",
+  "api": {
+    "api_version": "1.0",
+    "detection_config": "b65f237ebbbbfc78",
+    "analyzer_language": "fr",
+    "analyzer_recognizers": "51fa36bee769596e"
+  },
+  "themes": [
+    "compta",
+    "it",
+    "medical"
+  ],
+  "stack": {
+    "git_commit": "c35c8de",
+    "app_files_modified_since_commit": 0,
+    "images": {
+      "app": "ghcr.io/epicfail20/obfusk8-app:main@sha256:57f5f5b9f190ba964b9647d3a918f1408cd61d1284288cf98761e43770b9dc5b",
+      "presidio_analyzer": "ghcr.io/epicfail20/obfusk8-presidio-analyzer:latest@sha256:ce18c22c451a92f70478edeaffafbb35c986ade900dd60f7372382cda63425a8",
+      "traefik": "traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0"
+    },
+    "analyzer": {
+      "presidio_analyzer": "2.2.364",
+      "spacy": "3.8.13",
+      "fr_core_news_md": "3.8.0",
+      "en_core_web_lg": "3.8.0",
+      "regex": "2026.7.10"
+    },
+    "app": {
+      "python": "3.12.15",
+      "fastapi": "0.141.1",
+      "starlette": "1.7.0",
+      "pydantic": "2.13.5",
+      "anyio": "4.15.1",
+      "uvicorn": "0.35.0",
+      "requests": "2.33.1"
+    },
+    "theme_files_sha256_16": {
+      "app/themes/common.json": "48585f8b381e8e5c",
+      "app/themes/compta.json": "c4414dd9b5b28f1c",
+      "app/themes/it.json": "4253f78a9eec958f",
+      "app/themes/medical.json": "e7465bae5b218e49",
+      "app/themes/extension/secrets.json": "1622bc0b14b33411"
+    },
+    "seccomp": "filter (app-enforce.json)"
+  },
+  "corpus": {
+    "name": "supplementary",
+    "prompts": 252,
+    "entities": 252,
+    "variants": {
+      "nir_espace": 36,
+      "iban_espace": 36,
+      "carte_espace": 36,
+      "adresse_code_postal": 36,
+      "date_lettres_fr": 36,
+      "date_lettres_en": 36,
+      "date_tiret_typographique": 36
+    }
+  },
+  "results": {
+    "aucun": {
+      "strict": {
+        "global": {
+          "tp": 252,
+          "fp": 153,
+          "fn": 0,
+          "precision": 0.622,
+          "recall": 1.0,
+          "f1": 0.767
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 97,
+            "fn": 0,
+            "precision": 0.271,
+            "recall": 1.0,
+            "f1": 0.426
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 252,
+          "fp": 104,
+          "fn": 0,
+          "precision": 0.743,
+          "recall": 1.0,
+          "f1": 0.853
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 48,
+            "fn": 0,
+            "precision": 0.639,
+            "recall": 1.0,
+            "f1": 0.78
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 252,
+          "leaked": 0,
+          "recall": 1.0
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "CARD": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "DATE": {
+            "covered": 108,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "IBAN": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "NIR": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_code_postal": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "carte_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_en": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_fr": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_tiret_typographique": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "iban_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "nir_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "IP_ADDRESS": 2,
+        "ORGANIZATION": 2,
+        "MEDICAL_LICENSE": 2
+      },
+      "leaks": []
+    },
+    "compta": {
+      "strict": {
+        "global": {
+          "tp": 252,
+          "fp": 153,
+          "fn": 0,
+          "precision": 0.622,
+          "recall": 1.0,
+          "f1": 0.767
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 97,
+            "fn": 0,
+            "precision": 0.271,
+            "recall": 1.0,
+            "f1": 0.426
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 252,
+          "fp": 104,
+          "fn": 0,
+          "precision": 0.743,
+          "recall": 1.0,
+          "f1": 0.853
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 48,
+            "fn": 0,
+            "precision": 0.639,
+            "recall": 1.0,
+            "f1": 0.78
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 252,
+          "leaked": 0,
+          "recall": 1.0
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "CARD": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "DATE": {
+            "covered": 108,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "IBAN": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "NIR": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_code_postal": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "carte_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_en": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_fr": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_tiret_typographique": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "iban_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "nir_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "IP_ADDRESS": 2,
+        "ORGANIZATION": 2,
+        "MEDICAL_LICENSE": 2
+      },
+      "leaks": []
+    },
+    "it": {
+      "strict": {
+        "global": {
+          "tp": 252,
+          "fp": 153,
+          "fn": 0,
+          "precision": 0.622,
+          "recall": 1.0,
+          "f1": 0.767
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 97,
+            "fn": 0,
+            "precision": 0.271,
+            "recall": 1.0,
+            "f1": 0.426
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 252,
+          "fp": 104,
+          "fn": 0,
+          "precision": 0.743,
+          "recall": 1.0,
+          "f1": 0.853
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 48,
+            "fn": 0,
+            "precision": 0.639,
+            "recall": 1.0,
+            "f1": 0.78
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 252,
+          "leaked": 0,
+          "recall": 1.0
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "CARD": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "DATE": {
+            "covered": 108,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "IBAN": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "NIR": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_code_postal": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "carte_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_en": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_fr": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_tiret_typographique": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "iban_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "nir_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "IP_ADDRESS": 2,
+        "ORGANIZATION": 2,
+        "MEDICAL_LICENSE": 2,
+        "PRIVATE_IP_SUFFIX": 1
+      },
+      "leaks": []
+    },
+    "medical": {
+      "strict": {
+        "global": {
+          "tp": 252,
+          "fp": 153,
+          "fn": 0,
+          "precision": 0.622,
+          "recall": 1.0,
+          "f1": 0.767
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 97,
+            "fn": 0,
+            "precision": 0.271,
+            "recall": 1.0,
+            "f1": 0.426
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "overlap": {
+        "global": {
+          "tp": 252,
+          "fp": 104,
+          "fn": 0,
+          "precision": 0.743,
+          "recall": 1.0,
+          "f1": 0.853
+        },
+        "per_type": {
+          "ADDRESS": {
+            "tp": 36,
+            "fp": 48,
+            "fn": 0,
+            "precision": 0.639,
+            "recall": 1.0,
+            "f1": 0.78
+          },
+          "CARD": {
+            "tp": 36,
+            "fp": 33,
+            "fn": 0,
+            "precision": 0.522,
+            "recall": 1.0,
+            "f1": 0.686
+          },
+          "DATE": {
+            "tp": 108,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "IBAN": {
+            "tp": 36,
+            "fp": 0,
+            "fn": 0,
+            "precision": 1.0,
+            "recall": 1.0,
+            "f1": 1.0
+          },
+          "NIR": {
+            "tp": 36,
+            "fp": 2,
+            "fn": 0,
+            "precision": 0.947,
+            "recall": 1.0,
+            "f1": 0.973
+          }
+        }
+      },
+      "masking": {
+        "global": {
+          "covered": 252,
+          "leaked": 0,
+          "recall": 1.0
+        },
+        "per_type": {
+          "ADDRESS": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "CARD": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "DATE": {
+            "covered": 108,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "IBAN": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "NIR": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        },
+        "per_variant": {
+          "adresse_code_postal": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "carte_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_en": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_lettres_fr": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "date_tiret_typographique": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "iban_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          },
+          "nir_espace": {
+            "covered": 36,
+            "leaked": 0,
+            "recall": 1.0
+          }
+        }
+      },
+      "out_of_vocabulary_predictions": {
+        "IP_ADDRESS": 2,
+        "MEDICAL_LICENSE": 2
+      },
+      "leaks": []
+    }
+  }
+}

@@ -78,7 +78,7 @@ for name, text in CASES.items():
     if final.status_code == HTTP_OK:
         download = session.get(f"{BASE}{final.json()['download_url']}", timeout=60)
         doc = fitz.open(stream=download.content, filetype="pdf")
-        redacted = "".join(page.get_text() for page in doc)
+        redacted = "".join(doc[i].get_text() for i in range(len(doc)))
         doc.close()
     covered = "Boyer" not in redacted and "Chlo" not in redacted and "Compte rendu" in redacted
     ok = response.status_code == HTTP_OK and bool(job) and not warned and covered

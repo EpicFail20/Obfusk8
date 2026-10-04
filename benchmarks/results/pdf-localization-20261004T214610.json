@@ -1,0 +1,902 @@
+{
+ "generated_at": "2026-10-04T21:44:22+0000",
+ "pymupdf": "1.28.2",
+ "scenarios": {
+  "dejavu-sans": {
+   "aucun": {
+    "pages": 48,
+    "detected": 285,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 32,
+     "ORGANIZATION": 7,
+     "PATIENT_ID": 8,
+     "PERSON": 106,
+     "PHONE_NUMBER": 30,
+     "STREET_ADDRESS": 4,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 48,
+    "detected": 278,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 32,
+     "PATIENT_ID": 8,
+     "PERSON": 106,
+     "PHONE_NUMBER": 30,
+     "STREET_ADDRESS": 4,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "dejavu-serif": {
+   "aucun": {
+    "pages": 48,
+    "detected": 283,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 8,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 32,
+     "ORGANIZATION": 7,
+     "PATIENT_ID": 8,
+     "PERSON": 107,
+     "PHONE_NUMBER": 25,
+     "STREET_ADDRESS": 5,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 48,
+    "detected": 276,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 8,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 32,
+     "PATIENT_ID": 8,
+     "PERSON": 107,
+     "PHONE_NUMBER": 25,
+     "STREET_ADDRESS": 5,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "dejavu-mono": {
+   "aucun": {
+    "pages": 48,
+    "detected": 283,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 18,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 30,
+     "ORGANIZATION": 8,
+     "PATIENT_ID": 8,
+     "PERSON": 105,
+     "PHONE_NUMBER": 31,
+     "STREET_ADDRESS": 4,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 16,
+    "partial_by_type": {
+     "PERSON": 12,
+     "PHONE_NUMBER": 4
+    },
+    "partial_with_line_break": 0,
+    "partial_details": [
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 11,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 16,
+      "line_break": false,
+      "chars_left": 7
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     }
+    ],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {
+      "PERSON": 12,
+      "PHONE_NUMBER": 4
+     }
+    }
+   },
+   "medical": {
+    "pages": 48,
+    "detected": 275,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 18,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 30,
+     "PATIENT_ID": 8,
+     "PERSON": 105,
+     "PHONE_NUMBER": 31,
+     "STREET_ADDRESS": 4,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 16,
+    "partial_by_type": {
+     "PERSON": 12,
+     "PHONE_NUMBER": 4
+    },
+    "partial_with_line_break": 0,
+    "partial_details": [
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 11,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PERSON",
+      "len": 12,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     },
+     {
+      "type": "PERSON",
+      "len": 16,
+      "line_break": false,
+      "chars_left": 7
+     },
+     {
+      "type": "PERSON",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 8
+     },
+     {
+      "type": "PHONE_NUMBER",
+      "len": 15,
+      "line_break": false,
+      "chars_left": 6
+     }
+    ],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {
+      "PERSON": 12,
+      "PHONE_NUMBER": 4
+     }
+    }
+   }
+  },
+  "base14-helvetica": {
+   "aucun": {
+    "pages": 24,
+    "detected": 134,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 9,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 19,
+     "ORGANIZATION": 4,
+     "PATIENT_ID": 4,
+     "PERSON": 50,
+     "PHONE_NUMBER": 9,
+     "STREET_ADDRESS": 5,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 24,
+    "detected": 130,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 9,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 19,
+     "PATIENT_ID": 4,
+     "PERSON": 50,
+     "PHONE_NUMBER": 9,
+     "STREET_ADDRESS": 5,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "base14-times": {
+   "aucun": {
+    "pages": 24,
+    "detected": 131,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 1,
+     "DATE_TIME": 9,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 19,
+     "ORGANIZATION": 4,
+     "PATIENT_ID": 4,
+     "PERSON": 50,
+     "PHONE_NUMBER": 9,
+     "STREET_ADDRESS": 4,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 24,
+    "detected": 127,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 1,
+     "DATE_TIME": 9,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 19,
+     "PATIENT_ID": 4,
+     "PERSON": 50,
+     "PHONE_NUMBER": 9,
+     "STREET_ADDRESS": 4,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "majuscules": {
+   "aucun": {
+    "pages": 48,
+    "detected": 274,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 19,
+     "ORGANIZATION": 9,
+     "PATIENT_ID": 8,
+     "PERSON": 104,
+     "PHONE_NUMBER": 31,
+     "STREET_ADDRESS": 5,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 48,
+    "detected": 265,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 19,
+     "PATIENT_ID": 8,
+     "PERSON": 104,
+     "PHONE_NUMBER": 31,
+     "STREET_ADDRESS": 5,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "coupure-fin-de-ligne": {
+   "aucun": {
+    "pages": 48,
+    "detected": 282,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 4,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 25,
+     "ORGANIZATION": 20,
+     "PATIENT_ID": 8,
+     "PERSON": 108,
+     "PHONE_NUMBER": 20,
+     "STREET_ADDRESS": 6,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 48,
+    "detected": 262,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 4,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 25,
+     "PATIENT_ID": 8,
+     "PERSON": 108,
+     "PHONE_NUMBER": 20,
+     "STREET_ADDRESS": 6,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "colonnes": {
+   "aucun": {
+    "pages": 24,
+    "detected": 289,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 33,
+     "ORGANIZATION": 8,
+     "PATIENT_ID": 8,
+     "PERSON": 109,
+     "PHONE_NUMBER": 27,
+     "STREET_ADDRESS": 6,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 24,
+    "detected": 281,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 7,
+     "DATE_TIME": 18,
+     "EMAIL_ADDRESS": 19,
+     "FR_NIR": 9,
+     "IBAN_CODE": 7,
+     "LOCATION": 33,
+     "PATIENT_ID": 8,
+     "PERSON": 109,
+     "PHONE_NUMBER": 27,
+     "STREET_ADDRESS": 6,
+     "URL": 38
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "ligatures-serif": {
+   "aucun": {
+    "pages": 24,
+    "detected": 213,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 10,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 18,
+     "ORGANIZATION": 3,
+     "PATIENT_ID": 4,
+     "PERSON": 125,
+     "PHONE_NUMBER": 14,
+     "STREET_ADDRESS": 5,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 24,
+    "detected": 210,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 10,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 18,
+     "PATIENT_ID": 4,
+     "PERSON": 125,
+     "PHONE_NUMBER": 14,
+     "STREET_ADDRESS": 5,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  },
+  "ligatures-sans": {
+   "aucun": {
+    "pages": 24,
+    "detected": 212,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 10,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 18,
+     "ORGANIZATION": 3,
+     "PATIENT_ID": 4,
+     "PERSON": 124,
+     "PHONE_NUMBER": 15,
+     "STREET_ADDRESS": 4,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   },
+   "medical": {
+    "pages": 24,
+    "detected": 209,
+    "lost": 0,
+    "lost_rate": 0.0,
+    "detected_by_type": {
+     "CREDIT_CARD": 3,
+     "DATE_TIME": 10,
+     "EMAIL_ADDRESS": 8,
+     "FR_NIR": 4,
+     "IBAN_CODE": 3,
+     "LOCATION": 18,
+     "PATIENT_ID": 4,
+     "PERSON": 124,
+     "PHONE_NUMBER": 15,
+     "STREET_ADDRESS": 4,
+     "URL": 16
+    },
+    "lost_by_type": {},
+    "lost_with_line_break": 0,
+    "lost_details": [],
+    "partial": 0,
+    "partial_by_type": {},
+    "partial_with_line_break": 0,
+    "partial_details": [],
+    "app_exposed": 0,
+    "app_exposed_by_type": {},
+    "app_report": {
+     "unlocated": {},
+     "incomplete": {},
+     "recovered": {}
+    }
+   }
+  }
+ }
+}

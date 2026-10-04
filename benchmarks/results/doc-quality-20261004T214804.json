@@ -1,0 +1,459 @@
+{
+ "generated_at": "2026-10-04T21:48:04+0000",
+ "prompts": 64,
+ "values": 285,
+ "variants": {
+  "base": 8,
+  "typographique": 8,
+  "espaces_insecables": 8,
+  "largeur_nulle": 8,
+  "nfd": 8,
+  "chiffres_espaces": 8,
+  "majuscules": 8,
+  "adresse_multiligne": 8
+ },
+ "results": {
+  "aucun": {
+   "docx": {
+    "masking": 0.965,
+    "totals": {
+     "covered": 275,
+     "exposed": 10
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 33
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 31,
+      "exposed": 1
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 14
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 36
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   },
+   "csv": {
+    "masking": 0.965,
+    "totals": {
+     "covered": 275,
+     "exposed": 10
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 33
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 31,
+      "exposed": 1
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 14
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 36
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   },
+   "pdf": {
+    "masking": 0.951,
+    "totals": {
+     "covered": 271,
+     "exposed": 14
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 32,
+      "exposed": 1
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 30,
+      "exposed": 2
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 35,
+      "exposed": 3
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 35,
+      "exposed": 3
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 13,
+      "exposed": 1
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 33,
+      "exposed": 3
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   }
+  },
+  "medical": {
+   "docx": {
+    "masking": 0.965,
+    "totals": {
+     "covered": 275,
+     "exposed": 10
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 33
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 31,
+      "exposed": 1
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 14
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 36
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   },
+   "csv": {
+    "masking": 0.965,
+    "totals": {
+     "covered": 275,
+     "exposed": 10
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 33
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 31,
+      "exposed": 1
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 14
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 36
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   },
+   "pdf": {
+    "masking": 0.951,
+    "totals": {
+     "covered": 271,
+     "exposed": 14
+    },
+    "by_variant": {
+     "adresse_multiligne": {
+      "covered": 32,
+      "exposed": 1
+     },
+     "base": {
+      "covered": 33
+     },
+     "chiffres_espaces": {
+      "covered": 30,
+      "exposed": 2
+     },
+     "espaces_insecables": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "largeur_nulle": {
+      "covered": 35,
+      "exposed": 3
+     },
+     "majuscules": {
+      "covered": 36,
+      "exposed": 2
+     },
+     "nfd": {
+      "covered": 35,
+      "exposed": 3
+     },
+     "typographique": {
+      "covered": 34,
+      "exposed": 1
+     }
+    },
+    "by_type": {
+     "ADDRESS": {
+      "covered": 13,
+      "exposed": 1
+     },
+     "DATE": {
+      "covered": 19
+     },
+     "EMAIL": {
+      "covered": 19
+     },
+     "IBAN": {
+      "covered": 8
+     },
+     "LOCATION": {
+      "covered": 13
+     },
+     "NIR": {
+      "covered": 11
+     },
+     "PATIENT_ID": {
+      "covered": 8
+     },
+     "PERSON": {
+      "covered": 147,
+      "exposed": 4
+     },
+     "PHONE": {
+      "covered": 33,
+      "exposed": 3
+     },
+     "SECRET": {
+      "exposed": 6
+     }
+    }
+   }
+  }
+ }
+}

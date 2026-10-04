@@ -46,3 +46,26 @@ Sources : API JSON de PyPI (`https://pypi.org/pypi/<paquet>/json`, champ `info.v
 | Outil | Version retenue | Dernière stable observée (2026-10-02) | Source | Remarque |
 |---|---|---|---|---|
 | trivy | 0.75.0, image `aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa` | 0.75.0 (publiée le 2026-10-01) | API GitHub des versions d'aquasecurity/trivy ; condensat par `docker buildx imagetools inspect` | Conteneur jetable, mémoire limitée à 800 Mo, cache et archive d'image sur disque (pas dans le tmpfs `/tmp`, voir EXT-25). Résultat : EXT-33 |
+
+## Phase 2 — serveur prêt pour un pilote (2026-10-04)
+
+### Production (image `app`)
+
+**Aucune dépendance de production ajoutée ni mise à jour.** Le nouveau module `app/text_normalization.py` n'utilise que la bibliothèque
+standard (`unicodedata`, `re`, `dataclasses`) ; le fil d'exécution dédié aux documents utilise `concurrent.futures` et `asyncio` (bibliothèque
+standard). Aucun appel système ajouté au profil seccomp : suite de tests et bouts en bout exécutés sous `app-enforce.json`.
+
+Audit de l'environnement installé de l'image de test (image de référence de la phase, seuls les fichiers modifiés remplacés ;
+`pip-audit --path /usr/local/lib/python3.12/site-packages --vulnerability-service osv`, 2026-10-04) : une seule distribution vulnérable,
+`pip` 25.0.1 de l'image de base (12 identifiants PYSEC), inchangé depuis la phase 1 (EXT-24, hors périmètre).
+
+### Développement (jamais dans l'image)
+
+Verrou `app/requirements-dev.txt` inchangé. `pip-audit -r app/requirements-dev.txt --no-deps` (service OSV, 2026-10-04) : aucune vulnérabilité connue.
+
+### Outils et artefacts de mesure exécutés hors dépôt
+
+| Élément | Version retenue | Dernière stable observée (2026-10-04) | Source | Remarque |
+|---|---|---|---|---|
+| trivy | 0.75.0, `aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa` | 0.75.0 (publiée le 2026-10-01) | API GitHub des versions d'aquasecurity/trivy ; condensat par `docker buildx imagetools inspect` | Conteneur jetable, mémoire limitée à 800 Mo, archive et cache sur disque. Image `app` de test : 79 HIGH/CRITICAL dans les paquets Debian (EXT-33, 1 corrigeable), 0 dans les paquets Python |
+| presidio-analyzer (roue PyPI) | 2.2.364, `presidio_analyzer-2.2.364-py3-none-any.whl`, SHA-256 `0a9eeb60ccc416c505367b4989d056becb84ef082703ee3361c046fb75941739` | 2.2.364 (API JSON de PyPI) | API JSON de PyPI, empreinte vérifiée au téléchargement | **Pas une dépendance** : seul `spacy_recognizer.py` en est extrait, pour l'image de mesure d'EXT-18 (sans filtre PROPN, sans étiquette, jamais poussée). Licence MIT (métadonnées de la roue : `License-Expression: MIT`) |

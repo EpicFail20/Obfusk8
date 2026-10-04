@@ -21,7 +21,7 @@ false negative. This bench counts, per PDF layout, how many detected
 entities end up with no rectangle at all.
 
 It runs the SAME steps as `_detect_pdf` pass 1, by importing app/main.py
-and calling its own functions (normalizations, `_analyze_text` against the
+and calling its own functions (`_analyze_normalized`, against the
 real presidio-analyzer), then `page.search_for` on the same slice of the
 page text — only the counting is added. Layouts (synthetic PDFs, fonts
 embedded): several fonts (DejaVu Sans/Serif/Mono, base-14 Helvetica and
@@ -245,7 +245,9 @@ def measure(pdf: bytes, theme: dict[str, Any] | None) -> dict[str, Any]:
             page = doc[page_number]
             page_text = page.get_text()
             boxes = _align(page_text, _page_chars(page))
-            entities = main._analyze_text(main._normalize_dashes(main._normalize_allcaps(page_text)), theme=theme)
+            # The application's own entry point (common normalization D-014,
+            # then upper-case words and dashes; positions on the page text).
+            entities = main._analyze_normalized(page_text, theme=theme)
             for entity in entities:
                 start, end = entity["start"], entity["end"]
                 entity_text = page_text[start:end]
@@ -293,7 +295,7 @@ def markdown(report: dict[str, Any]) -> str:
     lines = [
         f"# EXT-35 — détections PDF non localisées ({report['generated_at']})",
         "",
-        "Même chaîne que `_detect_pdf` (passe 1) : texte de la page, normalisations, `_analyze_text` vers le vrai "
+        "Même chaîne que `_detect_pdf` (passe 1) : texte de la page, `_analyze_normalized` vers le vrai "
         "`presidio-analyzer`, puis `page.search_for` sur la tranche du texte de la page. Une entité **perdue** est "
         "une entité détectée pour laquelle `search_for` ne renvoie aucun rectangle : aucune zone de caviardage, "
         "aucun avertissement. Seuls des comptes sont publiés.",
