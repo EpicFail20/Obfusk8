@@ -20,7 +20,16 @@ enforcing seccomp profile, presidio-analyzer):
 2. a document (synthetic CSV) detected alone, then while a sustained flow of
    prompts runs — does the text API slow the document flow down?
 3. the same prompt flow observed while documents are processed — the
-   document flow blocks the single event loop (EXT-07).
+   document flow blocked the single event loop until phase 2 (EXT-07);
+4. (phase 2) /health probed every 0.25 s during the same scenario.
+
+Phase 2: the scenario can run in several rounds (BENCH_CONTENTION_ROUNDS,
+BENCH_CONTENTION_DOCUMENTS documents each, 3 x 1 by default as in phase 1)
+to reach n >= 30 prompts overlapping a document. Each document leaves a job
+pending review (never finalized): 2 x documents per round must stay under
+MAX_PENDING_JOBS (20), and rounds are separated by BENCH_JOB_TTL_SECONDS
+(JOB_REVIEW_TTL_SECONDS of the stack, 600 by default) plus a margin, so that
+the jobs of the previous round have expired.
 
 Limits of this run: one test account, so the prompt flow is bounded by the
 per-user Traefik rate limit (60/min, burst 20) — it measures one heavy user,
@@ -123,25 +132,61 @@ def _detect(session: Any) -> float:
     return elapsed
 
 
-def contention(documents: int = 3) -> dict[str, Any]:
-    doc_session, prompt_api = login(), TextApi(login(), min_interval=1.0)
+Sample = tuple[float, float, float]  # (start, end, duration) of one request
+ROUNDS = int(os.environ.get("BENCH_CONTENTION_ROUNDS", "1"))
+DOCUMENTS = int(os.environ.get("BENCH_CONTENTION_DOCUMENTS", "3"))
+JOB_TTL_SECONDS = int(os.environ.get("BENCH_JOB_TTL_SECONDS", "600"))
+HEALTH_PERIOD_SECONDS = 0.25
+
+
+def _flow(stop: threading.Event, call: Any, samples: list[Sample], period: float = 0.0) -> None:
+    """`call()` returns the duration of the request itself, or None on
+    failure. The client may sleep before sending (TextApi paces requests
+    under the rate limit): that wait is NOT part of the latency, so the
+    interval is anchored on the end of the call minus the request duration."""
+    while not stop.is_set():
+        duration = call()
+        if duration is not None:
+            ended = time.monotonic()
+            samples.append((ended - duration, ended, duration))
+        time.sleep(period)
+
+
+def _timed_health(session: Any) -> float | None:
+    started = time.monotonic()
+    ok = session.get(f"{BASE_URL}/health", timeout=30).status_code == HTTP_OK
+    return time.monotonic() - started if ok else None
+
+
+def _timed_prompt(api: TextApi) -> float | None:
+    status, _, elapsed = api.call("analyze", _text(2000))
+    return elapsed if status == HTTP_OK else None
+
+
+def _round(documents: int) -> dict[str, list[Any]]:
+    doc_session, prompt_api, health_session = login(), TextApi(login(), min_interval=1.0), login()
     alone = []
     for _ in range(documents):
         time.sleep(UPLOAD_PACING_SECONDS)
         alone.append(_detect(doc_session))
 
-    samples: list[tuple[float, float, float]] = []  # (start, end, duration) of each prompt request
+    prompts: list[Sample] = []
+    health: list[Sample] = []
     stop = threading.Event()
-
-    def prompt_flow() -> None:
-        while not stop.is_set():
-            started = time.monotonic()
-            status, _, elapsed = prompt_api.call("analyze", _text(2000))
-            if status == HTTP_OK:
-                samples.append((started, started + elapsed, elapsed))
-
-    worker = threading.Thread(target=prompt_flow, daemon=True)
-    worker.start()
+    workers = [
+        threading.Thread(
+            target=_flow,
+            args=(stop, lambda: _timed_prompt(prompt_api), prompts),
+            daemon=True,
+        ),
+        threading.Thread(
+            target=_flow,
+            args=(stop, lambda: _timed_health(health_session), health, HEALTH_PERIOD_SECONDS),
+            daemon=True,
+        ),
+    ]
+    for worker in workers:
+        worker.start()
     time.sleep(15)  # prompt-only baseline before the first document
     windows, loaded = [], []
     for _ in range(documents):
@@ -151,22 +196,42 @@ def contention(documents: int = 3) -> dict[str, Any]:
         windows.append((start, time.monotonic()))
     time.sleep(10)
     stop.set()
-    worker.join(timeout=60)
+    for worker in workers:
+        worker.join(timeout=60)
+    return {"alone": alone, "loaded": loaded, "windows": windows, "prompts": prompts, "health": health}
 
-    def during(s: tuple[float, float, float]) -> bool:
+
+def contention(rounds: int = ROUNDS, documents: int = DOCUMENTS) -> dict[str, Any]:
+    merged: dict[str, list[Any]] = {"alone": [], "loaded": [], "windows": [], "prompts": [], "health": []}
+    for index in range(rounds):
+        if index:
+            time.sleep(JOB_TTL_SECONDS + 90)  # previous round's pending jobs expire (MAX_PENDING_JOBS)
+        for key, values in _round(documents).items():
+            merged[key].extend(values)
+    windows, prompts, health = merged["windows"], merged["prompts"], merged["health"]
+
+    def during(s: Sample) -> bool:
         return any(s[0] < end and start < s[1] for start, end in windows)
 
+    span = sum(w[1] - w[0] for w in windows)
     return {
+        "rounds": rounds,
+        "documents_per_round": documents,
         "document_detect": {
-            "alone": _stats(alone),
-            "with_prompt_flow": _stats(loaded),
-            "prompt_flow_rate_per_s": round(len(samples) / max(1.0, samples[-1][1] - samples[0][0]), 2)
-            if samples
+            "alone": _stats(merged["alone"]),
+            "with_prompt_flow": _stats(merged["loaded"]),
+            "prompt_flow_rate_per_s": round(len(prompts) / max(1.0, prompts[-1][1] - prompts[0][0]), 2)
+            if prompts
             else None,
+            "processing_seconds_total": round(span, 1),
         },
         "prompts_2000_chars": {
-            "outside_document_processing": _stats([s[2] for s in samples if not during(s)]),
-            "overlapping_document_processing": _stats([s[2] for s in samples if during(s)]),
+            "outside_document_processing": _stats([s[2] for s in prompts if not during(s)]),
+            "overlapping_document_processing": _stats([s[2] for s in prompts if during(s)]),
+        },
+        "health": {
+            "outside_document_processing": _stats([s[2] for s in health if not during(s)]),
+            "overlapping_document_processing": _stats([s[2] for s in health if during(s)]),
         },
     }
 
@@ -203,11 +268,20 @@ def markdown(report: dict[str, Any]) -> str:
             "Prompt 2 000 car., pendant un traitement de document",
             c["prompts_2000_chars"]["overlapping_document_processing"],
         ),
+        *(
+            (
+                ("/health, hors traitement de document", c["health"]["outside_document_processing"]),
+                ("/health, pendant un traitement de document", c["health"]["overlapping_document_processing"]),
+            )
+            if "health" in c
+            else ()
+        ),
     ):
         lines.append(f"| {label} | {s['n']} | {s['p50_ms']} | {s['p95_ms']} | {s['max_ms']} |")
     lines += [
         "",
         f"Débit effectif du flux de prompts : {c['document_detect']['prompt_flow_rate_per_s']} requête(s) par seconde.",
+        f"Scénario : {c.get('rounds', 1)} tour(s) de {c.get('documents_per_round', 3)} document(s).",
     ]
     return "\n".join(lines) + "\n"
 

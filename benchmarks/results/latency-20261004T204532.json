@@ -1,0 +1,137 @@
+{
+  "generated_at": "2026-10-04T19:47:49+0000",
+  "api": {
+    "api_version": "1.0",
+    "detection_config": "b65f237ebbbbfc78",
+    "analyzer_recognizers": "51fa36bee769596e"
+  },
+  "stack": {
+    "git_commit": "50ce67c",
+    "app_files_modified_since_commit": 0,
+    "images": {
+      "app": "ghcr.io/epicfail20/obfusk8-app:main@sha256:57f5f5b9f190ba964b9647d3a918f1408cd61d1284288cf98761e43770b9dc5b",
+      "presidio_analyzer": "ghcr.io/epicfail20/obfusk8-presidio-analyzer:latest@sha256:ce18c22c451a92f70478edeaffafbb35c986ade900dd60f7372382cda63425a8",
+      "traefik": "traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0"
+    },
+    "analyzer": {
+      "presidio_analyzer": "2.2.364",
+      "spacy": "3.8.13",
+      "fr_core_news_md": "3.8.0",
+      "en_core_web_lg": "3.8.0",
+      "regex": "2026.7.10"
+    },
+    "app": {
+      "python": "3.12.15",
+      "fastapi": "0.141.1",
+      "starlette": "1.7.0",
+      "pydantic": "2.13.5",
+      "anyio": "4.15.1",
+      "uvicorn": "0.35.0",
+      "requests": "2.33.1"
+    },
+    "theme_files_sha256_16": {
+      "app/themes/common.json": "48585f8b381e8e5c",
+      "app/themes/compta.json": "c4414dd9b5b28f1c",
+      "app/themes/it.json": "4253f78a9eec958f",
+      "app/themes/medical.json": "e7465bae5b218e49",
+      "app/themes/extension/secrets.json": "5f5cee0606d053fe"
+    },
+    "seccomp": "filter (app-enforce.json)"
+  },
+  "per_size": {
+    "analyze": {
+      "200": {
+        "n": 30,
+        "p50_ms": 18.8,
+        "p95_ms": 23.6,
+        "max_ms": 24.2
+      },
+      "1000": {
+        "n": 30,
+        "p50_ms": 40.5,
+        "p95_ms": 49.2,
+        "max_ms": 70.4
+      },
+      "5000": {
+        "n": 30,
+        "p50_ms": 171.0,
+        "p95_ms": 180.7,
+        "max_ms": 194.5
+      },
+      "10000": {
+        "n": 30,
+        "p50_ms": 382.7,
+        "p95_ms": 403.7,
+        "max_ms": 407.6
+      },
+      "20000": {
+        "n": 30,
+        "p50_ms": 973.5,
+        "p95_ms": 1021.1,
+        "max_ms": 1048.4
+      }
+    },
+    "pseudonymize": {
+      "1000": {
+        "n": 15,
+        "p50_ms": 39.6,
+        "p95_ms": 47.4,
+        "max_ms": 47.4
+      },
+      "10000": {
+        "n": 15,
+        "p50_ms": 378.9,
+        "p95_ms": 463.1,
+        "max_ms": 463.1
+      }
+    }
+  },
+  "contention": {
+    "rounds": 4,
+    "documents_per_round": 9,
+    "document_detect": {
+      "alone": {
+        "n": 36,
+        "p50_ms": 1539.1,
+        "p95_ms": 1593.6,
+        "max_ms": 1613.4
+      },
+      "with_prompt_flow": {
+        "n": 36,
+        "p50_ms": 1608.5,
+        "p95_ms": 1677.2,
+        "max_ms": 1685.6
+      },
+      "prompt_flow_rate_per_s": 0.19,
+      "processing_seconds_total": 58.1
+    },
+    "prompts_2000_chars": {
+      "outside_document_processing": {
+        "n": 532,
+        "p50_ms": 70.3,
+        "p95_ms": 76.4,
+        "max_ms": 102.5
+      },
+      "overlapping_document_processing": {
+        "n": 52,
+        "p50_ms": 186.4,
+        "p95_ms": 260.6,
+        "max_ms": 301.2
+      }
+    },
+    "health": {
+      "outside_document_processing": {
+        "n": 2248,
+        "p50_ms": 3.0,
+        "p95_ms": 4.1,
+        "max_ms": 12.7
+      },
+      "overlapping_document_processing": {
+        "n": 226,
+        "p50_ms": 3.2,
+        "p95_ms": 5.4,
+        "max_ms": 17.3
+      }
+    }
+  }
+}
