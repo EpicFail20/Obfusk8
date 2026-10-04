@@ -63,6 +63,7 @@
   "pdf_password_protected": "This PDF is password-protected. Please remove the protection (or provide an unprotected version) before analyzing it.",
   "pdf_too_many_pages": "This PDF has too many pages ({page_count}, max {max_pages}) — a small file size does not guarantee a reasonable page count.",
   "pdf_corrupt_structure": "This PDF is corrupted or has an invalid structure that prevents processing it.",
+  "pdf_localization_warning": "{count} detected value(s) could not be fully located on the page (types: {types}). Automatic redaction may leave them readable in whole or in part: check the document and add manual zones if needed.",
 
   "image_corrupt_truncated": "Corrupted or truncated image, unable to fully decode it.",
   "image_invalid_structure": "This image has an invalid structure that prevents processing it.",

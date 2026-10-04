@@ -1450,7 +1450,69 @@ def _name_variants(name: str) -> set[str]:
     return variants
 
 
-def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
+# EXT-35: a detected entity is turned into rectangles by searching its text on
+# the page. Measured in phase 2 (benchmarks/documents/pdf_localization_bench.py,
+# DejaVu Sans Mono): a glyph with no Unicode mapping is extracted as U+0000,
+# and a NUL in the searched string truncates the search — "Chloé<NUL>Boyer"
+# only got a rectangle over "Chloé", and "Boyer" stayed readable after
+# redaction (6 names out of 229 detections). A search returning nothing leaves
+# no zone at all. Both used to go unnoticed; they are now counted per entity
+# type (never the value), shown to the reviewer and recorded in the audit log.
+#
+# A character counts as covered when at least half of its box lies inside a
+# found rectangle. Measured: apply_redactions removes a character as soon as
+# 5 to 20 % of its width is covered, so this rule can only report MORE than
+# what redaction actually leaves (doctrine: a false alarm costs a glance, a
+# missed leak costs the data).
+PDF_COVERED_CHAR_FRACTION = 0.5
+
+
+def _pdf_char_boxes(page: "fitz.Page", page_text: str) -> list:
+    """Box of each character of `page_text` (= page.get_text()), None for
+    white space or a character not found. Rebuilt from page.get_text("rawdict")
+    in get_text's order (blocks, lines, spans, a line break after each line);
+    measured identical on 359 of 360 benchmark pages, the exception being an
+    extra line break after a NUL — hence the tolerance on white space."""
+    chars = []
+    for block in page.get_text("rawdict")["blocks"]:
+        if block.get("type") != 0:
+            continue
+        for line in block["lines"]:
+            for span in line["spans"]:
+                chars.extend((ch["c"], fitz.Rect(ch["bbox"])) for ch in span["chars"])
+            chars.append(("\n", None))
+    boxes: list = [None] * len(page_text)
+    j = 0
+    for i, c in enumerate(page_text):
+        while j < len(chars) and chars[j][0] != c and chars[j][0].isspace():
+            j += 1
+        if j < len(chars) and chars[j][0] == c:
+            boxes[i] = chars[j][1]
+            j += 1
+    return boxes
+
+
+def _pdf_value_fully_covered(text: str, boxes: list, rects: list) -> bool:
+    """True when every non-blank character of the value (`text`, with its
+    `boxes`) is covered by the rectangles found (PDF_COVERED_CHAR_FRACTION).
+    A character whose box could not be found counts as NOT covered. A box
+    of zero area (zero-width character such as U+200B) shows nothing and is
+    skipped: counting it produced 11 false alarms out of 231 values on the
+    DejaVu Sans scenario of the EXT-35 bench, none actually exposed."""
+    for c, box in zip(text, boxes, strict=True):
+        if c.isspace():
+            continue
+        if box is None:
+            return False
+        area = box.get_area()
+        if area == 0:
+            continue
+        if not any((box & rect).get_area() >= PDF_COVERED_CHAR_FRACTION * area for rect in rects):
+            return False
+    return True
+
+
+def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> tuple[list[dict], dict[str, dict[str, int]]]:
     """
     Detects sensitive entities without redacting them. For each
     visual occurrence found, returns both its actual position in the PDF (for
@@ -1462,9 +1524,16 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
     propagation of names confirmed in pass 1 to the rest of the document, where
     NER may have missed an identical occurrence (dense context,
     form, different page) — see PROPAGATED_ENTITY_TYPES.
+
+    Also returns the pass-1 localization issues (EXT-35), counts per entity
+    type: {"unlocated": {...}, "incomplete": {...}} — entities with no
+    rectangle at all, and entities whose rectangles leave part of the value
+    uncovered. Pass 2 is not counted: a propagated name absent from a page
+    is the normal case.
     """
     matrix = fitz.Matrix(PREVIEW_ZOOM, PREVIEW_ZOOM)
     detections: list[dict] = []
+    issues: dict[str, dict[str, int]] = {"unlocated": {}, "incomplete": {}}
 
     page_texts: list[str] = []
     propagate_candidates: dict[str, str] = {}
@@ -1478,6 +1547,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
         page_texts.append(page_text)
         normalized_text = _normalize_dashes(_normalize_allcaps(page_text))
         entities = _analyze_text(normalized_text, theme=theme)
+        page_boxes = None  # computed once per page, only if an entity needs it
 
         for entity in entities:
             entity_text = page_text[entity["start"] : entity["end"]]
@@ -1486,6 +1556,16 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                 continue
 
             entity_type = entity.get("entity_type", "UNKNOWN")
+            rects = page.search_for(entity_text)
+            if not rects:
+                issues["unlocated"][entity_type] = issues["unlocated"].get(entity_type, 0) + 1
+            else:
+                if page_boxes is None:
+                    page_boxes = _pdf_char_boxes(page, page_text)
+                if not _pdf_value_fully_covered(
+                    entity_text, page_boxes[entity["start"] : entity["end"]], rects
+                ):
+                    issues["incomplete"][entity_type] = issues["incomplete"].get(entity_type, 0) + 1
             # An isolated last name is too ambiguous to propagate without
             # risk, but an isolated city name (e.g. "Ajaccio") is a good
             # candidate even alone — hence the different rule per type.
@@ -1498,7 +1578,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
             is_propagatable = entity_type in PROPAGATED_ENTITY_TYPES and (
                 " " in stripped or (entity_type == "LOCATION" and len(stripped) >= 4)
             )
-            for rect in page.search_for(entity_text):
+            for rect in rects:
                 display_rect = rect * matrix
                 key = (page_index, (rect.x0, rect.y0, rect.x1, rect.y1))
                 already_covered.add(key)
@@ -1546,7 +1626,7 @@ def _detect_pdf(doc: fitz.Document, theme: dict | None = None) -> list[dict]:
                         }
                     )
 
-    return detections
+    return detections, issues
 
 
 def _rect_iou(a: list[float], b: list[float]) -> float:
@@ -3078,7 +3158,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
 
     try:
         with metrics.DETECTION_DURATION_SECONDS.labels(format="pdf").time():
-            detections = _detect_pdf(doc, theme=selected_theme)
+            detections, localization_issues = _detect_pdf(doc, theme=selected_theme)
         clusters = _cluster_detections(detections)
 
         page_sizes = []
@@ -3109,6 +3189,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
             "kind": "pdf",
             "raw_pdf": raw,
             "detections": detections,
+            "localization_issues": localization_issues,
             "clusters": {c["id"]: c["member_ids"] for c in clusters},
             "theme": theme,
             "filename_hash": filename_hash,
@@ -3123,8 +3204,26 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
         job_id, filename_hash, len(detections), len(clusters), theme or "aucun",
     )
 
+    issue_counts: dict[str, int] = {}
+    for per_type in localization_issues.values():
+        for entity_type, count in per_type.items():
+            issue_counts[entity_type] = issue_counts.get(entity_type, 0) + count
+    warning_html = ""
+    if issue_counts:
+        # EXT-35: metadata only (entity types and counts), never the value.
+        log.warning(
+            "Job %s: détection(s) PDF non localisée(s) entièrement sur la page (EXT-35) : %s",
+            job_id, json.dumps(localization_issues, sort_keys=True),
+        )
+        types = ", ".join(f"{entity_type} ({count})" for entity_type, count in sorted(issue_counts.items()))
+        message = STRINGS["pdf_localization_warning"].format(count=sum(issue_counts.values()), types=types)
+        warning_html = (
+            '<p class="localization-warning" role="alert" style="color:#842029; background:#f8d7da; '
+            f'padding:8px 12px; border-radius:4px;">{html.escape(message)}</p>'
+        )
+
     pages_html = _build_page_containers_html(job_id, page_sizes, clusters)
-    return _build_pixel_review_page(job_id, len(clusters), pages_html)
+    return _build_pixel_review_page(job_id, len(clusters), pages_html, warning_html=warning_html)
 
 
 def _build_page_containers_html(job_id: str, page_sizes: list[tuple[int, int]], clusters: list[dict]) -> str:
@@ -3153,11 +3252,15 @@ def _build_page_containers_html(job_id: str, page_sizes: list[tuple[int, int]], 
     return "".join(pages_html)
 
 
-def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str) -> HTMLResponse:
+def _build_pixel_review_page(
+    job_id: str, total_detections: int, pages_html: str, warning_html: str = ""
+) -> HTMLResponse:
     """Common PDF/image review template: image rendering + pixel
     clickable zones to exclude a detection, AND manual drawing of a new zone
     (manual_zones) — unlike the DOCX/CSV text template
-    (_build_text_review_page), which does not offer this possibility."""
+    (_build_text_review_page), which does not offer this possibility.
+    `warning_html` (already escaped): EXT-35 localization warning, shown at
+    the top of the toolbar; empty otherwise, the page is then unchanged."""
     return HTMLResponse(f"""
     <!doctype html>
     <html lang="{UI_LANG}">
@@ -3199,7 +3302,7 @@ def _build_pixel_review_page(job_id: str, total_detections: int, pages_html: str
         <p><a href="/">&larr; {STRINGS["restart_link"]}</a></p>
         <p>
           {STRINGS["review_zone_count_text"].format(count=total_detections)}
-        </p>
+        </p>{warning_html}
         <button type="button" id="manual-mode-btn" onclick="toggleManualMode()" style="
             padding:8px 16px; background:#e9ecef; border:1px solid #ccc;
             border-radius:4px; cursor:pointer; margin-bottom:8px;">
@@ -4040,6 +4143,15 @@ async def finalize_document(
         job_id, kind, total, excluded_count, manual_count,
     )
 
+    # EXT-35: counts per entity type of the PDF detections that could not be
+    # (fully) located, only when there are some — otherwise the audit line
+    # keeps exactly its previous fields.
+    localization_issues = job.get("localization_issues") or {}
+    extra_audit = (
+        {"pdf_localization_issues": localization_issues}
+        if any(localization_issues.values())
+        else {}
+    )
     _record_audit_event(
         job_id=job_id,
         format=kind,
@@ -4051,6 +4163,7 @@ async def finalize_document(
         total_redactions=total,
         manually_excluded=excluded_count,
         manually_added=manual_count,
+        **extra_audit,
     )
 
     _schedule_cleanup(output_path)
