@@ -35,11 +35,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from obfusk8_client import HTTP_OK, TextApi, login  # noqa: E402
 
+sys.path.insert(0, str(HERE))
+from build_secret_corpus import fp_records, tp_records  # noqa: E402
+
 RESULTS = HERE.parent / "results"
-
-
-def _load(name: str) -> list[dict[str, Any]]:
-    return [json.loads(line) for line in (HERE / name).read_text(encoding="utf-8").splitlines() if line.strip()]
 
 
 def _covered(entities: list[dict[str, Any]], text: str, value: str) -> bool:
@@ -51,7 +50,8 @@ def _covered(entities: list[dict[str, Any]], text: str, value: str) -> bool:
 def run() -> dict[str, Any]:
     api = TextApi(login())
     version = api.version()
-    fp_corpus, tp_corpus = _load("fp_corpus.jsonl"), _load("tp_corpus.jsonl")
+    fp_corpus: list[dict[str, Any]] = list(fp_records())
+    tp_corpus: list[dict[str, Any]] = list(tp_records())
     themes = [None] + [t["key"] for t in version["themes"]]
     per_theme = {}
     for theme in themes:

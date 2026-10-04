@@ -43,11 +43,16 @@ Usage: python3 benchmarks/quality/build_quality_corpus.py
 
 import json
 import random
+import sys
 import unicodedata
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "app" / "tests"))
+import fake_secrets  # shared with the tests, see its docstring
 
 HERE = Path(__file__).resolve().parent
 SEED = 20261002
@@ -155,13 +160,15 @@ MONTHS_FR = [
     "novembre",
     "décembre",
 ]
+# Fictitious secrets in real formats, rebuilt at run time from fragments
+# (decision Q5 of 2026-10-04: no such literal in the repository).
 SECRETS = [
-    "AKIAIOSFODNN7EXAMPLE",
-    "ghp_FAKEfakeFAKEfakeFAKEfake0123456789",
-    "sk_test_FAKEFAKEFAKEFAKE1234",
-    "xoxb-FICTIF-NON-VALIDE-FAKEFAKEFAKEFAKEFAKE000",
-    "glpat-FakeFakeFake0123456789",
-    "AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe",
+    fake_secrets.AWS_ACCESS_KEY,
+    fake_secrets.GITHUB_TOKEN,
+    fake_secrets.STRIPE_TEST_KEY,
+    fake_secrets.SLACK_BOT_TOKEN,
+    fake_secrets.GITLAB_TOKEN,
+    fake_secrets.GOOGLE_API_KEY,
 ]
 
 
@@ -599,17 +606,28 @@ def build() -> list[Prompt]:
     return docs
 
 
-def main() -> None:
+def records() -> list[dict[str, Any]]:
+    """The corpus, built in memory (phase 2, decision Q5: corpus.jsonl holds
+    real-format secrets and is no longer versioned; the benchmarks call this
+    instead of reading it — same records, byte for byte)."""
     docs = build()
     for d in docs:  # self-check: annotations point at non-empty spans of the text
         for e in d.entities:
             if not d.text[int(e["start"]) : int(e["end"])].strip():
                 raise ValueError(f"empty annotation in {d.id}")
-    with open(HERE / "corpus.jsonl", "w", encoding="utf-8") as f:
-        for d in docs:
-            f.write(json.dumps(d.record(), ensure_ascii=False) + "\n")
-    by_variant = Counter(d.variant for d in docs)
-    entities = sum(len(d.entities) for d in docs)
+    return [d.record() for d in docs]
+
+
+def jsonl(docs: list[dict[str, Any]]) -> str:
+    return "".join(json.dumps(d, ensure_ascii=False) + "\n" for d in docs)
+
+
+def main() -> None:
+    """Writes corpus.jsonl locally for inspection (ignored by git)."""
+    docs = records()
+    (HERE / "corpus.jsonl").write_text(jsonl(docs), encoding="utf-8")
+    by_variant = Counter(d["variant"] for d in docs)
+    entities = sum(len(d["entities"]) for d in docs)
     print(f"{len(docs)} prompts, {entities} entités annotées ; par variante : {dict(by_variant)}")
 
 

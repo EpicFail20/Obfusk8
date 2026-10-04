@@ -38,8 +38,10 @@ The corpora are **generated** by `secret_detection/build_secret_corpus.py` and `
   - names: common first and last names combined at random, no real person is described;
   - IBAN, social security and card numbers generated with a valid check digit from random digits (so recognizers that validate it can
     fire); cards start with 4970;
-  - secrets: provider documentation examples (`AKIAIOSFODNN7EXAMPLE`, the Azurite emulator key, the Telegram example token) or strings
-    spelled `FAKE` / `Fictif`.
+  - secrets: provider documentation examples (the AWS example access key, the Azurite emulator key, the Telegram example token) or
+    strings spelled `FAKE` / `Fictif`. Every value in a real secret format is **rebuilt at run time** by `app/tests/fake_secrets.py`
+    from fragments (decision Q5 of 2026-10-04): none is written as is in the repository. The corpora `quality/corpus.jsonl` and
+    `secret_detection/tp_corpus.jsonl` are no longer versioned: the benchmarks build them in memory (byte for byte the phase 1 files).
 
 ## Running
 

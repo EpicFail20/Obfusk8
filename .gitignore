@@ -37,3 +37,8 @@ secrets/
 # --- Traefik gateway secret (audit 3.7): rendered by generate-secrets.sh,
 #     contains the secret in clear text, never commit ---
 traefik/dynamic/gateway-secret.yml
+
+# Benchmark corpora holding real-format fictitious secrets: built in memory
+# by the benchmarks, written only for local inspection (decision Q5 of 2026-10-04).
+benchmarks/quality/corpus.jsonl
+benchmarks/secret_detection/tp_corpus.jsonl

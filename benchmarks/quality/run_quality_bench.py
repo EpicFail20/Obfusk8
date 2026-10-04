@@ -31,7 +31,7 @@ Writes a timestamped JSON and Markdown report in benchmarks/results/.
 
 Usage: python3 benchmarks/quality/run_quality_bench.py   (environment: see benchmarks/obfusk8_client.py;
        BENCH_STACK_INFO=<file> adds the versions collected by benchmarks/collect_stack_info.sh;
-       BENCH_CORPUS=supplementary measures the phase 2 supplementary corpus instead of corpus.jsonl)
+       BENCH_CORPUS=supplementary measures the phase 2 supplementary corpus instead of the main one)
 """
 
 import json
@@ -47,10 +47,12 @@ sys.path.insert(0, str(HERE.parent))
 from obfusk8_client import HTTP_OK, TextApi, login  # noqa: E402
 
 sys.path.insert(0, str(HERE))
+from build_quality_corpus import records as build_main  # noqa: E402
 from build_supplementary_corpus import build as build_supplementary  # noqa: E402
 
 RESULTS = HERE.parent / "results"
-# BENCH_CORPUS: "main" (default, corpus.jsonl, the phase 1 baseline) or
+# BENCH_CORPUS: "main" (default, the phase 1 baseline corpus, built in memory by
+# build_quality_corpus.records()) or
 # "supplementary" (build_supplementary_corpus.py, built in memory: families
 # EXT-29 to EXT-31 with >= 30 examples each, phase 2).
 CORPUS = os.environ.get("BENCH_CORPUS", "main")
@@ -181,7 +183,7 @@ def _corpus() -> list[dict[str, Any]]:
         return build_supplementary()
     if CORPUS != "main":
         raise SystemExit(f"unknown BENCH_CORPUS: {CORPUS}")
-    return [json.loads(line) for line in (HERE / "corpus.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    return build_main()
 
 
 def run() -> dict[str, Any]:

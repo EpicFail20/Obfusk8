@@ -73,7 +73,9 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 from obfusk8_client import BASE_URL, HTTP_OK, login  # noqa: E402
 
-CORPUS = HERE.parent / "quality" / "corpus.jsonl"
+sys.path.insert(0, str(HERE.parent / "quality"))
+from build_quality_corpus import jsonl, records  # noqa: E402
+
 RESULTS = HERE.parent / "results"
 FONT = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
 PROMPTS_PER_VARIANT = 3
@@ -98,8 +100,7 @@ def prompts() -> list[str]:
     """The first PROMPTS_PER_VARIANT prompts of each variant, `code` excluded."""
     taken: dict[str, int] = {}
     out = []
-    for line in CORPUS.read_text(encoding="utf-8").splitlines():
-        doc = json.loads(line)
+    for doc in records():
         if doc["category"] == "code" or taken.get(doc["variant"], 0) >= PROMPTS_PER_VARIANT:
             continue
         taken[doc["variant"]] = taken.get(doc["variant"], 0) + 1
@@ -230,7 +231,8 @@ def snapshot() -> dict[str, Any]:
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "prompts": len(texts),
-        "corpus_sha256": hashlib.sha256(CORPUS.read_bytes()).hexdigest()[:16],
+        # Same serialization as the former corpus.jsonl: same fingerprint.
+        "corpus_sha256": hashlib.sha256(jsonl(records()).encode("utf-8")).hexdigest()[:16],
         "cases": cases,
     }
 

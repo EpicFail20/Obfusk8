@@ -38,8 +38,11 @@ Les corpus sont **générés** par `secret_detection/build_secret_corpus.py` et 
   - noms : prénoms et noms courants combinés au hasard, aucune personne réelle n'est décrite ;
   - IBAN, NIR et numéros de carte générés avec une clé de contrôle valide à partir de chiffres aléatoires (pour que les reconnaisseurs
     qui valident la clé puissent se déclencher) ; les cartes commencent par 4970 ;
-  - secrets : exemples des documentations des fournisseurs (`AKIAIOSFODNN7EXAMPLE`, clé de l'émulateur Azurite, jeton d'exemple Telegram)
-    ou chaînes épelées `FAKE` / `Fictif`.
+  - secrets : exemples des documentations des fournisseurs (clé d'accès d'exemple d'AWS, clé de l'émulateur Azurite, jeton d'exemple
+    Telegram) ou chaînes épelées `FAKE` / `Fictif`. Toute valeur au format réel d'un secret est **reconstruite à l'exécution** par
+    `app/tests/fake_secrets.py` à partir de fragments (décision Q5 du 2026-10-04) : aucune n'est écrite telle quelle dans le dépôt.
+    Les corpus `quality/corpus.jsonl` et `secret_detection/tp_corpus.jsonl` ne sont plus versionnés : les bancs les construisent en
+    mémoire (identiques octet pour octet aux fichiers de la phase 1).
 
 ## Lancer les mesures
 

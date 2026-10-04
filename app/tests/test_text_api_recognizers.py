@@ -19,8 +19,10 @@ EXACTLY as presidio-analyzer compiles an ad hoc recognizer — `regex` module
 IGNORECASE|DOTALL|MULTILINE — then checked on synthetic true and false
 positives, and probed for catastrophic backtracking at the MAX_TEXT_CHARS cap.
 
-Every value below is FICTITIOUS (provider documentation examples such as
-AKIAIOSFODNN7EXAMPLE, or obviously fake strings).
+Every value below is FICTITIOUS (provider documentation examples, or
+obviously fake strings). Values in a real secret format are rebuilt at run
+time by fake_secrets.py (decision Q5 of 2026-10-04): none is written
+literally here.
 
 The `regex` module is a development dependency only: skipped where absent
 (e.g. inside the production image, which ships pytest — EXT-09).
@@ -37,6 +39,7 @@ regex = pytest.importorskip("regex")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import main  # noqa: E402
 import text_api  # noqa: E402
+from tests import fake_secrets as fs  # noqa: E402
 
 PRESIDIO_FLAGS = regex.DOTALL | regex.MULTILINE | regex.IGNORECASE
 # Since phase 2 (decision Q4, EXT-08/EXT-23), the card, NIR and any-domain
@@ -87,46 +90,34 @@ def test_invariants_de_tous_les_reconnaisseurs():
 # ---------------------------------------------------------------------------
 
 PEM_BODY = "MIIEowIBAAKCAQEAuF4x0aBcDeFgHiJkLmNoPqRsTuVwXyZ\nabcdEFGHijklMNOPqrstUVWX0123"
+PGP_BLOCK = f"{fs.PGP_BEGIN}\nVersion: Fictif 1.0\n\nlQOYBGFakeFakeFakeFake\n=AbCd\n" + fs.PGP_BEGIN.replace(
+    "BEGIN", "END"
+)
 
 
 @pytest.mark.parametrize(
     "text,expected",
     [
         # RFC 7468 / legacy labels, complete block
-        (
-            f"cle :\n-----BEGIN RSA PRIVATE KEY-----\n{PEM_BODY}\n-----END RSA PRIVATE KEY-----\nfin",
-            f"-----BEGIN RSA PRIVATE KEY-----\n{PEM_BODY}\n-----END RSA PRIVATE KEY-----",
-        ),
-        (
-            f"-----BEGIN ENCRYPTED PRIVATE KEY-----\n{PEM_BODY}\n-----END ENCRYPTED PRIVATE KEY-----",
-            f"-----BEGIN ENCRYPTED PRIVATE KEY-----\n{PEM_BODY}\n-----END ENCRYPTED PRIVATE KEY-----",
-        ),
+        (f"cle :\n{fs.pem('RSA', PEM_BODY)}\nfin", fs.pem("RSA", PEM_BODY)),
+        (fs.pem("ENCRYPTED", PEM_BODY), fs.pem("ENCRYPTED", PEM_BODY)),
         # OpenSSH (sshkey.c MARK_BEGIN), truncated paste: header and base64 body
-        (
-            f"-----BEGIN OPENSSH PRIVATE KEY-----\n{PEM_BODY}\npuis du texte",
-            f"-----BEGIN OPENSSH PRIVATE KEY-----\n{PEM_BODY}",
-        ),
+        (f"{fs.pem_begin('OPENSSH')}\n{PEM_BODY}\npuis du texte", f"{fs.pem_begin('OPENSSH')}\n{PEM_BODY}"),
         # RFC 9580 s.6.2.1 with armor headers
-        (
-            "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: Fictif 1.0\n\nlQOYBGFakeFakeFakeFake\n=AbCd\n"
-            "-----END PGP PRIVATE KEY BLOCK-----",
-            "-----BEGIN PGP PRIVATE KEY BLOCK-----\nVersion: Fictif 1.0\n\nlQOYBGFakeFakeFakeFake\n=AbCd\n"
-            "-----END PGP PRIVATE KEY BLOCK-----",
-        ),
+        (PGP_BLOCK, PGP_BLOCK),
         # RFC 7519 s.3.1 / s.6.1 (unsecured, empty signature)
-        (
-            "jeton eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaWN0aWYifQ.c2lnbmF0dXJlLWZpY3RpdmU fin",
-            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaWN0aWYifQ.c2lnbmF0dXJlLWZpY3RpdmU",
-        ),
-        ("eyJhbGciOiJub25lIn0.eyJpc3MiOiJmaWN0aWYifQ. suite", "eyJhbGciOiJub25lIn0.eyJpc3MiOiJmaWN0aWYifQ."),
+        (f"jeton {fs.JWT_HS256} fin", fs.JWT_HS256),
+        (f"{fs.JWT_UNSIGNED} suite", fs.JWT_UNSIGNED),
         # RFC 3986 userinfo
         (
-            "DATABASE_URL=postgresql://appuser:Fict1f-S3cret@db.exemple.invalid:5432/app",
-            "postgresql://appuser:Fict1f-S3cret@db.exemple.invalid:5432",
+            "DATABASE_URL="
+            + fs.credentials_uri("postgresql", "appuser", "Fict1f-S3cret", "db.exemple.invalid")
+            + ":5432/app",
+            fs.credentials_uri("postgresql", "appuser", "Fict1f-S3cret", "db.exemple.invalid") + ":5432",
         ),
         (
-            "mongodb+srv://lecteur:Pa55Fictif@cluster0.exemple.invalid/base",
-            "mongodb+srv://lecteur:Pa55Fictif@cluster0.exemple.invalid",
+            fs.credentials_uri("mongodb+srv", "lecteur", "Pa55Fictif", "cluster0.exemple.invalid") + "/base",
+            fs.credentials_uri("mongodb+srv", "lecteur", "Pa55Fictif", "cluster0.exemple.invalid"),
         ),
         # Assignments
         ('export MYSQL_ROOT_PASSWORD="Fictif mot2passe"', '"Fictif mot2passe"'),
@@ -135,38 +126,35 @@ PEM_BODY = "MIIEowIBAAKCAQEAuF4x0aBcDeFgHiJkLmNoPqRsTuVwXyZ\nabcdEFGHijklMNOPqrs
         ("spring.datasource.password=Fict1fJdbc", "Fict1fJdbc"),
         ("Le mot de passe est Lune#Fictive42 pour le compte de test.", "Lune#Fictive42"),
         ("mdp : Soleil2026!", "Soleil2026!"),
-        (
-            "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-        ),
+        (f"aws_secret_access_key = {fs.AWS_SECRET_KEY}", fs.AWS_SECRET_KEY),
         # Azure (Microsoft Learn connection string page, emulator example key)
         (
-            "DefaultEndpointsProtocol=https;AccountName=fictif;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IF"
-            "suFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;EndpointSuffix=core.windows.net",
-            "Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==",
+            f"DefaultEndpointsProtocol=https;AccountName=fictif;AccountKey={fs.AZURITE_ACCOUNT_KEY};"
+            "EndpointSuffix=core.windows.net",
+            fs.AZURITE_ACCOUNT_KEY,
         ),
         (
-            "https://fictif.blob.core.windows.net/c?sv=2015-04-05&sr=b&sig=9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX%2BXXIU%3D",
-            "9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX%2BXXIU%3D",
+            f"https://fictif.blob.core.windows.net/c?sv=2015-04-05&sr=b&sig={fs.AZURE_SAS_SIGNATURE}",
+            fs.AZURE_SAS_SIGNATURE,
         ),
         # HTTP Authorization
         ("Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123", "abcdefghijklmnopqrstuvwxyz0123"),
         ("curl -H 'Authorization: Basic dXNlcjpmaWN0aWY='", "dXNlcjpmaWN0aWY="),
-        # Providers (documentation example values or obviously fake)
-        ("cle AKIAIOSFODNN7EXAMPLE fin", "AKIAIOSFODNN7EXAMPLE"),
-        ("temporaire ASIAIOSFODNN7EXAMPLE", "ASIAIOSFODNN7EXAMPLE"),
-        ("cle AKIAFICTIVEONLYLETTERS", "AKIAFICTIVEONLYLETTERS"),  # all letters: capitalized by normalization
-        ("key=AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe", "AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe"),
-        ("ghp_FAKEfakeFAKEfakeFAKEfake0123456789", "ghp_FAKEfakeFAKEfakeFAKEfake0123456789"),
-        ("github_pat_11FAKEFAKE0_fakeFAKEfake0123456789", "github_pat_11FAKEFAKE0_fakeFAKEfake0123456789"),
-        ("glpat-FakeFakeFake0123456789", "glpat-FakeFakeFake0123456789"),
-        ("gldt-FakeFakeFake0123456789", "gldt-FakeFakeFake0123456789"),
-        ("xoxb-0000000000-FAKEFAKEFAKE", "xoxb-0000000000-FAKEFAKEFAKE"),
-        ("xoxe.xapp-1-FAKEFAKEFAKE0", "xoxe.xapp-1-FAKEFAKEFAKE0"),
-        ("bot 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11", "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"),
-        ("sk_test_FAKEFAKEFAKE1234", "sk_test_FAKEFAKEFAKE1234"),
-        ("rk_live_FAKEFAKEFAKE1234", "rk_live_FAKEFAKEFAKE1234"),
-        ("whsec_FAKEFAKEFAKE1234", "whsec_FAKEFAKEFAKE1234"),
+        # Providers (documentation example values or obviously fake, rebuilt by fake_secrets)
+        (f"cle {fs.AWS_ACCESS_KEY} fin", fs.AWS_ACCESS_KEY),
+        (f"temporaire {fs.AWS_TEMPORARY_ACCESS_KEY}", fs.AWS_TEMPORARY_ACCESS_KEY),
+        (f"cle {fs.AWS_ACCESS_KEY_LETTERS}", fs.AWS_ACCESS_KEY_LETTERS),  # all letters: capitalized by normalization
+        (f"key={fs.GOOGLE_API_KEY}", fs.GOOGLE_API_KEY),
+        (fs.GITHUB_TOKEN, fs.GITHUB_TOKEN),
+        (fs.GITHUB_FINE_GRAINED_TOKEN, fs.GITHUB_FINE_GRAINED_TOKEN),
+        (fs.GITLAB_TOKEN, fs.GITLAB_TOKEN),
+        (fs.GITLAB_DEPLOY_TOKEN, fs.GITLAB_DEPLOY_TOKEN),
+        (fs.SLACK_BOT_TOKEN_SHORT, fs.SLACK_BOT_TOKEN_SHORT),
+        (fs.SLACK_REFRESH_TOKEN, fs.SLACK_REFRESH_TOKEN),
+        (f"bot {fs.TELEGRAM_BOT_TOKEN}", fs.TELEGRAM_BOT_TOKEN),
+        (fs.STRIPE_TEST_KEY_SHORT, fs.STRIPE_TEST_KEY_SHORT),
+        (fs.STRIPE_RESTRICTED_KEY, fs.STRIPE_RESTRICTED_KEY),
+        (fs.STRIPE_WEBHOOK_SECRET_SHORT, fs.STRIPE_WEBHOOK_SECRET_SHORT),
     ],
 )
 def test_secret_detecte(text, expected):
@@ -223,9 +211,9 @@ def test_identifiants_couverts_ext08_ext23():
 
 CAP = text_api.TextApiSettings().max_text_chars
 ADVERSARIAL = [
-    "-----BEGIN RSA PRIVATE KEY-----\n" + "A" * CAP,
+    fs.pem_begin("RSA") + "\n" + "A" * CAP,
     "-----BEGIN " + "A " * (CAP // 2),
-    ("-----BEGIN RSA PRIVATE KEY-----\n" + "QUJD " * 10) * (CAP // 100),
+    (fs.pem_begin("RSA") + "\n" + "QUJD " * 10) * (CAP // 100),
     "eyJ" + "a" * CAP + ".eyJ" + "b" * 10,
     "eyJa.eyJ" * (CAP // 8),
     "a://" + "u" * 256 + ":" + "p" * (CAP - 300),

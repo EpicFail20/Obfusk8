@@ -28,11 +28,16 @@ Exit code 1 if anything is found (the report says where, never what).
 """
 
 import argparse
-import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "quality"))
+sys.path.insert(0, str(ROOT / "secret_detection"))
+from build_quality_corpus import records as quality_records  # noqa: E402
+from build_secret_corpus import tp_records  # noqa: E402
+
 PROJECT = "obfusk8"
 SERVICES = ["app", "presidio-analyzer", "presidio-anonymizer", "traefik", "oauth2-proxy", "keycloak"]
 AUDIT_FILES = ["/data/audit/audit.log", "/data/audit/audit-extension.log"]
@@ -42,14 +47,16 @@ MIN_VALUE_CHARS = 8
 
 def _values() -> set[str]:
     values = set(CANARIES)
-    for line in (ROOT / "quality" / "corpus.jsonl").read_text(encoding="utf-8").splitlines():
-        doc = json.loads(line)
+    for doc in quality_records():
         for e in doc["entities"]:
             value = doc["text"][e["start"] : e["end"]]
             if len(value) >= MIN_VALUE_CHARS:
                 values.add(value)
-    for line in (ROOT / "secret_detection" / "tp_corpus.jsonl").read_text(encoding="utf-8").splitlines():
-        values.update(s for s in json.loads(line)["secrets"] if len(s) >= MIN_VALUE_CHARS)
+    for tp in tp_records():
+        secrets = tp["secrets"]
+        if not isinstance(secrets, list):
+            raise TypeError("tp_records: secrets must be a list")
+        values.update(s for s in secrets if len(s) >= MIN_VALUE_CHARS)
     return values
 
 

@@ -12,29 +12,34 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Builds the secrets corpus (deterministic, no randomness): writes
-fp_corpus.jsonl (ordinary text and code WITHOUT any secret, to count false
-positives) and tp_corpus.jsonl (one fictitious secret per documented format,
-each embedded in a realistic prompt, to measure recall).
+Builds the secrets corpus (deterministic, no randomness), in memory for the
+benchmarks (fp_records, tp_records): ordinary text and code WITHOUT any
+secret, to count false positives, and one fictitious secret per documented
+format, each embedded in a realistic prompt, to measure recall. Run as a
+script, also writes fp_corpus.jsonl and tp_corpus.jsonl for inspection.
 
-Every value is fictitious: provider documentation examples
-(AKIAIOSFODNN7EXAMPLE, the Azurite emulator key, the Telegram doc token) or
-strings spelled FAKE/Fictif. Domains use the reserved .invalid TLD (RFC 2606)
+Every value is fictitious: provider documentation examples (the AWS example
+access key, the Azurite emulator key, the Telegram documentation token) or
+strings spelled FAKE/Fictif. Values in a real secret format are rebuilt at
+run time by app/tests/fake_secrets.py (decision Q5 of 2026-10-04): none is
+written literally in this file. Domains use the reserved .invalid TLD (RFC 2606)
 except where the format itself is the point.
 
 Usage: python3 benchmarks/secret_detection/build_secret_corpus.py
 """
 
 import json
+import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE.parents[1] / "app" / "tests"))
+import fake_secrets  # noqa: E402 - shared with the tests, see its docstring
 
-PEM = (
-    "-----BEGIN RSA PRIVATE KEY-----\n"
+PEM = fake_secrets.pem(
+    "RSA",
     "MIIEowIBAAKCAQEAFAKEFAKEFAKEuF4x0aBcDeFgHiJkLmNoPqRsTuVwXyZ01234\n"
-    "abcdEFGHijklMNOPqrstUVWXfakeFAKEfakeFAKEfakeFAKEfakeFAKEfake5678\n"
-    "-----END RSA PRIVATE KEY-----"
+    "abcdEFGHijklMNOPqrstUVWXfakeFAKEfakeFAKEfakeFAKEfakeFAKEfake5678",
 )
 
 # --- Ordinary text and code: NO secret anywhere -----------------------------
@@ -220,25 +225,27 @@ TP = [
     ("pem", "Pourquoi ma clé ne marche pas ?\n" + PEM, [PEM]),
     (
         "pem-truncated",
-        "Voici le début de ma clé : -----BEGIN OPENSSH PRIVATE KEY-----\n"
-        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nla suite est coupée",
-        ["-----BEGIN OPENSSH PRIVATE KEY-----"],
+        "Voici le début de ma clé : "
+        + fake_secrets.pem_begin("OPENSSH")
+        + "\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\nla suite est coupée",
+        [fake_secrets.pem_begin("OPENSSH")],
     ),
     (
         "jwt",
-        "Ce jeton est-il expiré ? eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaWN0aWYiLCJleHAiOjE3MDAwMDAwMDB9."
-        "FAKEsignatureFAKEsignatureFAKE",
-        ["eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaWN0aWYiLCJleHAiOjE3MDAwMDAwMDB9.FAKEsignatureFAKEsignatureFAKE"],
+        "Ce jeton est-il expiré ? " + fake_secrets.JWT_EXPIRED,
+        [fake_secrets.JWT_EXPIRED],
     ),
     (
         "uri-credentials",
-        "Erreur de connexion avec DATABASE_URL=postgresql://appuser:Fict1f-S3cret@db.exemple.invalid"
-        ":5432/app, une idée ?",
+        "Erreur de connexion avec DATABASE_URL="
+        + fake_secrets.credentials_uri("postgresql", "appuser", "Fict1f-S3cret", "db.exemple.invalid")
+        + ":5432/app, une idée ?",
         ["Fict1f-S3cret"],
     ),
     (
         "uri-credentials",
-        "redis://default:FakeRedisPass42@cache.exemple.invalid:6379/0 ne répond pas",
+        fake_secrets.credentials_uri("redis", "default", "FakeRedisPass42", "cache.exemple.invalid")
+        + ":6379/0 ne répond pas",
         ["FakeRedisPass42"],
     ),
     ("assignment", "Mon .env contient DB_PASSWORD=Fict1fDbPass et l'appli plante.", ["Fict1fDbPass"]),
@@ -251,73 +258,93 @@ TP = [
     ("assignment", "Pour le compte de test, le mot de passe est Lune#Fictive42.", ["Lune#Fictive42"]),
     (
         "assignment",
-        "aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
-        ["wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"],
+        "aws_secret_access_key = " + fake_secrets.AWS_SECRET_KEY,
+        [fake_secrets.AWS_SECRET_KEY],
     ),
     (
         "http-auth",
         "curl -H 'Authorization: Bearer FAKEbearerTOKENfake0123456789' https://api.exemple.invalid",
         ["FAKEbearerTOKENfake0123456789"],
     ),
-    ("aws", "Les clés sont AKIAIOSFODNN7EXAMPLE et je ne sais plus laquelle utiliser.", ["AKIAIOSFODNN7EXAMPLE"]),
+    (
+        "aws",
+        "Les clés sont " + fake_secrets.AWS_ACCESS_KEY + " et je ne sais plus laquelle utiliser.",
+        [fake_secrets.AWS_ACCESS_KEY],
+    ),
     (
         "google",
-        "La clé AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe renvoie une erreur 403.",
-        ["AIzaSyDaGmWKa4JsXZ-HjGw7ISLn_3namBGewQe"],
+        "La clé " + fake_secrets.GOOGLE_API_KEY + " renvoie une erreur 403.",
+        [fake_secrets.GOOGLE_API_KEY],
     ),
     (
         "azure",
-        "DefaultEndpointsProtocol=https;AccountName=fictif;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50"
-        "uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;EndpointSuffix=core.windows.net",
-        ["Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw=="],
+        "DefaultEndpointsProtocol=https;AccountName=fictif;AccountKey="
+        + fake_secrets.AZURITE_ACCOUNT_KEY
+        + ";EndpointSuffix=core.windows.net",
+        [fake_secrets.AZURITE_ACCOUNT_KEY],
     ),
     (
         "azure-sas",
         "Le lien https://fictif.blob.core.windows.net/c/f.pdf?sv=2015-04-05&sr=b&sig="
-        "9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX%2BXXIU%3D a expiré ?",
-        ["9aCzs76n0E7y5BpEi2GvsSv433BZa22leDOZXX%2BXXIU%3D"],
+        + fake_secrets.AZURE_SAS_SIGNATURE
+        + " a expiré ?",
+        [fake_secrets.AZURE_SAS_SIGNATURE],
     ),
     (
         "github",
-        "git push refuse mon jeton ghp_FAKEfakeFAKEfakeFAKEfake0123456789",
-        ["ghp_FAKEfakeFAKEfakeFAKEfake0123456789"],
+        "git push refuse mon jeton " + fake_secrets.GITHUB_TOKEN,
+        [fake_secrets.GITHUB_TOKEN],
     ),
-    ("gitlab", "Le runner utilise glrt-FakeFakeFake0123456789 et échoue.", ["glrt-FakeFakeFake0123456789"]),
+    (
+        "gitlab",
+        "Le runner utilise " + fake_secrets.GITLAB_RUNNER_TOKEN + " et échoue.",
+        [fake_secrets.GITLAB_RUNNER_TOKEN],
+    ),
     (
         "slack",
-        "Le bot Slack (xoxb-FICTIF-NON-VALIDE-FAKEFAKEFAKEFAKEFAKE000) ne poste plus.",
-        ["xoxb-FICTIF-NON-VALIDE-FAKEFAKEFAKEFAKEFAKE000"],
+        "Le bot Slack (" + fake_secrets.SLACK_BOT_TOKEN + ") ne poste plus.",
+        [fake_secrets.SLACK_BOT_TOKEN],
     ),
     (
         "telegram",
-        "Mon bot 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11 ne reçoit rien.",
-        ["123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"],
+        "Mon bot " + fake_secrets.TELEGRAM_BOT_TOKEN + " ne reçoit rien.",
+        [fake_secrets.TELEGRAM_BOT_TOKEN],
     ),
     (
         "stripe",
-        "En test j'utilise sk_test_FAKEFAKEFAKEFAKE1234 et le webhook whsec_FAKEFAKEFAKEFAKE1234.",
-        ["sk_test_FAKEFAKEFAKEFAKE1234", "whsec_FAKEFAKEFAKEFAKE1234"],
+        "En test j'utilise "
+        + fake_secrets.STRIPE_TEST_KEY
+        + " et le webhook "
+        + fake_secrets.STRIPE_WEBHOOK_SECRET
+        + ".",
+        [fake_secrets.STRIPE_TEST_KEY, fake_secrets.STRIPE_WEBHOOK_SECRET],
     ),
 ]
 
 
+def fp_records() -> list[dict[str, str]]:
+    return [
+        {"id": f"fp-{i:03d}", "lang": lang, "kind": kind, "text": text} for i, (lang, kind, text) in enumerate(FP, 1)
+    ]
+
+
+def tp_records() -> list[dict[str, object]]:
+    """Built in memory (phase 2, decision Q5: tp_corpus.jsonl holds
+    real-format secrets and is no longer versioned)."""
+    out: list[dict[str, object]] = []
+    for i, (family, text, secrets) in enumerate(TP, 1):
+        for s in secrets:
+            if s not in text:
+                raise ValueError(f"{family}: secret not in its text")
+        out.append({"id": f"tp-{i:03d}", "family": family, "text": text, "secrets": secrets})
+    return out
+
+
 def main() -> None:
-    with open(HERE / "fp_corpus.jsonl", "w", encoding="utf-8") as f:
-        for i, (lang, kind, text) in enumerate(FP, 1):
-            f.write(
-                json.dumps({"id": f"fp-{i:03d}", "lang": lang, "kind": kind, "text": text}, ensure_ascii=False) + "\n"
-            )
-    with open(HERE / "tp_corpus.jsonl", "w", encoding="utf-8") as f:
-        for i, (family, text, secrets) in enumerate(TP, 1):
-            for s in secrets:
-                if s not in text:
-                    raise ValueError(f"{family}: secret not in its text")
-            f.write(
-                json.dumps(
-                    {"id": f"tp-{i:03d}", "family": family, "text": text, "secrets": secrets}, ensure_ascii=False
-                )
-                + "\n"
-            )
+    """Writes fp_corpus.jsonl and tp_corpus.jsonl locally for inspection
+    (tp_corpus.jsonl is ignored by git)."""
+    for name, docs in (("fp_corpus.jsonl", fp_records()), ("tp_corpus.jsonl", tp_records())):
+        (HERE / name).write_text("".join(json.dumps(d, ensure_ascii=False) + "\n" for d in docs), encoding="utf-8")
     print(f"{len(FP)} textes sans secret, {len(TP)} textes avec secret")
 
 

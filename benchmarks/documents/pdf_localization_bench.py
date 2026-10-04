@@ -41,8 +41,8 @@ the code under test mounted read-only and tmpfs instead of the volumes:
   docker run --rm --network obfusk8_backend --read-only --memory 1g \\
     --security-opt seccomp=seccomp/app-enforce.json --cap-drop ALL \\
     --tmpfs /tmp --tmpfs /data/tmp:uid=1000,gid=1000 --tmpfs /data/audit:uid=1000,gid=1000 \\
-    -v "$PWD/app:/app-src:ro" -v "$PWD/benchmarks:/bench" -w /bench \\
-    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/app-src \\
+    -v "$PWD:/repo" -w /repo/benchmarks \\
+    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/repo/app \\
     --entrypoint python ghcr.io/epicfail20/obfusk8-app:main documents/pdf_localization_bench.py
 """
 
@@ -59,7 +59,9 @@ import pymupdf as fitz
 import main
 
 HERE = Path(__file__).resolve().parent
-CORPUS = HERE.parent / "quality" / "corpus.jsonl"
+sys.path.insert(0, str(HERE.parent / "quality"))
+from build_quality_corpus import records  # noqa: E402
+
 RESULTS = HERE.parent / "results"
 DEJAVU_DIR = "/usr/share/fonts/truetype/dejavu"
 DEJAVU = {"sans": "DejaVuSans.ttf", "serif": "DejaVuSerif.ttf", "mono": "DejaVuSansMono.ttf"}
@@ -74,8 +76,7 @@ THEMES = {"aucun": None, "medical": main.THEMES.get("medical")}
 def corpus(variants: tuple[str, ...]) -> list[str]:
     taken: Counter[str] = Counter()
     out = []
-    for line in CORPUS.read_text(encoding="utf-8").splitlines():
-        doc = json.loads(line)
+    for doc in records():
         if doc["category"] == "code" or doc["variant"] not in variants or taken[doc["variant"]] >= PROMPTS_PER_VARIANT:
             continue
         taken[doc["variant"]] += 1
