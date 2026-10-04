@@ -106,7 +106,8 @@ Réponse 200 :
 - Types d'entités : ceux de Presidio et des thèmes (`PERSON`, `LOCATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `DATE_TIME`, `PATIENT_ID`, `FR_NIR`…),
   plus ceux propres à l'API texte, actifs quel que soit le thème (`app/themes/extension/`) : `SECRET` (clés privées PEM, JWT, URI avec identifiants,
   affectations `password`/`token`/`secret`/`api_key`, en-têtes `Authorization`, clés AWS, Google Cloud, Azure, GitHub, GitLab, Slack, Telegram,
-  Stripe), `CREDIT_CARD`, `FR_NIR` (EXT-08) et `EMAIL_ADDRESS` quel que soit le domaine, y compris interne (EXT-23). Le client doit traiter
+  Stripe). Depuis la phase 2, `CREDIT_CARD`, `FR_NIR` (EXT-08) et `EMAIL_ADDRESS` quel que soit le domaine, y compris interne (EXT-23),
+  sont détectés par les reconnaisseurs communs à tous les flux (`app/themes/common.json`), documents compris. Le client doit traiter
   tout type inconnu comme sensible.
 
 ### 2.3 `POST /api/v1/text/pseudonymize`

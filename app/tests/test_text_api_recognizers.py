@@ -12,7 +12,8 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 """
-Text API recognizers (app/themes/extension/*.json): each pattern is compiled
+Text API recognizers (app/themes/extension/*.json) and, since phase 2, the
+common recognizers of every flow (app/themes/common.json): each pattern is compiled
 EXACTLY as presidio-analyzer compiles an ad hoc recognizer — `regex` module
 (same version as in the analyzer image, requirements-dev.in) with
 IGNORECASE|DOTALL|MULTILINE — then checked on synthetic true and false
@@ -38,7 +39,13 @@ import main  # noqa: E402
 import text_api  # noqa: E402
 
 PRESIDIO_FLAGS = regex.DOTALL | regex.MULTILINE | regex.IGNORECASE
-RECOGNIZERS = text_api.load_extension_recognizers(main.THEMES_DIR / "extension", main.THEMES)
+# Since phase 2 (decision Q4, EXT-08/EXT-23), the card, NIR and any-domain
+# email recognizers are common to every flow (app/themes/common.json): the
+# common recognizers are checked here too, with the extension's own.
+RECOGNIZERS = [
+    *main.COMMON_RECOGNIZERS,
+    *text_api.load_extension_recognizers(main.THEMES_DIR / "extension", main.THEMES),
+]
 COMPILED = [
     (r["name"], r["supported_entity"], regex.compile(p["regex"], PRESIDIO_FLAGS))
     for r in RECOGNIZERS

@@ -1,5 +1,15 @@
 {
   "label": "Commun (appliqué à tous les thèmes)",
+  "_comment": [
+    "Applied to every flow (text API and documents), with and without theme.",
+    "PaymentCardNumberRecognizer, AnyDomainEmailRecognizer and the NIR (EXT-08, EXT-23) were on the text routes only (app/themes/extension/identifiers.json, D-015) until phase 2; moved here by decision Q4 of 2026-10-04.",
+    "include_theme_recognizers reuses a theme's recognizer by name instead of copying its regex (no duplication, no drift); an unknown name fails startup."
+  ],
+  "include_theme_recognizers": {
+    "medical": [
+      "FrenchNirRecognizer"
+    ]
+  },
   "ad_hoc_recognizers": [
     {
       "name": "FrenchStreetAddressRecognizer",
@@ -26,6 +36,40 @@
       ],
       "context": ["biologiste", "docteur", "responsable", "signature", "signé", "dr"],
       "supported_entity": "PERSON"
+    },
+    {
+      "name": "PaymentCardNumberRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "CREDIT_CARD",
+      "patterns": [
+        {
+          "name": "payment card number, same regex as Presidio 2.2.364 CreditCardRecognizer (predefined_recognizers/generic/credit_card_recognizer.py, registered for 'en' only, EXT-08); no Luhn check possible in an ad hoc recognizer: false positives accepted (doctrine 0.1), measured; score 0.6 keeps a margin above every threshold, including the code default DEFAULT_SCORE_THRESHOLD=0.5 (EXT-15)",
+          "regex": "\\b(?!1\\d{12}(?!\\d))((4\\d{3})|(5[0-5]\\d{2})|(6\\d{3})|(1\\d{3})|(3\\d{3}))[- ]?(\\d{3,4})[- ]?(\\d{3,4})[- ]?(\\d{3,5})\\b",
+          "score": 0.6
+        }
+      ],
+      "context": [
+        "carte",
+        "cb",
+        "visa",
+        "mastercard",
+        "amex",
+        "credit",
+        "card",
+        "paiement"
+      ]
+    },
+    {
+      "name": "AnyDomainEmailRecognizer",
+      "supported_language": "fr",
+      "supported_entity": "EMAIL_ADDRESS",
+      "patterns": [
+        {
+          "name": "email address with any domain, including internal ones (.local, .lan, .internal) rejected by Presidio's EmailRecognizer TLD check (EXT-23); simplified dot-atom addr-spec (RFC 5322 s.3.4.1)",
+          "regex": "\\b[A-Za-z0-9._%+\\-]{1,64}+@[A-Za-z0-9\\-]{1,63}+(?:\\.[A-Za-z0-9\\-]{1,63}+){1,10}+",
+          "score": 0.7
+        }
+      ]
     }
   ]
 }

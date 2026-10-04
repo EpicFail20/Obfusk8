@@ -304,24 +304,30 @@ def _load_themes() -> dict:
     return themes
 
 
-def _load_common_recognizers() -> list[dict]:
+def _load_common_recognizers(path: Path, themes: dict) -> list[dict]:
     """Common recognizers (e.g. postal addresses) applied regardless of
     the chosen theme, including when no theme is selected — for
-    false negatives that are not specific to a particular business domain."""
-    path = THEMES_DIR / COMMON_RECOGNIZERS_FILENAME
+    false negatives that are not specific to a particular business domain.
+
+    Phase 2 (EXT-08, EXT-23): also the payment card, the email with any
+    domain and the NIR, which `include_theme_recognizers` takes BY REFERENCE
+    from the medical theme (same mechanism as app/themes/extension/). An
+    unknown included name raises text_api.TextApiConfigError: startup fails
+    rather than run without the recognizer (silent false negative)."""
     if not path.exists():
         return []
     try:
         with open(path, encoding="utf-8") as f:
             data = json.load(f)
-        return data.get("ad_hoc_recognizers", [])
     except (json.JSONDecodeError, OSError) as exc:
         log.error("Reconnaisseurs communs illisibles, ignorés: %s", exc)
         return []
+    included = text_api.included_theme_recognizers(data.get("include_theme_recognizers", {}), themes, path.name)
+    return included + data.get("ad_hoc_recognizers", [])
 
 
 THEMES = _load_themes()
-COMMON_RECOGNIZERS = _load_common_recognizers()
+COMMON_RECOGNIZERS = _load_common_recognizers(THEMES_DIR / COMMON_RECOGNIZERS_FILENAME, THEMES)
 log.info("Thèmes chargés: %s", list(THEMES.keys()))
 for _theme_key, _theme_data in THEMES.items():
     log.info(
@@ -1300,9 +1306,13 @@ def _analyze_text(text: str, theme: dict | None = None, timeout: float = 30) -> 
     payload = {"text": text, "language": LANGUAGE}
 
     # Common recognizers always apply, whether a theme is selected or not.
+    # A theme recognizer with the same name as a common one is the same
+    # recognizer (common.json includes the medical NIR by reference): sent
+    # once, otherwise Presidio would return each of its matches twice.
     ad_hoc = list(COMMON_RECOGNIZERS)
     if theme and theme.get("ad_hoc_recognizers"):
-        ad_hoc.extend(theme["ad_hoc_recognizers"])
+        sent = {r.get("name") for r in ad_hoc}
+        ad_hoc.extend(r for r in theme["ad_hoc_recognizers"] if r.get("name") not in sent)
     if ad_hoc:
         payload["ad_hoc_recognizers"] = ad_hoc
 

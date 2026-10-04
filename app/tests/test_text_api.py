@@ -267,9 +267,12 @@ def test_reconnaisseur_de_theme_inclus_par_reference_et_copie(tmp_path):
 
 def test_fichiers_reels_de_l_extension_charges_avec_les_vrais_themes():
     """The shipped app/themes/extension/ files load against the real themes
-    (a renamed theme recognizer would fail here, not in production)."""
+    (a renamed theme recognizer would fail here, not in production). Since
+    phase 2 (decision Q4, EXT-08/EXT-23), the card, NIR and any-domain email
+    recognizers live in app/themes/common.json, applied to every flow: the
+    text routes still get all four entity types, from both sources."""
     loaded = text_api.load_extension_recognizers(main.THEMES_DIR / "extension", main.THEMES)
-    entities = {r["supported_entity"] for r in loaded}
+    entities = {r["supported_entity"] for r in [*loaded, *main.COMMON_RECOGNIZERS]}
     assert {"SECRET", "CREDIT_CARD", "FR_NIR", "EMAIL_ADDRESS"} <= entities
 
 

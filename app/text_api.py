@@ -204,14 +204,17 @@ def load_extension_recognizers(extension_dir: Path, themes: Mapping[str, Mapping
         entries = data.get("ad_hoc_recognizers") if isinstance(data, dict) else None
         if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
             raise TextApiConfigError(f"invalid extension recognizer file: {path.name}")
-        recognizers.extend(_included_theme_recognizers(data.get("include_theme_recognizers", {}), themes, path.name))
+        recognizers.extend(included_theme_recognizers(data.get("include_theme_recognizers", {}), themes, path.name))
         recognizers.extend(entries)
     return recognizers
 
 
-def _included_theme_recognizers(
+def included_theme_recognizers(
     includes: object, themes: Mapping[str, Mapping[str, Any]], filename: str
 ) -> list[dict[str, Any]]:
+    """Copies of the theme recognizers named in `includes` ({theme: [name,
+    ...]}). Also used by main.py for app/themes/common.json (phase 2, EXT-08):
+    any unknown theme or name raises TextApiConfigError (startup fails)."""
     if not isinstance(includes, dict):
         raise TextApiConfigError(f"invalid include_theme_recognizers in {filename}")
     found: list[dict[str, Any]] = []

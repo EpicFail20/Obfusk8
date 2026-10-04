@@ -105,7 +105,8 @@ Any other field (for instance `score_threshold`, `entities`, `ad_hoc_recognizers
 - Entity types: those of Presidio and of the themes (`PERSON`, `LOCATION`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `DATE_TIME`, `PATIENT_ID`, `FR_NIR`…),
   plus the text-API-specific ones, active whatever the theme (`app/themes/extension/`): `SECRET` (PEM private keys, JWT, URIs with credentials,
   `password`/`token`/`secret`/`api_key` assignments, `Authorization` headers, AWS, Google Cloud, Azure, GitHub, GitLab, Slack, Telegram and Stripe
-  keys), `CREDIT_CARD`, `FR_NIR` (EXT-08) and `EMAIL_ADDRESS` whatever the domain, internal ones included (EXT-23). The client must treat any
+  keys). Since phase 2, `CREDIT_CARD`, `FR_NIR` (EXT-08) and `EMAIL_ADDRESS` whatever the domain, internal ones included (EXT-23), are
+  detected by the recognizers common to every flow (`app/themes/common.json`), documents included. The client must treat any
   unknown type as sensitive.
 
 ### 2.3 `POST /api/v1/text/pseudonymize`

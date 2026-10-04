@@ -155,7 +155,10 @@ Format : contexte, décision, alternatives écartées, conséquences. Statuts : 
 - **Décision** : sous-répertoire `app/themes/extension/` (non parcouru par le `glob` non récursif, copié par le `COPY themes/` existant). Reconnaisseurs
   ponctuels envoyés à Presidio par le mécanisme existant (`ad_hoc_recognizers`), ajoutés pour les seules routes texte, quel que soit le thème.
   Le flux documents reste strictement inchangé.
-- **Conséquences** : EXT-08 et EXT-23 restent ouverts pour le flux documents (hors périmètre).
+- **Conséquences** : EXT-08 et EXT-23 restent ouverts pour le flux documents (hors périmètre). **Phase 2** (réponse Q4 du 2026-10-04) : carte,
+  NIR et courriel à domaine libre déplacés dans `app/themes/common.json`, appliqués à tous les flux ; `identifiers.json` supprimé ; le NIR reste
+  repris par référence au thème médical (`include_theme_recognizers`, désormais aussi lu dans `common.json`) ; un même reconnaisseur commun et
+  de thème n'est envoyé qu'une fois à Presidio.
 - **Mise en œuvre (étape D)** : `secrets.json` (type `SECRET`) et `identifiers.json` (`CREDIT_CARD`, `FR_NIR`, `EMAIL_ADDRESS` à domaine libre).
   Le NIR est **repris par référence** au thème médical (`include_theme_recognizers`), pas recopié : une correction du thème s'applique ici aussi,
   et un nom introuvable fait échouer le démarrage. Numéro de carte : même motif que le `CreditCardRecognizer` de Presidio 2.2.364, **sans** contrôle
