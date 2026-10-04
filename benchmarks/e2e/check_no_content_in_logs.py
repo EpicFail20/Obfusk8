@@ -36,6 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "quality"))
 sys.path.insert(0, str(ROOT / "secret_detection"))
 from build_quality_corpus import records as quality_records  # noqa: E402
+from build_supplementary_corpus import build as supplementary_records  # noqa: E402
 from build_secret_corpus import tp_records  # noqa: E402
 
 PROJECT = "obfusk8"
@@ -47,7 +48,8 @@ MIN_VALUE_CHARS = 8
 
 def _values() -> set[str]:
     values = set(CANARIES)
-    for doc in quality_records():
+    # Main and supplementary corpora (phase 2): every value sent by the benchmarks.
+    for doc in [*quality_records(), *supplementary_records()]:
         for e in doc["entities"]:
             value = doc["text"][e["start"] : e["end"]]
             if len(value) >= MIN_VALUE_CHARS:
