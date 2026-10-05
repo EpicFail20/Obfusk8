@@ -127,5 +127,6 @@
   "text_api_busy": "Too many text analyses waiting. Try again in a moment.",
   "text_api_timeout": "The analysis exceeded the maximum allowed time ({max_seconds} s). Try again in a moment.",
   "text_api_analyzer_unavailable": "Analysis engine unavailable. Try again later.",
-  "text_api_internal_error": "Unexpected internal error. Give the request identifier to the administrator."
+  "text_api_internal_error": "Unexpected internal error. Give the request identifier to the administrator.",
+  "text_api_identity_missing": "User identity missing: access denied. Sign in again; if the problem persists, give the request identifier to the administrator."
 }

@@ -40,6 +40,7 @@ import os
 import re
 import time
 import traceback
+import unicodedata
 import uuid
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
@@ -107,6 +108,14 @@ _PLACEHOLDER_CLOSE = "⟧"
 # A type that wins a tie between overlapping spans of equal length: a secret
 # must never be labelled as something less sensitive.
 _PRIORITY_TYPE = "SECRET"
+
+# D-035 (phase 2 bis): both identity headers that Traefik's forwardAuth copies
+# from oauth2-proxy (authResponseHeaders). X-Auth-Request-User keys the
+# per-user rate limit at the edge, X-Auth-Request-Email is the identity the
+# application audits (main._request_user, which falls back to "inconnu" when
+# it is missing): a request lacking either one is refused, never served under
+# a shared or empty identity.
+_IDENTITY_HEADERS = ("x-auth-request-user", "x-auth-request-email")
 
 
 class TextApiConfigError(RuntimeError):
@@ -346,6 +355,17 @@ def pseudonymize(text: str, spans: Sequence[Span]) -> tuple[str, list[MappingEnt
 # ---------------------------------------------------------------------------
 # Errors, admission control, audit
 # ---------------------------------------------------------------------------
+
+
+def has_identity(request: Request) -> bool:
+    """True when every identity header carries something visible: control
+    and format characters (category C) and white space do not count, so a
+    value made only of them is as empty as a missing header."""
+    for name in _IDENTITY_HEADERS:
+        value = request.headers.get(name, "")
+        if not "".join(c for c in value if not unicodedata.category(c).startswith("C")).strip():
+            return False
+    return True
 
 
 class ApiError(Exception):
@@ -623,6 +643,8 @@ class _TextApi:
         request_id = uuid.uuid4().hex
         outcome = _Outcome(route=route, request_id=request_id, user=self.deps.request_user(request))
         try:
+            if not has_identity(request):
+                raise ApiError(403, "forbidden", "text_api_identity_missing")
             payload, theme = await self._parse(request, outcome)
             spans = await self._detect(payload.text, theme)
             outcome.entities = Counter(span.entity_type for span in spans)
@@ -695,6 +717,8 @@ class _TextApi:
 
     async def version(self, request: Request) -> JSONResponse:
         request_id = uuid.uuid4().hex
+        if not has_identity(request):
+            return self._error_response(ApiError(403, "forbidden", "text_api_identity_missing"), request_id)
         if self.recognizers_fingerprint is None:
             self.recognizers_fingerprint = await anyio.to_thread.run_sync(self._fetch_recognizers_fingerprint)
         body = VersionResponse(

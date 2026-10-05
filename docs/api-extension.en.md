@@ -161,6 +161,7 @@ Same format as the application's existing errors (`detail` field), plus the corr
 | 400 | Body not UTF-8, invalid JSON (including a lone surrogate in a `\u` escape) |
 | 401 | Missing or wrong gateway secret (request bypassing Traefik) — existing application response, without `request_id` |
 | 401 | **Unauthenticated** (no session, expired session): oauth2-proxy's response relayed as is by Traefik, `Content-Type: text/plain`, body `Unauthorized`, **no redirect, no JSON, no `request_id`** (D-020). The client relies on the **HTTP status alone**; expected behavior in §8 |
+| 403 | **Identity missing** (phase 2 bis, D-035): `X-Auth-Request-User` or `X-Auth-Request-Email` header missing, empty, or made only of control, format or white-space characters. Refused before the body is read, on all three routes (`/version` included); JSON with `request_id`; audit line `forbidden` (analyze and pseudonymize). Does not happen for a normally signed-in user: oauth2-proxy always sets these headers. Expected behaviour: do not retry; offer to sign in again, then to contact the administrator with the `request_id` |
 | 404 | `ENABLE_EXTENSION_API=false` (standard FastAPI response `{"detail":"Not Found"}`, identical to today) |
 | 413 | Body beyond the cap (at the edge by Traefik, otherwise by the application), or `text` beyond `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` other than `application/json` (also protects against cross-site form posts, §6) |
@@ -211,7 +212,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 bytes (238 KiB) by de
    "duration_ms": 42, "outcome": "ok"}
   ```
 
-  `outcome`: `ok`, or a closed category (`too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
+  `outcome`: `ok`, or a closed category (`forbidden`, `too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
 - **Never** any text, detected value, placeholder or `mapping`: metadata only (user, types and counts, length, duration, identifier). A test will
   demonstrate it on the audit log **and** on the container logs (`app`, `presidio-analyzer`, Traefik).
 - Application logs: one line per request (`request_id`, route, status, duration, number of entities).

@@ -59,9 +59,18 @@ def _run(coro):
         loop.close()
 
 
-async def _call(app, method, path, body=b"", headers=None, chunks=None):
+# Identity headers that Traefik's forwardAuth always injects in production
+# (oauth2-proxy, authResponseHeaders). Phase 2 bis (D-035) refuses /api/v1/
+# without them, so the harness sends them by default; identity=False sends a
+# request without any, explicit headers override them.
+IDENTITY = {"x-auth-request-user": "id-fictif-0001", "x-auth-request-email": USER}
+
+
+async def _call(app, method, path, body=b"", headers=None, chunks=None, identity=True):
     """One request through the ASGI app. Returns (status, headers, json|bytes, chunks consumed)."""
-    raw_headers = [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()]
+    all_headers = {**(IDENTITY if identity else {}), **(headers or {})}
+    # latin-1, as HTTP header values reach Starlette (ASCII values: unchanged).
+    raw_headers = [(k.lower().encode(), v.encode("latin-1")) for k, v in all_headers.items()]
     parts = chunks if chunks is not None else [body]
     consumed = {"n": 0}
 
@@ -746,3 +755,51 @@ def test_budget_epuise_pendant_l_appel_classe_timeout_sans_alerte(audit_dir, ext
     assert status == 503 and body["detail"] == STRINGS["text_api_timeout"].format(max_seconds=1)
     assert alerts == []
     assert _audit_lines(audit_dir)[0]["outcome"] == "timeout"
+
+
+# ---------------------------------------------------------------------------
+# D-035 (phase 2 bis): identity required on every /api/v1/ route
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {},
+        {"x-auth-request-email": USER},
+        {"x-auth-request-user": "id-fictif-0001"},
+        {"x-auth-request-user": "", "x-auth-request-email": USER},
+        {"x-auth-request-user": "id-fictif-0001", "x-auth-request-email": "  "},
+        {"x-auth-request-user": "\u00a0\t\u00ad", "x-auth-request-email": USER},
+    ],
+    ids=["aucun", "sans-user", "sans-email", "user-vide", "email-blanc", "user-invisible"],
+)
+@pytest.mark.parametrize("path", [ANALYZE, PSEUDO])
+def test_identite_absente_ou_vide_refusee_403(audit_dir, extension_dir, caplog, headers, path):
+    detector = _regex_detector(DETECT)
+    app = _app(_deps(audit_dir, extension_dir, detector))
+    caplog.set_level(logging.DEBUG)
+    status, resp_headers, body, _ = _post(app, path, {"text": f"Bonjour {CANARY}"}, identity=False, headers=headers)
+    assert status == 403
+    assert body == {"detail": STRINGS["text_api_identity_missing"], "request_id": resp_headers["x-request-id"]}
+    assert detector.calls == []  # refused before any analysis
+    (line,) = _audit_lines(audit_dir)
+    assert line["outcome"] == "forbidden" and line["text_chars"] is None
+    assert CANARY not in json.dumps(line) and CANARY not in caplog.text
+
+
+def test_version_sans_identite_refusee_403(audit_dir, extension_dir, monkeypatch):
+    def fail_get(*args, **kwargs):
+        raise AssertionError("no analyzer call without an identity")
+
+    monkeypatch.setattr(text_api.requests, "get", fail_get)
+    app = _app(_deps(audit_dir, extension_dir, _regex_detector({})))
+    status, headers, body, _ = _run(_call(app, "GET", "/api/v1/version", identity=False))
+    assert status == 403 and body["detail"] == STRINGS["text_api_identity_missing"]
+    assert body["request_id"] == headers["x-request-id"]
+
+
+def test_message_identite_traduit():
+    for lang in ("fr", "en"):
+        strings = json.loads((Path(main.__file__).parent / "i18n" / f"{lang}.json").read_text(encoding="utf-8"))
+        assert strings["text_api_identity_missing"].strip()

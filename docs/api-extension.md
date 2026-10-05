@@ -162,6 +162,7 @@ Même format que les erreurs existantes de l'application (champ `detail`), plus 
 | 400 | Corps non UTF-8, JSON invalide (y compris surrogate isolée dans une séquence `\u`) |
 | 401 | Secret de passerelle absent ou faux (requête qui contourne Traefik) — réponse existante de l'application, sans `request_id` |
 | 401 | **Non authentifié** (pas de session, session expirée) : réponse d'oauth2-proxy relayée telle quelle par Traefik, `Content-Type: text/plain`, corps `Unauthorized`, **sans redirection ni JSON ni `request_id`** (D-020). Le client se fie au **code HTTP seul** ; conduite attendue au §8 |
+| 403 | **Identité absente** (phase 2 bis, D-035) : en-tête `X-Auth-Request-User` ou `X-Auth-Request-Email` absent, vide, ou fait uniquement de caractères de contrôle, de format ou d'espaces. Refus avant toute lecture du corps, sur les trois routes (`/version` comprise) ; JSON avec `request_id` ; ligne d'audit `forbidden` (analyse et pseudonymisation). Ne se produit pas pour un utilisateur connecté normalement : oauth2-proxy renseigne toujours ces en-têtes. Conduite attendue : ne pas réessayer ; proposer de se reconnecter, puis de contacter l'administrateur avec le `request_id` |
 | 404 | `ENABLE_EXTENSION_API=false` (réponse FastAPI standard `{"detail":"Not Found"}`, identique à aujourd'hui) |
 | 413 | Corps au-delà du plafond (en bordure par Traefik, sinon par l'application), ou `text` au-delà de `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` autre que `application/json` (protège aussi contre les envois de formulaire intersites, §6) |
@@ -213,7 +214,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 octets (238 Kio) par 
    "duration_ms": 42, "outcome": "ok"}
   ```
 
-  `outcome` : `ok`, ou une catégorie fermée (`too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
+  `outcome` : `ok`, ou une catégorie fermée (`forbidden`, `too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
 - **Jamais** de texte, de valeur détectée, de marqueur ni de `mapping` : uniquement des métadonnées (utilisateur, types et nombres, longueur, durée,
   identifiant). Un test le démontrera sur le journal d'audit **et** sur les journaux des conteneurs (`app`, `presidio-analyzer`, Traefik).
 - Journaux applicatifs : une ligne par requête (`request_id`, route, code, durée, nombre d'entités).
