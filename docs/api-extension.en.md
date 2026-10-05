@@ -1,8 +1,9 @@
 # Text API for the browser extension — contract v1
 
 > Version française : [`api-extension.md`](./api-extension.md).
-> Status: **phase 1, step B proposal**, pending validation. Nothing is implemented yet.
-> The reasoning behind each choice is in [`DECISIONS.md`](./DECISIONS.md) (decisions D-001 to D-016).
+> Status: **implemented** (phase 1), extended in phase 2 (D-014 normalization, D-020 401 without redirect) and in phase 2 bis
+> (D-035 403 on missing identity, D-030 fingerprint). Reviewed end to end from a client's point of view on 2026-10-05 (§3.1).
+> The reasoning behind each choice is in [`DECISIONS.md`](./DECISIONS.md).
 
 ## 1. Purpose
 
@@ -177,6 +178,31 @@ Same format as the application's existing errors (`detail` field), plus the corr
 Note: the document flow answers 502 when Presidio is unavailable. The v1 routes answer **503**, which is more accurate and easier for a retrying
 client to handle (D-005).
 
+### 3.1 Expected client behaviour, per status code (phase 2 bis review)
+
+Formats **measured** through the stack on 2026-10-05 (Traefik 3.7.13, oauth2-proxy 7.15.5). Only the **application**'s responses carry JSON
+with a `request_id`; Traefik's and oauth2-proxy's do not: the client relies on the **HTTP status code**, never on the body.
+
+| Code | Emitted by | Body | Client behaviour |
+|---|---|---|---|
+| 200 | application | JSON (§2) | — |
+| 400, 415, 422 | application | JSON `detail` + `request_id` | The client's own error: do not retry; log the `request_id` (never the text) |
+| 401 | oauth2-proxy | `Unauthorized` (plain text) | No or expired session: do not retry in a loop, offer to open the sign-in page (§8), then resend once |
+| 403 | application | JSON `detail` + `request_id` | Identity missing (D-035): do not retry; offer to sign in again, then to contact the administrator with the `request_id` |
+| 404 | application | JSON `{"detail":"Not Found"}`, no `request_id` | API disabled (`ENABLE_EXTENSION_API=false`) or unknown path: tell the user the server does not offer the API |
+| 405 | application | JSON `{"detail":"Method Not Allowed"}`, no `request_id` | Client bug (wrong method) |
+| 413 | Traefik **or** application | Traefik: `Request Entity Too Large` (plain text, no `Content-Type`); application: JSON + `request_id` | Text too long: the client checks `max_text_chars` itself (code points, `GET /version`) before sending; do not resend as is |
+| 429 | application **or** Traefik | Application: JSON + `request_id`, `Retry-After: 1` (queue full); Traefik: plain text, `Retry-After` and `X-Retry-In` (per-user rate, §7) | Retry **once** after `Retry-After` seconds, then give up and tell the user |
+| 500 | application | JSON `detail` + `request_id` | Do not retry automatically; show the `request_id` for the administrator |
+| 502, 504 | Traefik | plain text | Application unreachable or stopped: retry later, without a loop |
+| 503 | application | JSON + `request_id`; `Retry-After: 1` (time limit exceeded, `outcome` `timeout`) or `Retry-After: 5` (analyzer unreachable) | Retry **once** after `Retry-After`, then tell the user |
+
+In **every** failure case the text has not been pseudonymized: the extension must **never** send the original text to the AI service as a
+silent fallback (doctrine: a false negative is worse than a false positive).
+
+What a client cannot learn from the API and must take from its configuration: the server URL, the sign-in URL (§8), Traefik's rate limits
+(§7, not exposed by `/version`).
+
 ## 4. Limits and environment variables
 
 All declared in `docker-compose.yml` and in `env.fr.example` / `env.en.example`.
@@ -232,7 +258,8 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 bytes (238 KiB) by de
 | Giant input | Body cap at the edge and in the application (reading interrupted), `MAX_TEXT_CHARS`, maximum duration. |
 | Malicious JSON (deep nesting, duplicates) | Pydantic's JSON parser, bounded by the body cap; strict schema, unknown fields refused. |
 | Tricky Unicode (lone surrogates, zero-width, NFD, non-breaking spaces, bidirectional controls) | Lone surrogates rejected. The others are accepted, then normalized before detection with a position map (D-014, phase 2): offsets and pseudonymization refer to the text received, inner invisible characters included. The text is never written to a log, so no visual log spoofing risk. |
-| Denial of service, starving the document flow | Per-user rate limiting at the edge; bounded queue and a single text analysis at a time in the application; maximum duration. Known limitation: the document flow itself blocks the event loop (EXT-07, out of scope); text requests then wait for the document processing to finish. |
+| Denial of service, starving the document flow | Per-user rate limiting at the edge; bounded queue and a single text analysis at a time in the application; maximum duration. Document processing no longer blocks the event loop since phase 2 (EXT-07, D-019: dedicated thread). |
+| Empty or missing identity | 403 before the body is read (D-035, phase 2 bis): no request is served or audited under an empty or shared identity. |
 | Client weakening detection | No threshold, entity or recognizer parameter; unknown fields refused (422); unknown theme refused. |
 | Enumeration (themes, users) | Themes are public to an authenticated user (`/version`). No other user's data is reachable: no state, no job identifier. |
 | Leak through logs or audit | Metadata only, demonstrated by test (§5). `Cache-Control: no-store` on every response (existing security headers). |
@@ -265,10 +292,11 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
   - `sourceCriterion.requestHeaderName` groups requests by header value (mutually exclusive with `ipStrategy`);
   - `forwardAuth` sets the `authResponseHeaders` on the forwarded request **after deleting** any client-supplied value. The following middlewares in
     the chain therefore see the authenticated identity: `text-ratelimit` must come **after** `oidc-auth`;
-  - if the header is missing, the extracted value is an empty string: all such requests share one bucket (no error). `X-Auth-Request-User` is chosen
+  - if the header is missing, the extracted value is an empty string: all such requests share one bucket (no error on Traefik's side; since
+    phase 2 bis the application then refuses them with 403, D-035). `X-Auth-Request-User` is chosen
     over `X-Auth-Request-Email` because oauth2-proxy fills it from the user identifier, whereas the email address may be missing from the token
     (assumed from oauth2-proxy's documentation, to be checked end to end).
-  - The real behavior will be **checked end to end** in step F (two accounts, same IP: separate buckets).
+  - Checked end to end in phase 2 (`benchmarks/results/multi-user-20261005T061725.md`: two accounts, same IP, separate buckets).
 - **Body cap**: `buffering` keeps the whole body in memory up to `memRequestBodyBytes`; at the 238 KiB cap, the disk buffer is never used.
 
 ## 8. Authentication of the extension
@@ -285,5 +313,7 @@ cookie) of D-010; option 4 (Obfusk8-specific API tokens) remains rejected.
 
 ## 9. Open decisions
 
-See `DECISIONS.md`, "Open decisions" section: source of `presidio_version` (D-013), final placeholder format (D-004), propagation of exact values
-to every type (D-012), additional Unicode normalization (D-014, implemented in phase 2).
+- Source of `presidio_version` (D-013): still `null`, Presidio's REST API not exposing its version; the analyzer's **declared** versions
+  enter `detection_config` (phase 2 bis).
+- Type kept on an overlap (D-031): in the detection backlog (`docs/BACKLOG-detection.md`), current rule unchanged (§2.3).
+- Extension authentication: choice between options 2 and 3 of D-010 in phase 3 (§8).

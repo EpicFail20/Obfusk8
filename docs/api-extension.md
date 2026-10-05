@@ -1,8 +1,9 @@
 # API texte pour l'extension de navigateur — contrat v1
 
 > English version: [`api-extension.en.md`](./api-extension.en.md).
-> Statut : **proposition de la phase 1, étape B**, en attente de validation. Rien n'est encore implémenté.
-> Les raisons de chaque choix sont dans [`DECISIONS.md`](./DECISIONS.md) (décisions D-001 à D-016).
+> Statut : **implémenté** (phase 1), complété en phase 2 (normalisation D-014, 401 sans redirection D-020) et en phase 2 bis
+> (403 sur identité absente D-035, empreinte D-030). Relu de bout en bout du point de vue d'un client le 2026-10-05 (§3.1).
+> Les raisons de chaque choix sont dans [`DECISIONS.md`](./DECISIONS.md).
 
 ## 1. Objet
 
@@ -178,6 +179,31 @@ Même format que les erreurs existantes de l'application (champ `detail`), plus 
 Note : le flux documents répond 502 quand Presidio est indisponible. Les routes v1 répondent **503**, plus juste et plus simple à traiter
 pour un client qui réessaie (D-005).
 
+### 3.1 Conduite attendue du client, par code (relecture de la phase 2 bis)
+
+Formats **mesurés** à travers la pile le 2026-10-05 (Traefik 3.7.13, oauth2-proxy 7.15.5). Seules les réponses de l'**application** portent
+du JSON avec `request_id` ; celles de Traefik et d'oauth2-proxy n'en ont pas : le client se fie au **code HTTP**, jamais au corps.
+
+| Code | Émetteur | Corps | Conduite du client |
+|---|---|---|---|
+| 200 | application | JSON (§2) | — |
+| 400, 415, 422 | application | JSON `detail` + `request_id` | Erreur du client lui-même : ne pas réessayer ; journaliser le `request_id` (jamais le texte) |
+| 401 | oauth2-proxy | `Unauthorized` (texte brut) | Session absente ou expirée : ne pas réessayer en boucle, proposer d'ouvrir la page de connexion (§8), puis renvoyer une fois |
+| 403 | application | JSON `detail` + `request_id` | Identité absente (D-035) : ne pas réessayer ; proposer de se reconnecter, puis de contacter l'administrateur avec le `request_id` |
+| 404 | application | JSON `{"detail":"Not Found"}`, sans `request_id` | API désactivée (`ENABLE_EXTENSION_API=false`) ou chemin inconnu : informer l'utilisateur que le serveur n'offre pas l'API |
+| 405 | application | JSON `{"detail":"Method Not Allowed"}`, sans `request_id` | Bogue du client (mauvaise méthode) |
+| 413 | Traefik **ou** application | Traefik : `Request Entity Too Large` (texte brut, sans `Content-Type`) ; application : JSON + `request_id` | Texte trop long : le client vérifie lui-même `max_text_chars` (points de code, `GET /version`) avant l'envoi ; ne pas réessayer tel quel |
+| 429 | application **ou** Traefik | Application : JSON + `request_id`, `Retry-After: 1` (file pleine) ; Traefik : texte brut, `Retry-After` et `X-Retry-In` (débit par utilisateur, §7) | Réessayer **une** fois après `Retry-After` secondes, puis abandonner en informant l'utilisateur |
+| 500 | application | JSON `detail` + `request_id` | Ne pas réessayer automatiquement ; afficher le `request_id` pour l'administrateur |
+| 502, 504 | Traefik | texte brut | Application injoignable ou arrêtée : réessayer plus tard, sans boucle |
+| 503 | application | JSON + `request_id` ; `Retry-After: 1` (délai dépassé, `outcome` `timeout`) ou `Retry-After: 5` (analyseur injoignable) | Réessayer **une** fois après `Retry-After`, puis informer l'utilisateur |
+
+Dans **tous** les cas d'échec, le texte n'a pas été pseudonymisé : l'extension ne doit **jamais** envoyer le texte d'origine au service d'IA
+par repli silencieux (doctrine : un faux négatif est plus grave qu'un faux positif).
+
+Ce qu'un client ne peut pas apprendre de l'API et doit tenir de sa configuration : l'URL du serveur, l'URL de connexion (§8), les limites de
+débit de Traefik (§7, non exposées par `/version`).
+
 ## 4. Plafonds et variables d'environnement
 
 Toutes déclarées dans `docker-compose.yml` et dans `env.fr.example` / `env.en.example`.
@@ -234,7 +260,8 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 octets (238 Kio) par 
 | Entrée géante | Plafond de corps en bordure et dans l'application (lecture interrompue), `MAX_TEXT_CHARS`, délai maximal. |
 | JSON piégé (imbrication profonde, doublons) | Parseur JSON de Pydantic, borné par le plafond de corps ; schéma strict, champs inconnus refusés. |
 | Unicode piégeux (surrogates isolées, largeur nulle, NFD, espaces insécables, contrôle bidirectionnel) | Surrogates isolées rejetées. Les autres sont acceptées, puis normalisées avant détection avec une table de correspondance (D-014, phase 2) : positions et pseudonymisation portent sur le texte reçu, invisibles intérieurs compris. Le texte n'est jamais écrit dans un journal, donc pas de risque d'usurpation visuelle des journaux. |
-| Déni de service, famine du flux documents | Limitation de débit par utilisateur en bordure ; file bornée et une seule analyse de texte à la fois dans l'application ; délai maximal. Limite connue : le flux documents bloque lui-même la boucle d'événements (EXT-07, hors périmètre) ; les requêtes de texte attendent alors la fin du traitement du document. |
+| Déni de service, famine du flux documents | Limitation de débit par utilisateur en bordure ; file bornée et une seule analyse de texte à la fois dans l'application ; délai maximal. Le traitement des documents ne bloque plus la boucle d'événements depuis la phase 2 (EXT-07, D-019 : fil dédié). |
+| Identité vide ou absente | 403 avant toute lecture du corps (D-035, phase 2 bis) : aucune requête n'est servie ni auditée sous une identité vide ou commune. |
 | Affaiblissement de la détection par le client | Aucun paramètre de seuil, d'entités ni de reconnaisseur ; champs inconnus refusés (422) ; thème inconnu refusé. |
 | Énumération (thèmes, utilisateurs) | Les thèmes sont publics pour un utilisateur authentifié (`/version`). Aucune donnée d'autres utilisateurs n'est accessible : pas d'état, pas d'identifiant de tâche. |
 | Fuite par les journaux ou l'audit | Métadonnées seulement, démontré par test (§5). `Cache-Control: no-store` sur toutes les réponses (en-têtes de sécurité existants). |
@@ -267,10 +294,11 @@ traefik.http.middlewares.text-bodylimit.buffering.memRequestBodyBytes=244096
   - `sourceCriterion.requestHeaderName` regroupe les requêtes par valeur d'en-tête (exclusif de `ipStrategy`) ;
   - `forwardAuth` pose les `authResponseHeaders` sur la requête transmise, **après suppression** de toute valeur fournie par le client. Les middlewares
     suivants de la chaîne voient donc l'identité authentifiée : `text-ratelimit` doit être placé **après** `oidc-auth` ;
-  - si l'en-tête est absent, la valeur extraite est une chaîne vide : toutes ces requêtes partagent un même seau (pas d'erreur).
+  - si l'en-tête est absent, la valeur extraite est une chaîne vide : toutes ces requêtes partagent un même seau (pas d'erreur côté Traefik) ;
+    depuis la phase 2 bis, l'application les refuse ensuite en 403 (D-035).
     `X-Auth-Request-User` est retenu plutôt que `X-Auth-Request-Email` parce qu'oauth2-proxy le renseigne à partir de l'identifiant de l'utilisateur, alors que l'adresse électronique
     peut manquer dans le jeton (supposé d'après la documentation d'oauth2-proxy, à vérifier de bout en bout).
-  - Le comportement réel sera **vérifié de bout en bout** à l'étape F (deux comptes, même IP : seaux distincts).
+  - Vérifié de bout en bout en phase 2 (`benchmarks/results/multi-user-20261005T061725.md` : deux comptes, même IP, seaux distincts).
 - **Plafond de corps** : `buffering` met tout le corps en mémoire jusqu'à `memRequestBodyBytes` ; au plafond de 238 Kio, le tampon disque n'est jamais utilisé.
 
 ## 8. Authentification de l'extension
@@ -288,5 +316,7 @@ session du navigateur) de D-010 ; l'option 4 (jetons d'API propres à Obfusk8) r
 
 ## 9. Décisions ouvertes
 
-Voir `DECISIONS.md`, section « Décisions ouvertes » : source de `presidio_version` (D-013), format définitif du marqueur (D-004),
-propagation des valeurs exactes à tous les types (D-012), normalisation Unicode supplémentaire (D-014, mise en œuvre en phase 2).
+- Source de `presidio_version` (D-013) : toujours `null`, l'API REST de Presidio n'exposant pas sa version ; les versions **déclarées** de
+  l'analyseur entrent dans `detection_config` (phase 2 bis).
+- Type retenu lors d'un chevauchement (D-031) : au backlog de détection (`docs/BACKLOG-detection.md`), règle actuelle inchangée (§2.3).
+- Authentification de l'extension : choix entre les options 2 et 3 de D-010 en phase 3 (§8).
