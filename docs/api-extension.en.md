@@ -23,7 +23,9 @@ Principles, inherited from the project doctrine:
 ## 2. Endpoints
 
 Versioned prefix **`/api/v1/`** (D-001). A future incompatible change will take the form of a new `/api/v2/` prefix; the extension also checks
-`api_version` (major.minor) returned by `GET /api/v1/version`.
+`api_version` (major.minor) returned by `GET /api/v1/version`. **Version rule** (D-041): until the first publication, the contract evolves freely
+and `api_version` stays `1.0`; afterwards, any change visible to a client bumps `api_version` (minor if compatible, major and a new prefix
+otherwise).
 
 | Method | Path | Purpose |
 |---|---|---|

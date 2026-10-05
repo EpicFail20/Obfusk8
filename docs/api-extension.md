@@ -23,7 +23,9 @@ Principes, hérités de la doctrine du projet :
 ## 2. Points d'accès
 
 Préfixe versionné **`/api/v1/`** (D-001). Une incompatibilité future prendra la forme d'un nouveau préfixe `/api/v2/` ; l'extension compare aussi
-`api_version` (majeure.mineure) renvoyé par `GET /api/v1/version`.
+`api_version` (majeure.mineure) renvoyé par `GET /api/v1/version`. **Règle de version** (D-041) : jusqu'à la première publication, le contrat
+évolue librement et `api_version` reste `1.0` ; après, tout changement visible par un client fait évoluer `api_version` (mineure si compatible,
+majeure et nouveau préfixe sinon).
 
 | Méthode | Chemin | Rôle |
 |---|---|---|
