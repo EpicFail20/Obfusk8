@@ -182,6 +182,10 @@ nouveau ici sans régression.
 
 ## Mise à jour : outillage de test (`docker compose run app pytest` sous blocage réel)
 
+> **Phase 2 bis (EXT-09, D-016)** : `pytest` et les tests ne sont plus dans l'image ; la commande `docker compose run app pytest`
+> ci-dessous est historique. La suite se lance avec `app/run-tests.sh` (conteneur jetable de l'image de production, tests et outils
+> montés en lecture seule, même profil `app-enforce.json`). Les appels système ajoutés pour `pytest` restent nécessaires à cette méthode.
+
 Gap distinct de tout ce qui précède : **syscalls nécessaires à `pytest`
 lui-même**, jamais appelés par le code applicatif — jusqu'ici invisibles
 puisque la suite de tests n'avait jamais été rejouée à l'intérieur d'un

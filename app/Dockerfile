@@ -43,11 +43,15 @@ RUN apt-get update && apt-get upgrade -y --no-install-recommends \
 # pip upgraded first from a hash-pinned file (EXT-24), then removed once the
 # dependencies are installed: never used at runtime, and even the latest pip
 # vendors copies flagged by trivy (urllib3, msgpack, setuptools).
-COPY requirements-build.txt requirements.txt ./
-RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements-build.txt \
-    && pip install --no-cache-dir -r requirements.txt \
+# requirements.lock: the full transitive set of requirements.txt, hash-pinned
+# (EXT-01); `--no-deps` so that nothing outside the lock gets installed.
+# Production dependencies only: pytest and the test suite are not in the
+# image (EXT-09), the tests are mounted at run time (docs/DECISIONS.md D-016).
+COPY requirements-build.txt requirements.lock /tmp/
+RUN pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-build.txt \
+    && pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements.lock \
     && pip check \
-    && rm requirements-build.txt \
+    && rm /tmp/requirements-build.txt /tmp/requirements.lock \
     && python -m pip uninstall -y pip
 
 COPY main.py .
@@ -62,19 +66,16 @@ COPY text_api.py text_api_models.py ./
 COPY text_normalization.py ./
 COPY themes/ ./themes/
 COPY i18n/ ./i18n/
-COPY tests/ ./tests/
-
-# The pytest cache must write somewhere other than the read-only /app root
-# (see read_only: true in docker-compose.yml) — /tmp is mounted as tmpfs
-# so it's writable.
-RUN printf '[pytest]\ncache_dir = /tmp/.pytest_cache\n' > pytest.ini
 
 # Dedicated non-root user (fixed UID/GID so host-side bind-mount volume
-# permissions can be aligned — see deployment).
+# permissions can be aligned — see deployment). Only the data directories
+# belong to it: the code, themes and translations in /app stay root-owned,
+# so the runtime user cannot modify them even without the read-only rootfs
+# (phase 2 bis; the app never writes under /app).
 RUN mkdir -p /data/tmp /data/audit && \
     groupadd -g 1000 appuser && \
     useradd -u 1000 -g appuser -s /usr/sbin/nologin -M appuser && \
-    chown -R appuser:appuser /app /data/tmp /data/audit
+    chown -R appuser:appuser /data/tmp /data/audit
 
 USER appuser
 

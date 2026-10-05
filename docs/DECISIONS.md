@@ -387,3 +387,15 @@ Recommandations de l'inventaire de l'étape A, toutes validées :
    maison, surveillance de la publication amont.
 9. **D-035** : 403 sur `/api/v1/` si `X-Auth-Request-User` **ou** `X-Auth-Request-Email` est absent ou vide (l'application identifie
    l'utilisateur par le courriel) ; le repli « inconnu » du flux documents est consigné (EXT-47), non corrigé.
+
+## D-016 (mise à jour) — Tests montés dans un conteneur jetable de l'image de production — phase 2 bis, 2026-10-05
+
+- **Contexte** : EXT-09 corrigé, l'image de production ne contient plus ni `pytest` ni les tests.
+- **Décision** : `app/run-tests.sh` lance la suite dans un conteneur jetable de l'image de production, sous `seccomp/app-enforce.json`,
+  `--read-only`, `--network none`, tmpfs à la place des volumes ; `app/tests` est monté en lecture seule dans `/app/tests` (on teste le
+  **code de l'image**, pas celui du dépôt), les outils de `app/requirements-dev.txt` sont montés en lecture seule et ajoutés au
+  `PYTHONPATH`. Le script échoue avant tout test si l'image contient `pytest` ou `/app/tests`.
+- **Alternative écartée** : une étape `test` dans le Dockerfile (image de test dérivée) : un second artefact à construire et à garder
+  cohérent, alors que le montage suffit.
+- **Conséquences** : pour tester du code non encore construit, reconstruire l'image (`docker-compose.build.yml`) ou monter `app/` en
+  entier (méthode de la phase 2).

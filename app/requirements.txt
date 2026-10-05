@@ -1,3 +1,7 @@
+# Top-level production dependencies. The image installs requirements.lock
+# (full transitive set, hash-pinned, generated from this file: see its
+# header); regenerate the lock after any change here. Test and development
+# tools live in requirements-dev.in / requirements-dev.txt, never here (EXT-09).
 fastapi==0.141.1
 uvicorn[standard]==0.35.0
 python-multipart==0.0.32
@@ -15,4 +19,3 @@ Pillow==12.3.0
 # (checked via OSV.dev) — Python wrapper around the tesseract-ocr binary (see
 # Dockerfile for the system package and its known limitation).
 pytesseract==0.3.13
-pytest>=9.0.3,<10
