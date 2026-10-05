@@ -95,6 +95,20 @@ def compare(a: dict[str, Any], b: dict[str, Any]) -> str:
                 f"| {corpus} | {run_['label']} | {recall:.3f} | {leaked} | {precision:.3f} | {fp} | "
                 f"{per_type.get('PERSON', {}).get('leaked', 0)} | {per_type.get('LOCATION', {}).get('leaked', 0)} |"
             )
+    lines += [
+        "",
+        "Masquage par famille du corpus complémentaire (dont `noms_minuscules`, D-027) :",
+        "",
+        "| Famille | " + " | ".join(run_["label"] for run_ in (a, b)) + " |",
+        "|---|---|---|",
+    ]
+    families = a["results"]["supplementary"]["masking"]["per_variant"]
+    for family in sorted(families):
+        cells = []
+        for run_ in (a, b):
+            v = run_["results"]["supplementary"]["masking"]["per_variant"].get(family, {})
+            cells.append(f"{v.get('covered', 0)}/{v.get('covered', 0) + v.get('leaked', 0)}")
+        lines.append(f"| {family} | " + " | ".join(cells) + " |")
     return "\n".join(lines) + "\n"
 
 

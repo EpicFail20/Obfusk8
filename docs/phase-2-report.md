@@ -248,3 +248,32 @@ Chaque point est une décision humaine : données mesurées, options, et ma reco
 | 11 | **Complément de `CLAUDE.md` §1** | Faits nouveaux : fil unique pour PyMuPDF (D-019), point d'entrée `_analyze_normalized` (D-014), `app/tests/fake_secrets.py` (Q5), repli de localisation PDF (D-026), séquences d'échappement imposées pour les caractères invisibles | a) je propose le diff ; b) non | a |
 | 12 | **EXT-39, EXT-40** (caractères bidirectionnels littéraux dans des tests existants ; CSV à une seule colonne reconnue) | Consignés, non corrigés | Les joindre à la phase 2 bis ou les traiter à part | Phase 2 bis |
 | 13 | **Validation de la phase** | Ce compte rendu | Avancer `feat/text-api` par `git merge --ff-only feat/pilote-serveur` (D-025), puis pousser | À ta décision après relecture du diff |
+
+## 13. Suite du 2026-10-05 : application des décisions et validation par reconstruction
+
+Décisions humaines consignées en D-027 à D-038 (`2dbf820`). Appliqué dans cette phase : EXT-44 (`footer = "-"`, `8f1377b`) ; banc du jeu de test
+indépendant prêt (D-038, `BENCH_CORPUS=holdout`, fichier absent à ce jour, jamais lu hors du banc) ; mesure complémentaire d'EXT-18 (D-027).
+Les points 2 à 6 et le contrôle d'identité du point 9 attendent la phase 2.1.
+
+**Validation par reconstruction** (observé) : image `app` reconstruite depuis le Dockerfile de la branche (`docker compose build app`, image
+`3f5dbf6cc202…`, image de base `python:3.12-slim` tirée à cette occasion, condensat de registre `sha256:02108f5d…`, Python 3.12.15, non épinglée,
+EXT-01) ; pile entièrement redémarrée ; `app` sous `Seccomp: 2`.
+
+| Vérification | Compte rendu (image rapiécée) | Image reconstruite |
+|---|---|---|
+| Suite de tests sous seccomp | 460 réussis | 460 réussis (tests du dépôt et tests copiés dans l'image) |
+| Qualité, corpus principal (`quality-20261005T071403.md`) | masquage 0,973, 27 exposées, P 0,883 | identique |
+| Secrets (`secrets-20261005T065546.md`) | 21/21, 0 faux positif | identique |
+| Zones contre la référence (`doc-zones-compare-20261005T065210.txt`) | — | **identique ligne à ligne** à la comparaison de la phase 2 |
+
+Aucun écart. **Seule zone disparue sur l'ensemble des documents de référence** : « Antécédents » (12 zones : 8 en DOCX et CSV, même empreinte
+`850debaa3b04`, 4 en PDF au même emplacement, sur les 4 thèmes ; 0 en image) — D-034 confirmé.
+
+**EXT-18, noms en minuscules** (D-027) : 15/36 noms couverts avec le filtre PROPN, 20/36 sans ; corpus principal inchangé. Le filtre coûte des
+faux négatifs sur cette famille ; nouvelle famille de faux négatifs consignée (EXT-46). Décision définitive à prendre.
+
+**Compte sans courriel** (D-035) : en attente de la création du compte par l'humain (attribut email facultatif dans Keycloak).
+
+**Observations** : oauth2-proxy journalise depuis le 2026-09-24 « --reverse-proxy is enabled but no --trusted-proxy-ip CIDRs were configured »
+(tous les en-têtes de transfert sont crus ; oauth2-proxy n'est joignable que par Traefik sur le réseau interne : supposé sans conséquence, non
+vérifié) ; « Rejecting invalid redirect » (EXT-45).

@@ -31,7 +31,9 @@ Writes a timestamped JSON and Markdown report in benchmarks/results/.
 
 Usage: python3 benchmarks/quality/run_quality_bench.py   (environment: see benchmarks/obfusk8_client.py;
        BENCH_STACK_INFO=<file> adds the versions collected by benchmarks/collect_stack_info.sh;
-       BENCH_CORPUS=supplementary measures the phase 2 supplementary corpus instead of the main one)
+       BENCH_CORPUS=supplementary measures the phase 2 supplementary corpus instead of the main one;
+       BENCH_CORPUS=holdout measures the independent corpus of BENCH_HOLDOUT_FILE, default
+       ~/obfusk8-holdout.jsonl, outside the repository, aggregated figures only — D-038)
 """
 
 import json
@@ -55,7 +57,13 @@ RESULTS = HERE.parent / "results"
 # build_quality_corpus.records()) or
 # "supplementary" (build_supplementary_corpus.py, built in memory: families
 # EXT-29 to EXT-31 with >= 30 examples each, phase 2).
+# "holdout" (D-038): an independent corpus kept OUTSIDE the repository, same
+# format as the main one. Its content is never printed nor written: an
+# invalid line is reported by its number only, and the report keeps
+# aggregated figures (no prompt id, category or text).
 CORPUS = os.environ.get("BENCH_CORPUS", "main")
+HOLDOUT_FILE = Path(os.environ.get("BENCH_HOLDOUT_FILE", "~/obfusk8-holdout.jsonl")).expanduser()
+HOLDOUT_KEYS = {"id", "lang", "category", "variant", "text", "entities"}
 
 # Annotated type -> predicted types that count as a correct detection.
 ACCEPTED: dict[str, set[str]] = {
@@ -178,9 +186,31 @@ def evaluate(docs: list[dict[str, Any]], predictions: dict[str, list[dict[str, A
     }
 
 
+def _holdout() -> list[dict[str, Any]]:
+    docs = []
+    for number, line in enumerate(HOLDOUT_FILE.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            doc = json.loads(line)
+        except ValueError:
+            raise SystemExit(f"holdout: line {number} is not valid JSON") from None
+        if (
+            not isinstance(doc, dict)
+            or not set(doc) >= HOLDOUT_KEYS
+            or not all(isinstance(e, dict) and {"start", "end", "type"} <= set(e) for e in doc["entities"])
+        ):
+            raise SystemExit(f"holdout: line {number} does not have the corpus format")
+        doc["id"] = f"h-{number:05d}"  # the file's own ids are never reported
+        docs.append(doc)
+    return docs
+
+
 def _corpus() -> list[dict[str, Any]]:
     if CORPUS == "supplementary":
         return build_supplementary()
+    if CORPUS == "holdout":
+        return _holdout()
     if CORPUS != "main":
         raise SystemExit(f"unknown BENCH_CORPUS: {CORPUS}")
     return build_main()
@@ -196,9 +226,12 @@ def run() -> dict[str, Any]:
         for doc in docs:
             status, body, _ = api.call("analyze", doc["text"], theme)
             if status != HTTP_OK:
-                raise RuntimeError(f"{doc['id']}: HTTP {status}")
+                raise RuntimeError(f"{doc['id']}: HTTP {status}")  # ids of the holdout are h-<line>
             predictions[doc["id"]] = body["entities"]
         results[theme or "aucun"] = evaluate(docs, predictions)
+        if CORPUS == "holdout":
+            # D-038: aggregated figures only — no per-prompt leak list.
+            results[theme or "aucun"].pop("leaks", None)
     stack: dict[str, Any] = {}
     if os.environ.get("BENCH_STACK_INFO"):
         stack = json.loads(Path(os.environ["BENCH_STACK_INFO"]).read_text(encoding="utf-8"))
@@ -214,6 +247,7 @@ def run() -> dict[str, Any]:
             "prompts": len(docs),
             "entities": sum(len(d["entities"]) for d in docs),
             "variants": dict(Counter(d["variant"] for d in docs)),
+            **({"file": "BENCH_HOLDOUT_FILE (outside the repository)"} if CORPUS == "holdout" else {}),
         },
         "results": results,
     }

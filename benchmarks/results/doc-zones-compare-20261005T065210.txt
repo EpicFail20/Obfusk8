@@ -1,0 +1,469 @@
+csv/aucun        reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 5, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 37, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 11, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 13, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 19, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 31, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 35, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 37, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 37, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 43, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 47, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 49, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 5, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+csv/compta       reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 5, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 37, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 11, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 13, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 19, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 31, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 35, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 37, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 37, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 43, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 47, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 49, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 5, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+csv/it           reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 5, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 37, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 11, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 13, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 19, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 31, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 35, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 37, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 37, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 43, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 47, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 49, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 5, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+csv/medical      reference=120 current=122 lost=1 extended=11 added=14
+  - lost {"block": 31, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 5, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 21, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 21, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 21, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 25, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 37, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 13, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 13, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 19, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 21, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 21, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+  + added {"block": 23, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 23, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 25, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 35, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 37, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 37, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 49, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 49, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 5, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+docx/aucun       reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 1, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 1, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 17, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 1, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 14, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 16, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 17, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 17, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 20, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 22, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 23, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 4, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 5, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 8, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/compta      reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 1, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 1, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 17, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 1, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 14, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 16, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 17, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 17, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 20, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 22, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 23, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 4, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 5, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 8, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/it          reference=115 current=123 lost=1 extended=11 added=20
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 1, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 1, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 17, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 1, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 122, "len": 21, "sha": "6a0aba45aa6c", "start": 101, "types": "FR_NIR"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 14, "end": 124, "len": 21, "sha": "6a0aba45aa6c", "start": 103, "types": "FR_NIR"}
+  + added {"block": 16, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 17, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 17, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 20, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 22, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 23, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 4, "end": 121, "len": 21, "sha": "6a0aba45aa6c", "start": 100, "types": "FR_NIR"}
+  + added {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 5, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 8, "end": 121, "len": 21, "sha": "369ce85a36fd", "start": 100, "types": "FR_NIR"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+docx/medical     reference=120 current=122 lost=1 extended=11 added=14
+  - lost {"block": 14, "end": 230, "len": 13, "sha": "850debaa3b04", "start": 217, "types": "LOCATION"}
+  ~ extended {"block": 1, "end": 141, "len": 17, "sha": "c26e8ceb2330", "start": 124, "types": "STREET_ADDRESS"}
+  ~ extended {"block": 1, "end": 154, "len": 5, "sha": "da72c090e052", "start": 149, "types": "LOCATION"}
+  ~ extended {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  ~ extended {"block": 9, "end": 156, "len": 8, "sha": "481833b82873", "start": 148, "types": "URL"}
+  ~ extended {"block": 9, "end": 172, "len": 11, "sha": "bfabc3743295", "start": 161, "types": "URL"}
+  ~ extended {"block": 9, "end": 200, "len": 5, "sha": "beee5b80ee60", "start": 195, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 75, "len": 5, "sha": "beee5b80ee60", "start": 70, "types": "PERSON"}
+  ~ extended {"block": 10, "end": 117, "len": 5, "sha": "beee5b80ee60", "start": 112, "types": "PERSON"}
+  ~ extended {"block": 11, "end": 177, "len": 5, "sha": "beee5b80ee60", "start": 172, "types": "PERSON"}
+  ~ extended {"block": 17, "end": 104, "len": 8, "sha": "e53df4038ee6", "start": 96, "types": "PERSON"}
+  ~ extended {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "IBAN_CODE, PERSON"}
+  + added {"block": 1, "end": 154, "len": 30, "sha": "2b40469674ff", "start": 124, "types": "LOCATION, STREET_ADDRESS"}
+  + added {"block": 10, "end": 117, "len": 12, "sha": "7e558b13d527", "start": 105, "types": "PERSON"}
+  + added {"block": 10, "end": 75, "len": 12, "sha": "7e558b13d527", "start": 63, "types": "PERSON"}
+  + added {"block": 11, "end": 177, "len": 12, "sha": "7e558b13d527", "start": 165, "types": "PERSON"}
+  + added {"block": 16, "end": 129, "len": 29, "sha": "9d35450e6662", "start": 100, "types": "CREDIT_CARD, FR_NIR"}
+  + added {"block": 17, "end": 154, "len": 58, "sha": "6f4097124e3d", "start": 96, "types": "CREDIT_CARD, FR_NIR, IBAN_CODE, PERSON"}
+  + added {"block": 17, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 23, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 23, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 5, "end": 134, "len": 38, "sha": "a59c79727755", "start": 96, "types": "CREDIT_CARD, IBAN_CODE, PERSON"}
+  + added {"block": 5, "end": 68, "len": 11, "sha": "5f2744d571bb", "start": 57, "types": "DATE_TIME"}
+  + added {"block": 8, "end": 175, "len": 11, "sha": "f5e6fd7116de", "start": 164, "types": "PERSON"}
+  + added {"block": 9, "end": 172, "len": 24, "sha": "d9cc3146b878", "start": 148, "types": "EMAIL_ADDRESS, URL"}
+  + added {"block": 9, "end": 200, "len": 12, "sha": "7e558b13d527", "start": 188, "types": "PERSON"}
+image/aucun      reference=74 current=85 lost=0 extended=5 added=16
+  ~ extended {"page": 0, "rect": [220, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [283, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [346, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [409, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION"}
+  + added {"page": 0, "rect": [122, 761, 26, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [157, 761, 25, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [193, 761, 38, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [220, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [241, 761, 40, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [283, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [290, 761, 32, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [346, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [409, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [537, 313, 68, 16], "types": "STREET_ADDRESS"}
+  + added {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION, STREET_ADDRESS"}
+  + added {"page": 0, "rect": [641, 857, 25, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [67, 761, 10, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [676, 856, 37, 17], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [724, 857, 59, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [87, 761, 25, 16], "types": "FR_NIR"}
+image/compta     reference=74 current=85 lost=0 extended=5 added=16
+  ~ extended {"page": 0, "rect": [220, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [283, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [346, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [409, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION"}
+  + added {"page": 0, "rect": [122, 761, 26, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [157, 761, 25, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [193, 761, 38, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [220, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [241, 761, 40, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [283, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [290, 761, 32, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [346, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [409, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [537, 313, 68, 16], "types": "STREET_ADDRESS"}
+  + added {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION, STREET_ADDRESS"}
+  + added {"page": 0, "rect": [641, 857, 25, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [67, 761, 10, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [676, 856, 37, 17], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [724, 857, 59, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [87, 761, 25, 16], "types": "FR_NIR"}
+image/it         reference=74 current=85 lost=0 extended=5 added=16
+  ~ extended {"page": 0, "rect": [220, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [283, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [346, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [409, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION"}
+  + added {"page": 0, "rect": [122, 761, 26, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [157, 761, 25, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [193, 761, 38, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [220, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [241, 761, 40, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [283, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [290, 761, 32, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [346, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [409, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [537, 313, 68, 16], "types": "STREET_ADDRESS"}
+  + added {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION, STREET_ADDRESS"}
+  + added {"page": 0, "rect": [641, 857, 25, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [67, 761, 10, 16], "types": "FR_NIR"}
+  + added {"page": 0, "rect": [676, 856, 37, 17], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [724, 857, 59, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [87, 761, 25, 16], "types": "FR_NIR"}
+image/medical    reference=81 current=85 lost=0 extended=5 added=9
+  ~ extended {"page": 0, "rect": [220, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [283, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [346, 889, 54, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [409, 889, 53, 16], "types": "IBAN_CODE"}
+  ~ extended {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION"}
+  + added {"page": 0, "rect": [220, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [283, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [346, 889, 54, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [409, 889, 53, 16], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 0, "rect": [537, 313, 68, 16], "types": "STREET_ADDRESS"}
+  + added {"page": 0, "rect": [615, 312, 60, 22], "types": "LOCATION, STREET_ADDRESS"}
+  + added {"page": 0, "rect": [641, 857, 25, 16], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [676, 856, 37, 17], "types": "DATE_TIME"}
+  + added {"page": 0, "rect": [724, 857, 59, 16], "types": "DATE_TIME"}
+pdf/aucun        reference=119 current=132 lost=1 extended=10 added=24
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 0, "rect": [450, 492, 168, 23], "types": "STREET_ADDRESS"}
+  ~ extended {"page": 1, "rect": [166, 492, 381, 23], "types": "IBAN_CODE"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 0, "rect": [450, 492, 302, 23], "types": "STREET_ADDRESS"}
+  + added {"page": 1, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 1, "rect": [166, 492, 381, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 1, "rect": [664, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 2, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 1232, 210, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [1073, 1210, 13, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+  + added {"page": 3, "rect": [100, 862, 210, 23], "types": "FR_NIR"}
+  + added {"page": 3, "rect": [1073, 840, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [100, 122, 260, 23], "types": "CREDIT_CARD, FR_NIR"}
+  + added {"page": 4, "rect": [1073, 100, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [166, 492, 508, 23], "types": "CREDIT_CARD, FR_NIR, IBAN_CODE"}
+  + added {"page": 4, "rect": [663, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [100, 1253, 38, 23], "types": "IBAN_CODE"}
+  + added {"page": 5, "rect": [270, 1232, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [324, 862, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [715, 1232, 337, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+pdf/compta       reference=119 current=132 lost=1 extended=10 added=24
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 0, "rect": [450, 492, 168, 23], "types": "STREET_ADDRESS"}
+  ~ extended {"page": 1, "rect": [166, 492, 381, 23], "types": "IBAN_CODE"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 0, "rect": [450, 492, 302, 23], "types": "STREET_ADDRESS"}
+  + added {"page": 1, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 1, "rect": [166, 492, 381, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 1, "rect": [664, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 2, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 1232, 210, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [1073, 1210, 13, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+  + added {"page": 3, "rect": [100, 862, 210, 23], "types": "FR_NIR"}
+  + added {"page": 3, "rect": [1073, 840, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [100, 122, 260, 23], "types": "CREDIT_CARD, FR_NIR"}
+  + added {"page": 4, "rect": [1073, 100, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [166, 492, 508, 23], "types": "CREDIT_CARD, FR_NIR, IBAN_CODE"}
+  + added {"page": 4, "rect": [663, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [100, 1253, 38, 23], "types": "IBAN_CODE"}
+  + added {"page": 5, "rect": [270, 1232, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [324, 862, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [715, 1232, 337, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+pdf/it           reference=119 current=132 lost=1 extended=10 added=24
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 0, "rect": [450, 492, 168, 23], "types": "STREET_ADDRESS"}
+  ~ extended {"page": 1, "rect": [166, 492, 381, 23], "types": "IBAN_CODE"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 0, "rect": [450, 492, 302, 23], "types": "STREET_ADDRESS"}
+  + added {"page": 1, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 1, "rect": [166, 492, 381, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 1, "rect": [664, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 2, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 1232, 210, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [1073, 1210, 13, 23], "types": "FR_NIR"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+  + added {"page": 3, "rect": [100, 862, 210, 23], "types": "FR_NIR"}
+  + added {"page": 3, "rect": [1073, 840, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [100, 122, 260, 23], "types": "CREDIT_CARD, FR_NIR"}
+  + added {"page": 4, "rect": [1073, 100, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [166, 492, 508, 23], "types": "CREDIT_CARD, FR_NIR, IBAN_CODE"}
+  + added {"page": 4, "rect": [663, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [100, 122, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [100, 1253, 38, 23], "types": "IBAN_CODE"}
+  + added {"page": 5, "rect": [270, 1232, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [324, 862, 229, 23], "types": "FR_NIR"}
+  + added {"page": 5, "rect": [715, 1232, 337, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+pdf/medical      reference=127 current=132 lost=1 extended=10 added=16
+  - lost {"page": 3, "rect": [277, 883, 126, 23], "types": "LOCATION"}
+  ~ extended {"page": 0, "rect": [450, 492, 168, 23], "types": "STREET_ADDRESS"}
+  ~ extended {"page": 1, "rect": [166, 492, 381, 23], "types": "IBAN_CODE"}
+  ~ extended {"page": 2, "rect": [100, 556, 85, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [160, 556, 57, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [163, 600, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [237, 556, 126, 23], "types": "URL"}
+  ~ extended {"page": 2, "rect": [245, 862, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [795, 840, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [818, 1232, 58, 23], "types": "PERSON"}
+  ~ extended {"page": 2, "rect": [834, 122, 58, 23], "types": "PERSON"}
+  + added {"page": 0, "rect": [450, 492, 302, 23], "types": "STREET_ADDRESS"}
+  + added {"page": 1, "rect": [166, 492, 381, 23], "types": "CREDIT_CARD, IBAN_CODE"}
+  + added {"page": 1, "rect": [664, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 2, "rect": [100, 556, 263, 23], "types": "EMAIL_ADDRESS, LOCATION, URL"}
+  + added {"page": 2, "rect": [100, 600, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [182, 862, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [732, 840, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [755, 1232, 121, 23], "types": "PERSON"}
+  + added {"page": 2, "rect": [774, 122, 119, 23], "types": "PERSON"}
+  + added {"page": 4, "rect": [100, 122, 260, 23], "types": "CREDIT_CARD, FR_NIR"}
+  + added {"page": 4, "rect": [1073, 100, 13, 23], "types": "FR_NIR"}
+  + added {"page": 4, "rect": [166, 492, 508, 23], "types": "CREDIT_CARD, FR_NIR, IBAN_CODE"}
+  + added {"page": 4, "rect": [663, 470, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [100, 1253, 38, 23], "types": "IBAN_CODE"}
+  + added {"page": 5, "rect": [270, 1232, 126, 23], "types": "DATE_TIME"}
+  + added {"page": 5, "rect": [715, 1232, 337, 23], "types": "CREDIT_CARD, IBAN_CODE"}

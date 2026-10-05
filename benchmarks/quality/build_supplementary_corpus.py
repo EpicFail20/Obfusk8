@@ -32,11 +32,16 @@ Families (variant field):
   date_lettres_fr, date_lettres_en         EXT-31: month in letters, with
       and without weekday, ordinal day, abbreviated month;
   date_tiret_typographique                 EXT-31: en dash, em dash,
-      non-breaking hyphen.
+      non-breaking hyphen;
+  noms_minuscules                          EXT-18 (D-027, 2026-10-05): names
+      typed in lower case, chat style ("prénom nom", "nom prénom", no
+      accents), the case the PROPN filter of the patched spaCy recognizer
+      could drop (no token tagged as a proper noun).
 """
 
 import random
 import sys
+import unicodedata
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -129,6 +134,17 @@ def _typo_date(dash: str) -> Form:
     return form
 
 
+def _lower_name(order: str) -> Form:
+    def form(v: Values) -> str:
+        first, last = v.person().split(" ", 1)
+        name = f"{last} {first}" if order == "last_first" else f"{first} {last}"
+        if order == "ascii":
+            name = unicodedata.normalize("NFKD", name).encode("ascii", "ignore").decode()
+        return name.lower()
+
+    return form
+
+
 def _address(sep: str) -> Form:
     def form(v: Values) -> str:
         postcode, city = v.rng.choice(CITIES)
@@ -186,6 +202,16 @@ FAMILIES: dict[str, tuple[str, str, list[Form], list[str]]] = {
         "en",
         [_en_us, _en_weekday, _en_ordinal],
         ["Born on {v} in Leeds.", "The appointment is on {v}.", "Hired {v}, probation ended later."],
+    ),
+    "noms_minuscules": (
+        "PERSON",
+        "fr",
+        [_lower_name("first_last"), _lower_name("last_first"), _lower_name("ascii")],
+        [
+            "salut, tu peux relancer {v} pour le rdv de demain ?",
+            "{v} a appelé ce matin, il faut le rappeler",
+            "dis à {v} que c'est ok pour jeudi",
+        ],
     ),
     "date_tiret_typographique": (
         "DATE",
