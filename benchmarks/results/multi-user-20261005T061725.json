@@ -1,0 +1,106 @@
+{
+  "generated_at": "2026-10-05T05:55:05+0000",
+  "users": 4,
+  "rate_limit_per_user": {
+    "first": "compte-1",
+    "second": "compte-2",
+    "first_user": {
+      "200 app": 20,
+      "429 edge": 10
+    },
+    "second_user_right_after": {
+      "200 app": 5
+    }
+  },
+  "starvation": {
+    "prompt_users": [
+      "compte-1",
+      "compte-2",
+      "compte-3"
+    ],
+    "documents_user": "compte-4",
+    "rounds": 2,
+    "documents_per_round": 9,
+    "document_detect": {
+      "alone": {
+        "n": 18,
+        "p50_ms": 1539.1,
+        "p95_ms": 1583.2,
+        "max_ms": 1583.2
+      },
+      "with_prompt_flows": {
+        "n": 18,
+        "p50_ms": 1846.7,
+        "p95_ms": 1904.2,
+        "max_ms": 1904.2
+      }
+    },
+    "prompts_all_users": {
+      "outside_document_processing": {
+        "n": 849,
+        "p50_ms": 138.4,
+        "p95_ms": 210.0,
+        "max_ms": 274.9
+      },
+      "overlapping_document_processing": {
+        "n": 105,
+        "p50_ms": 423.9,
+        "p95_ms": 883.8,
+        "max_ms": 981.3
+      }
+    },
+    "per_user": {
+      "compte-1": {
+        "outside_document_processing": {
+          "n": 283,
+          "p50_ms": 72.5,
+          "p95_ms": 139.5,
+          "max_ms": 199.9
+        },
+        "overlapping_document_processing": {
+          "n": 35,
+          "p50_ms": 218.8,
+          "p95_ms": 583.9,
+          "max_ms": 794.0
+        },
+        "statuses": {
+          "200 app": 318
+        }
+      },
+      "compte-2": {
+        "outside_document_processing": {
+          "n": 283,
+          "p50_ms": 138.1,
+          "p95_ms": 152.1,
+          "max_ms": 210.4
+        },
+        "overlapping_document_processing": {
+          "n": 35,
+          "p50_ms": 441.6,
+          "p95_ms": 827.4,
+          "max_ms": 899.1
+        },
+        "statuses": {
+          "200 app": 318
+        }
+      },
+      "compte-3": {
+        "outside_document_processing": {
+          "n": 283,
+          "p50_ms": 203.3,
+          "p95_ms": 214.1,
+          "max_ms": 274.9
+        },
+        "overlapping_document_processing": {
+          "n": 35,
+          "p50_ms": 697.4,
+          "p95_ms": 917.9,
+          "max_ms": 981.3
+        },
+        "statuses": {
+          "200 app": 318
+        }
+      }
+    }
+  }
+}

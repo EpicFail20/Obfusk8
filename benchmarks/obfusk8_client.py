@@ -56,7 +56,9 @@ if not VERIFY_TLS:
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-def login() -> requests.Session:
+def login(user: str | None = None, password: str | None = None) -> requests.Session:
+    """Session of BENCH_USER/BENCH_PASSWORD, or of the account given (phase 2,
+    multi-user benchmark)."""
     session = requests.Session()
     session.verify = VERIFY_TLS
     page = session.get(f"{BASE_URL}/oauth2/start?rd=%2F", timeout=30)
@@ -65,7 +67,11 @@ def login() -> requests.Session:
         raise RuntimeError(f"Keycloak login form not found (HTTP {page.status_code})")
     session.post(
         html.unescape(form.group(1)),
-        data={"username": os.environ["BENCH_USER"], "password": os.environ["BENCH_PASSWORD"], "credentialId": ""},
+        data={
+            "username": user if user is not None else os.environ["BENCH_USER"],
+            "password": password if password is not None else os.environ["BENCH_PASSWORD"],
+            "credentialId": "",
+        },
         timeout=30,
     )
     if not any(c.name.startswith("_oauth2_proxy") for c in session.cookies):

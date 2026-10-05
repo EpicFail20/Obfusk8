@@ -20,7 +20,8 @@ Keycloak, `app` sous `seccomp/app-enforce.json`, `presidio-analyzer`), sauf ment
 - **401 en texte brut** sur `/api/v1/` sans redirection (D-020) ; interface web inchangée.
 - **EXT-22, EXT-15, EXT-17** corrigés ; suite de tests entièrement verte sous seccomp.
 - **Aucun littéral au format réel d'un secret** dans le dépôt (Q5).
-- Premiers bancs du flux documents et d'EXT-18 publiés. **Mesure multi-utilisateurs non faite** : comptes de test 2 à 4 inutilisables (§7).
+- Premiers bancs du flux documents et d'EXT-18 publiés. **Mesure multi-utilisateurs faite le 2026-10-05** après régularisation des comptes :
+  limitation par utilisateur effective, aucune famine (§4). La vérification d'un compte **sans courriel** reste impossible (§7).
 
 ## 2. Commits
 
@@ -47,6 +48,7 @@ Keycloak, `app` sous `seccomp/app-enforce.json`, `presidio-analyzer`), sauf ment
 | `b2a8706` | Secrets fictifs reconstruits à l'exécution (Q5) ; corpus non versionnés |
 | `c35c8de` | Mesures de latence de l'étape D |
 | `780fcd7` | Mesures de l'étape G : flux documents, EXT-18, EXT-35, qualité ; EXT-41, EXT-42 |
+| `2e97008` | Vérifications finales et première version de ce compte rendu |
 | *(dernier)* | Vérifications finales et ce compte rendu |
 
 ## 3. Objectifs chiffrés (validés à l'étape A) et écarts
@@ -102,6 +104,7 @@ Aucune dépendance de production ajoutée (`docs/DEPENDENCIES.md`).
 | EXT-35 (`pdf-localization-20261004T214610.md`) | 0 entité sans rectangle, 0 valeur exposée avec les zones de l'application, 16 rattrapées par le repli |
 | Flux documents (`doc-quality-20261004T214804.md`) | masquage DOCX 0,965, CSV 0,965, PDF 0,951 (sans thème et thème médical) |
 | EXT-18 (`propn-sans_filtre-20261004T214628.md`) | §6 |
+| Plusieurs utilisateurs (`multi-user-20261005T061725.md`, 4 comptes, même IP) | Limitation par utilisateur : compte-1 20 × 200 puis 10 × 429 (Traefik), compte-2 5 × 200 juste après. Famine : 3 utilisateurs à un prompt de 2 000 car. par seconde pendant que le 4ᵉ fait détecter 18 documents : 954/954 prompts en 200 (aucun 429 ni 503), documents tous détectés (p95 1 583 ms seul, 1 904 ms sous charge) ; prompt p95 210 ms hors traitement, 884 ms pendant (1 seul utilisateur : 261 ms) ; 8 processus au plus. Audit : 3 identités distinctes, aucune vide |
 
 ## 5. Non-régression du flux documents
 
@@ -148,10 +151,10 @@ localisation (texte invisible, polices sans table ToUnicode, glyphes réordonné
 
 ## 7. Incidents, écarts et points à décider
 
-1. **Comptes de test 2 à 4 inutilisables** (observé) : Keycloak exige pour `compte-2` et `compte-3` de compléter le profil (deux champs
-   obligatoires vides, probablement le compte sans courriel) et pour `compte-4` un changement de mot de passe. Le prompt m'interdit de modifier
-   un compte : la vérification de `X-Auth-Request-User` pour un compte sans courriel et la **mesure multi-utilisateurs (étape G.4) ne sont pas
-   faites**. À faire après régularisation des comptes par l'humain.
+1. **Comptes de test** (observé) : le 2026-10-04, Keycloak exigeait pour `compte-2` et `compte-3` de compléter le profil et pour `compte-4` un
+   changement de mot de passe ; je ne les ai pas modifiés. Régularisés par l'humain le 2026-10-05 : la mesure multi-utilisateurs est faite (§4).
+   Les **quatre comptes ont désormais une adresse de courriel** (`/oauth2/userinfo` : `email` renseigné pour chacun) : la vérification de
+   `X-Auth-Request-User` pour un compte sans courriel reste **impossible** (décision 9, §12).
 2. **Régression introduite puis corrigée** (`462ab55` → `b5ef39e`) : la normalisation transformait « glyphe sans correspondance + espace » en
    deux espaces ; le NER ne trouvait plus le nom ; le nom fuyait dans le PDF caviardé. Trouvée en rejouant le test de bout en bout EXT-35 pendant
    l'étape D, que je n'avais pas rejoué après l'étape B. Test de non-régression ajouté.
@@ -181,7 +184,10 @@ localisation (texte invisible, polices sans table ToUnicode, glyphes réordonné
   supposée.
 - L'écart de latence sur les petites tailles vient des reconnaisseurs ajoutés (§3).
 - Le filtre PROPN ne coûte aucun faux négatif sur des données réelles : observé seulement sur des corpus synthétiques.
-- `X-Auth-Request-User` est renseigné pour un compte sans courriel (supposition de la phase 1, toujours non vérifiée).
+- `X-Auth-Request-User` est renseigné pour un compte sans courriel (supposition de la phase 1, toujours non vérifiée : plus aucun compte de
+  test sans courriel). Observé en revanche : renseigné et distinct pour quatre comptes avec courriel.
+- La hausse de latence à plusieurs utilisateurs vient de la sérialisation voulue des analyses (`MAX_TEXT_CONCURRENCY=1`, un worker d'analyseur
+  partagé avec les documents) : cohérent avec la conception, non mesuré composant par composant.
 
 ## 9. Vérifications finales (étape H)
 
@@ -212,9 +218,28 @@ La finalisation livre le fichier par `GET /api/download/<job_id>` sous le nom `c
 
 ## 11. Ce qui reste pour la suite
 
-- **Avant la phase 3** : régulariser les comptes de test, puis faire la vérification du compte sans courriel et la mesure multi-utilisateurs ;
-  décider d'EXT-18, d'EXT-42, de l'inclusion de la normalisation dans `detection_config` ; EXT-41 et la piste « titre + nom » d'EXT-32.
+- **Avant la phase 3** : les décisions du §12.
 - **Phase 2 bis** (D-021) : EXT-01, EXT-09, EXT-11, EXT-12, EXT-13, EXT-16, EXT-21, EXT-24, EXT-33 ; EXT-39 et EXT-40 peuvent s'y joindre.
 - **Phase 3** : choix entre les options 2 et 3 de D-010 ; le client traite le 401 en texte brut (contrat §8) ; mapping des marqueurs à
   ne garder qu'en mémoire.
 - Fusion finale dans `main` : intégrer `ca3c50c` (licence AGPL-3.0, résout EXT-05) et `7a7908e` (icône) (D-025).
+
+## 12. Décisions en attente
+
+Chaque point est une décision humaine : données mesurées, options, et ma recommandation (que je n'applique pas).
+
+| # | Sujet | Données (observé) | Options | Recommandation |
+|---|---|---|---|---|
+| 1 | **EXT-18 — filtre PROPN** du correctif spaCy | Corpus principal : masquage 0,940 avec et sans filtre ; faux positifs 150 avec, 240 sans. Corpus complémentaire : 1,000 dans les deux cas ; 147 contre 166 | a) garder le filtre ; b) le retirer ; c) le garder et mesurer sur des données plus proches du réel avant de trancher | a + c : aucun faux négatif mesuré, 90 faux positifs évités ; mais corpus synthétique écrit par la même équipe |
+| 2 | **EXT-42 — secrets dans les documents** | 6 SECRET exposés sur 6 dans le banc du flux documents (DOCX, CSV, PDF) ; par conception (D-015) les reconnaisseurs de secrets ne servent qu'à l'API texte | a) les appliquer à tous les flux (même mécanisme qu'EXT-08/EXT-23) ; b) garder la séparation | a, en mesurant les faux positifs sur des documents ordinaires (code, configurations) avant activation |
+| 3 | **EXT-41 — valeur PDF coupée par un retour à la ligne** | 3 téléphones exposés en PDF, exactement les 3 coupés par un retour à la ligne ; 0 en DOCX et CSV | a) pour l'analyse seulement, remplacer les sauts de ligne internes à un bloc PyMuPDF par une espace (positions conservées) ; b) ne rien faire | a dans la phase suivante, avec banc avant et après (faux positifs de valeurs collées d'une ligne à l'autre) |
+| 4 | **Empreinte `detection_config`** de `/version` | Ne reflète que la configuration (thèmes, reconnaisseurs, seuil, langue), pas le code de normalisation | a) y inclure une version de la normalisation ; b) inchangé | a : changement compatible du contrat (même champ, plus sensible), à noter dans le contrat FR/EN |
+| 5 | **Précision par type CARD (0,28)** | Les chiffres espacés d'un NIR ou d'un IBAN sont aussi typés « carte » ; masquage correct | a) lors d'un chevauchement, retenir le type le plus spécifique (NIR, IBAN avant carte) ; b) accepter | a, côté serveur (fusion des chevauchements) : le relecteur voit un libellé juste |
+| 6 | **EXT-32 — noms en contexte dense** | NER seul 44/64 noms des invites exposées ; NER + motif « titre ou fonction + Prénom Nom » 57/64, 0 correspondance hors nom sur 257 invites | a) ajouter ce motif aux reconnaisseurs communs ; b) attendre | a, avec test et banc ; les 7 restants relèvent d'EXT-19 (noms anglais) |
+| 7 | **Latence au repos des petites invites** | +5 ms à 200 car. (+25 %), +11 ms à 1 000 car. (+29 %) ; autres tailles ≤ +12 % | a) accepter l'écart ; b) mesurer le coût par reconnaisseur et optimiser | a : écart absolu faible ; b si le pilote le ressent |
+| 8 | **Zone « Antécédents » disparue** du flux documents | Faux positif LOCATION (forme NFD) qui disparaît une fois le texte recomposé ; seule disparition sur 16 cas | a) accepter cet écart à la règle « zones identiques sauf ajouts » ; b) le refuser | a : ce n'est pas une donnée |
+| 9 | **Compte sans courriel** (`X-Auth-Request-User`) | Les 4 comptes de test ont maintenant une adresse ; vérifié renseigné et distinct pour chacun | a) créer un compte de test sans courriel (action humaine) puis vérifier ; b) accepter la supposition | a, avant le pilote : la limitation par utilisateur repose sur cet en-tête |
+| 10 | **Plusieurs utilisateurs simultanés** | Aucune famine ; prompt p95 884 ms pendant un traitement avec 3 utilisateurs intensifs (261 ms avec 1) | a) accepter pour le pilote ; b) augmenter `MAX_TEXT_CONCURRENCY` ou les workers de l'analyseur (ressources, D-021) | a pour un pilote restreint ; b à mesurer si le nombre d'utilisateurs grandit |
+| 11 | **Complément de `CLAUDE.md` §1** | Faits nouveaux : fil unique pour PyMuPDF (D-019), point d'entrée `_analyze_normalized` (D-014), `app/tests/fake_secrets.py` (Q5), repli de localisation PDF (D-026), séquences d'échappement imposées pour les caractères invisibles | a) je propose le diff ; b) non | a |
+| 12 | **EXT-39, EXT-40** (caractères bidirectionnels littéraux dans des tests existants ; CSV à une seule colonne reconnue) | Consignés, non corrigés | Les joindre à la phase 2 bis ou les traiter à part | Phase 2 bis |
+| 13 | **Validation de la phase** | Ce compte rendu | Avancer `feat/text-api` par `git merge --ff-only feat/pilote-serveur` (D-025), puis pousser | À ta décision après relecture du diff |
