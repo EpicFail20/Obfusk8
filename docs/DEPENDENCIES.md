@@ -69,3 +69,56 @@ Verrou `app/requirements-dev.txt` inchangé. `pip-audit -r app/requirements-dev.
 |---|---|---|---|---|
 | trivy | 0.75.0, `aquasec/trivy@sha256:af6acf9a6b85dfe389a1941505c0ce9efef52a4719635e1a962f022a3d855daa` | 0.75.0 (publiée le 2026-10-01) | API GitHub des versions d'aquasecurity/trivy ; condensat par `docker buildx imagetools inspect` | Conteneur jetable, mémoire limitée à 800 Mo, archive et cache sur disque. Image `app` de test : 79 HIGH/CRITICAL dans les paquets Debian (EXT-33, 1 corrigeable), 0 dans les paquets Python |
 | presidio-analyzer (roue PyPI) | 2.2.364, `presidio_analyzer-2.2.364-py3-none-any.whl`, SHA-256 `0a9eeb60ccc416c505367b4989d056becb84ef082703ee3361c046fb75941739` | 2.2.364 (API JSON de PyPI) | API JSON de PyPI, empreinte vérifiée au téléchargement | **Pas une dépendance** : seul `spacy_recognizer.py` en est extrait, pour l'image de mesure d'EXT-18 (sans filtre PROPN, sans étiquette, jamais poussée). Licence MIT (métadonnées de la roue : `License-Expression: MIT`) |
+
+## Phase 2 bis — chaîne d'approvisionnement (2026-10-05)
+
+Sources interrogées le 2026-10-05 : API GitHub (versions publiées, hors préversions), Docker Hub, quay.io, ghcr.io (`docker buildx imagetools
+inspect` pour les condensats d'index), python.org, API JSON de PyPI, OSV. Licences : champ `license` de l'API GitHub, métadonnées des paquets.
+Scans : `trivy` 0.75.0 (dernière version, 2026-10-01), HIGH et CRITICAL ; `pip-audit` 2.10.1 sur les environnements installés.
+
+### Images
+
+| Image | Version retenue | Condensat (index) | Dernière stable observée | trivy (image finale) | Licence | Remarque |
+|---|---|---|---|---|---|---|
+| `traefik` | v3.7.13 | `sha256:24841fe2…` | v3.7.13 (2026-09-04) | 0 | MIT | Inchangée, épinglée |
+| `quay.io/keycloak/keycloak` | 26.8.0 | `sha256:b0f60d48…` | 26.8.0 (2026-10-01) | 6 HIGH sans correctif | Apache-2.0 | Depuis 26.0.8 (90 corrigeables dont CVE-2026-18963, prise de contrôle de compte) ; base H2 non migrable, royaume réimporté (D-040) |
+| `quay.io/oauth2-proxy/oauth2-proxy` | v7.15.5 | `sha256:8498b0d0…` | v7.15.5 (2026-10-01) | 0 | MIT | Depuis v7.15.4 : GHSA-63jm-59jj-478j, GHSA-wr5q-7wxw-x568 |
+| `tecnativa/docker-socket-proxy` | v0.5.0 | `sha256:1f5038b5…` | v0.5.0 (2026-07-27) | **6 HIGH corrigeables** (Alpine : openssl 3.5.7, pcre2 10.47) | Apache-2.0 | Pas de version amont plus récente ; accepté et surveillé (D-040, point 8) |
+| `busybox` | 1.38.0 | `sha256:fd7dc986…` | 1.38.0 (2026-09-23) | 0 | GPL-2.0 | Tâche ponctuelle `chown`, aucun lien avec le code du projet |
+| `python` (base de `app`) | 3.12-slim, Python 3.12.15, Debian 13 | `sha256:02108f5d…` | 3.12.15 (python.org, 2026-09-30) ; 3.14.8 existe | — | PSF-2.0 | 3.12 conservé (D-040, point 2) |
+| `ghcr.io/data-privacy-stack/presidio-analyzer` (base de l'analyseur) | 2.2.364 | `sha256:ae8f6f11…` | 2.2.364 (2026-07-22) ; `2.2.364-distroless-preview` exclue (préversion) | — | MIT | Dépôt officiel (anciennement `microsoft/presidio`, même identifiant 132129752) |
+| `ghcr.io/epicfail20/obfusk8-app` | 0.2.0-dev (local) | — (jamais publiée) | — | 77 sans correctif (dont 1 CRITICAL, libxml2) | AGPL-3.0 (en-têtes ; `LICENSE` : EXT-05) | 553 Mo (851 avant) |
+| `ghcr.io/epicfail20/obfusk8-presidio-analyzer` | 0.2.0-dev (local) | — | — | 52 sans correctif | idem | |
+| `ghcr.io/data-privacy-stack/presidio-anonymizer` | **retirée** | — | 2.2.364 | (113 HIGH/CRITICAL avant retrait) | MIT | Jamais appelée (EXT-20, D-040) |
+
+### Paquets ajoutés ou touchés à la construction
+
+| Paquet | Version | Empreinte | Dernière stable observée | Audit | Licence | Remarque |
+|---|---|---|---|---|---|---|
+| pip (construction seulement) | 26.2.1 | `sha256:71138adf…` | 26.2.1 (2026-08-04) | OSV : aucune | MIT | Installe les verrous, puis **désinstallé** des deux images (EXT-24) |
+| anyio (analyseur) | 4.15.1 | `sha256:6152fdbb…` | 4.15.1 | OSV : aucune | MIT | Remplace 4.14.1 (CVE-2026-63374, CVE-2026-63349) |
+| urllib3 (analyseur) | 2.8.0 | `sha256:0cf3cae5…` | 2.8.0 | OSV : aucune | MIT | Remplace 2.7.0 (CVE-2026-97687, CVE-2026-97689) |
+| fr_core_news_md (analyseur) | 3.8.0 | `sha256:8a70d090…` | 3.8.0, seule version pour spaCy 3.8 | OSV : aucune | **LGPL-LR** | Même artefact qu'avant (`direct_url.json`) ; licence des ressources linguistiques, inchangée, à noter pour la conformité |
+| uv (analyseur) | retiré | — | — | — | — | Binaire de construction de l'image amont (quinn-proto, rustls-webpki) |
+| `app/requirements.lock` | 32 paquets, versions **inchangées** | toutes | voir ci-dessous | `pip-audit` : aucune | — | Ensemble transitif de `requirements.txt` rendu explicite, `--require-hashes --no-deps` |
+
+Versions plus récentes publiées, **non appliquées** (mise à jour de dépendances de production non autorisée dans cette phase ; aucune
+vulnérabilité connue dans les versions en place) : fastapi 0.142.2 (0.141.1), requests 2.34.2 (2.33.1), uvicorn 0.54.0 (0.35.0 ; touche
+uvloop, revalidation seccomp nécessaire, EXT-11), websockets 17.2 (17.1), spaCy 3.8.16 (3.8.13, fournie par l'image Presidio ; changerait
+la détection). À décider.
+
+### Outils (jamais dans les images)
+
+| Outil | Version | Condensat | Licence |
+|---|---|---|---|
+| `aquasec/trivy` | 0.75.0 | `sha256:af6acf9a…` | Apache-2.0 |
+| `rhysd/actionlint` | 1.7.12 (2026-03-30) | `sha256:b1934ee5…` | MIT |
+
+### Actions GitHub
+
+| Action | Version | Commit | Licence |
+|---|---|---|---|
+| actions/checkout | v7.0.1 | `3d3c42e5…` | MIT |
+| docker/login-action | v4.6.0 | `dbcb8138…` | Apache-2.0 |
+| docker/metadata-action | v6.2.0 | `dc802804…` | Apache-2.0 |
+| docker/build-push-action | v7.4.0 | `c3c9e263…` | Apache-2.0 |
