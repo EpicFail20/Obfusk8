@@ -2,7 +2,8 @@
 # Runs the test suite against the code OF THE PRODUCTION IMAGE, in a throwaway
 # container, under the enforcing seccomp profile (docs/DECISIONS.md D-016,
 # updated in phase 2 bis). The image holds no tests and no test tool (EXT-09):
-# app/tests is mounted read-only at /app/tests, and the development tools of
+# app/tests is mounted read-only at /app/tests (the whole repository at /repo,
+# read-only, for the repository hygiene test, EXT-39), and the development tools of
 # requirements-dev.txt (installed OUTSIDE the image, see its header) are
 # mounted read-only and put on PYTHONPATH. No network, read-only root
 # filesystem, tmpfs instead of the real volumes: the real audit log and
@@ -36,6 +37,6 @@ exec docker run --rm --network none --read-only --memory 1g \
     --security-opt seccomp="$repo/seccomp/app-enforce.json" \
     --security-opt no-new-privileges --cap-drop ALL \
     --tmpfs /tmp --tmpfs /data/tmp:uid=1000,gid=1000 --tmpfs /data/audit:uid=1000,gid=1000 \
-    -v "$repo/app/tests:/app/tests:ro" -v "$devtools:/devtools:ro" -w /app \
-    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/devtools:/app \
+    -v "$repo/app/tests:/app/tests:ro" -v "$devtools:/devtools:ro" -v "$repo:/repo:ro" -w /app \
+    -e PYTHONDONTWRITEBYTECODE=1 -e PYTHONPATH=/devtools:/app -e OBFUSK8_REPO=/repo \
     --entrypoint python "$image" -m pytest -q -p no:cacheprovider "$@" tests

@@ -304,14 +304,14 @@ def test_nom_de_menace_est_assaini_avant_reutilisation(monkeypatch):
     (3.5) — threat_name comes from the ICAP server, not the uploaded file,
     but sanitized as a precaution before joining the HTTP response and the
     syslog log."""
-    threat_with_rtl_override = "Trojan‮exe.pdf"
+    threat_with_rtl_override = "Trojan\u202eexe.pdf"
     monkeypatch.setattr(main, "get_scanner", lambda: _FakeScanner(is_clean=False, threat_name=threat_with_rtl_override))
     monkeypatch.setattr(main, "get_alert_sink", _raising_alert_sink)
     monkeypatch.delenv("AV_ENFORCE", raising=False)
 
     with pytest.raises(HTTPException) as exc_info:
         main._run_antivirus_scan(b"raw", "fichier.pdf", "abc123")
-    assert "‮" not in exc_info.value.detail
+    assert "\u202e" not in exc_info.value.detail
 
 
 # ---------------------------------------------------------------------------
@@ -1037,7 +1037,7 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
     bounded, and that the full cycle succeeds.
     """
     monkeypatch.setattr(main, "_analyze_text", lambda text, theme=None: [])
-    hostile_theme = "medical‮" + ("a" * 500)
+    hostile_theme = "medical\u202e" + ("a" * 500)
     upload = _SyncUpload("t.csv", b"nom,ville\nJean Dupont,Paris\n")
 
     detect_resp = _drive(main.detect_document(_FakeRequest(), file=upload, theme=hostile_theme))
@@ -1398,7 +1398,7 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
     job_id = "99999999aaaaaaaabbbbbbbbcccccccc"
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
-        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice‮@hopital.fr"})))
+        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice\u202e@hopital.fr"})))
         assert resp.status_code == 200
     finally:
         main.PENDING_JOBS.pop(job_id, None)

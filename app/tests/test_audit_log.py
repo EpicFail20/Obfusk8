@@ -104,15 +104,15 @@ def test_record_audit_event_valeur_tres_longue_reste_une_seule_ligne(redirected_
 # ---------------------------------------------------------------------------
 
 def test_strip_unicode_neutralise_rtl_override():
-    payload = "attacker@x.com‮مصمم.gpj"
+    payload = "attacker@x.com\u202eمصمم.gpj"
     cleaned = main._strip_unicode_control_and_format_chars(payload)
-    assert "‮" not in cleaned
+    assert "\u202e" not in cleaned
 
 
 @pytest.mark.parametrize("char", [
-    "‮",  # RTL override
-    "‭",  # LRO
-    "⁦", "⁧", "⁨", "⁩",  # directional isolates
+    "\u202e",  # RTL override
+    "\u202d",  # LRO
+    "\u2066", "\u2067", "\u2068", "\u2069",  # directional isolates
     "\x00",  # NUL
     "\x1b",  # ESC
     "\n", "\r",
@@ -137,7 +137,7 @@ def test_bout_en_bout_email_malveillant_neutralise_avant_le_journal(redirected_a
     """Reproduces the real path: header -> _strip_unicode_control_and_format_chars
     (detect_document) -> job -> _record_audit_event. The RTL override must not
     survive any step."""
-    raw_header_value = "attacker@x.com‮مصمم.gpj"
+    raw_header_value = "attacker@x.com\u202eمصمم.gpj"
     sanitized = main._strip_unicode_control_and_format_chars(raw_header_value)
 
     main._record_audit_event(job_id="j2", format="pdf", user=sanitized, theme="aucun",
@@ -145,4 +145,4 @@ def test_bout_en_bout_email_malveillant_neutralise_avant_le_journal(redirected_a
                               total_redactions=0, manually_excluded=0, manually_added=0)
 
     raw_bytes = redirected_audit_log.read_bytes()
-    assert "‮".encode() not in raw_bytes
+    assert "\u202e".encode() not in raw_bytes
