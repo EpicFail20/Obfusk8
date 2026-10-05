@@ -1,8 +1,15 @@
-FROM python:3.12-slim
+# Pinned by digest (EXT-01): python:3.12-slim = Python 3.12.15 on Debian 13
+# (trixie), latest 3.12 release (python.org, 2026-09-30), checked on Docker Hub
+# on 2026-10-05. 3.12 kept rather than 3.14 (D-040): same series as the
+# presidio-analyzer image, no seccomp revalidation of a new interpreter.
+FROM python:3.12-slim@sha256:02108f5d322dd89f1c9e552442c25acb0543dfdbc455693a5599624f20d9155d
 
 WORKDIR /app
 
-# libgl1 required by some PyMuPDF dependencies depending on the base distro
+# No libgl1 (removed in phase 2 bis, D-040): the PyMuPDF wheel does not link
+# it, and no process of the running app mapped it (/proc/<pid>/maps); it only
+# pulled mesa, LLVM (which links the system libxml2, EXT-33) and the X11
+# libraries into the image.
 #
 # tesseract-ocr + tesseract-ocr-fra: OCR engine for image support
 # (PNG/JPEG) and its French language data — essential, this
@@ -24,14 +31,24 @@ WORKDIR /app
 # these CVEs therefore does not apply to this project's upload flow. To be reassessed
 # if Debian publishes a fix, or if a user/external source of .traineddata
 # were ever introduced.
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 \
+#
+# `apt-get upgrade` applies the Debian security updates available at build
+# time (EXT-33: the image had a fixable libpcre2 not applied).
+RUN apt-get update && apt-get upgrade -y --no-install-recommends \
+    && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-fra \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# pip upgraded first from a hash-pinned file (EXT-24), then removed once the
+# dependencies are installed: never used at runtime, and even the latest pip
+# vendors copies flagged by trivy (urllib3, msgpack, setuptools).
+COPY requirements-build.txt requirements.txt ./
+RUN pip install --no-cache-dir --require-hashes --no-deps -r requirements-build.txt \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip check \
+    && rm requirements-build.txt \
+    && python -m pip uninstall -y pip
 
 COPY main.py .
 COPY antivirus.py .
