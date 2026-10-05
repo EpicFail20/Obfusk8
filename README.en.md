@@ -97,7 +97,7 @@ OAUTH2_PROXY_CLIENT_ID=<your-provider-client-id>
 OAUTH2_PROXY_CLIENT_SECRET=<your-provider-client-secret>
 ```
 
-and in `oauth2-proxy.cfg`, the issuer URL (`oidc_issuer_url`) pointed to your tenant. Example for Entra ID:
+and in `oauth2-proxy/oauth2-proxy.cfg`, the issuer URL (`oidc_issuer_url`) pointed to your tenant. Example for Entra ID:
 `https://login.microsoftonline.com/<tenant-id>/v2.0`
 
 ## Customization

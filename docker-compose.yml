@@ -15,6 +15,20 @@ networks:
   app-internal:
     driver: bridge
     internal: true   # app, oauth2-proxy, keycloak — no direct internet access.
+    # Fixed addressing (phase 2 bis): Traefik gets 10.89.18.10, the only
+    # address oauth2-proxy trusts for X-Forwarded-* (trusted_proxy_ips in
+    # oauth2-proxy/oauth2-proxy.cfg — keep both in sync). Dynamic addresses
+    # are confined to ip_range, so no other container can ever receive it.
+    # The subnet is OUTSIDE Docker's default address pools (172.17.0.0/12 and
+    # 192.168.0.0/16): a subnet taken from them collided on the first
+    # deployment with a network of this same stack that Docker had just
+    # allocated dynamically ("networks have overlapping IPv4", observed on
+    # 2026-10-05). Change it (and the two addresses) only if it collides with
+    # a network the host routes to.
+    ipam:
+      config:
+        - subnet: 10.89.18.0/24
+          ip_range: 10.89.18.128/25
                       # WARNING WHEN MOVING TO ENTRA ID: oauth2-proxy will then need
                       # to reach the Microsoft servers. Revisit this network at that
                       # point (move it to a dedicated non-internal network).
@@ -126,9 +140,12 @@ services:
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/traefik/certs:ro
     networks:
-      - frontend
-      - app-internal
-      - docker-proxy
+      frontend: {}
+      app-internal:
+        # Fixed: the only peer oauth2-proxy trusts for X-Forwarded-* (see
+        # networks.app-internal and trusted_proxy_ips in oauth2-proxy/oauth2-proxy.cfg).
+        ipv4_address: 10.89.18.10
+      docker-proxy: {}
     depends_on:
       - docker-socket-proxy
 
@@ -221,6 +238,12 @@ services:
       # fichier .cfg, qui doit être retirée pour éviter tout conflit
       # entre les deux sources (même piège que .env vs Docker secret).
       - OAUTH2_PROXY_REDIRECT_URL=https://${APP_DOMAIN}/oauth2/callback
+      # EXT-45: allowed post-login redirect targets (the `rd` parameter).
+      # Without it, oauth2-proxy rejected every absolute `rd` (back to `/`
+      # after login); with it, only this exact host on the default HTTPS
+      # port — no subdomain, no other host: no open redirect. Derived from
+      # APP_DOMAIN for the same reason as the redirect URL above.
+      - OAUTH2_PROXY_WHITELIST_DOMAINS=${APP_DOMAIN}
     secrets:
       - oauth2_client_secret
       - oauth2_cookie_secret
