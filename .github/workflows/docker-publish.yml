@@ -1,9 +1,15 @@
 name: Publish Docker images
 
+# Phase 2 bis (EXT-21, D-040): images are published ONLY for a release tag
+# vX.Y.Z, under two immutable-by-convention tags: `X.Y.Z` and `sha-<commit>`.
+# No more `main` / `latest` (floating tags, EXT-01): docker-compose.yml pins
+# the published image by digest.
 on:
   push:
-    branches: [main]
-    tags: ['v*']
+    tags: ['v*.*.*']
+
+# Nothing by default; each job requests only what it needs.
+permissions: {}
 
 jobs:
   build-app:
@@ -12,10 +18,14 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions pinned by commit SHA (EXT-21), readable version in
+      # the comment; checked on GitHub on 2026-10-05 (docs/DEPENDENCIES.md).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Connexion à GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -23,12 +33,17 @@ jobs:
 
       - name: Métadonnées (app)
         id: meta-app
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}-app
+          flavor: |
+            latest=false
+          tags: |
+            type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
 
       - name: Build et push (app)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: ./app
           push: true
@@ -41,10 +56,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Connexion à GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -52,17 +69,19 @@ jobs:
 
       - name: Métadonnées (presidio-analyzer)
         id: meta-presidio
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ghcr.io/${{ github.repository }}-presidio-analyzer
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
             type=semver,pattern={{version}}
+            type=sha,prefix=sha-,format=short
+
       - name: Build et push (presidio-analyzer)
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          context: ./presidio/analyzer-build   # ⚠️ à corriger si le chemin réel diffère
+          context: ./presidio/analyzer-build
           push: true
           tags: ${{ steps.meta-presidio.outputs.tags }}
           labels: ${{ steps.meta-presidio.outputs.labels }}
