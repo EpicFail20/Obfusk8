@@ -153,8 +153,12 @@ localisation (texte invisible, polices sans table ToUnicode, glyphes réordonné
 
 1. **Comptes de test** (observé) : le 2026-10-04, Keycloak exigeait pour `compte-2` et `compte-3` de compléter le profil et pour `compte-4` un
    changement de mot de passe ; je ne les ai pas modifiés. Régularisés par l'humain le 2026-10-05 : la mesure multi-utilisateurs est faite (§4).
-   Les **quatre comptes ont désormais une adresse de courriel** (`/oauth2/userinfo` : `email` renseigné pour chacun) : la vérification de
-   `X-Auth-Request-User` pour un compte sans courriel reste **impossible** (décision 9, §12).
+   Le compte sans courriel (compte-4, modifié par l'humain le 2026-10-05) a ensuite été testé : **oauth2-proxy refuse sa connexion** (500,
+   « email in id_token () isn't verified »), l'application n'est jamais atteinte (EXT-43). La page affiche la version d'oauth2-proxy, comme la
+   page de connexion (EXT-44).
+10. **Identifiants affichés dans la session de travail** (le 2026-10-05) : en filtrant le journal d'oauth2-proxy pour diagnostiquer compte-4,
+    j'ai affiché les noms d'utilisateur et identifiants internes (UUID Keycloak) des comptes 1 à 3. Rien n'est écrit dans le dépôt ni dans les
+    rapports (vérifié : 0 fichier contenant une valeur des comptes) ; les commandes suivantes masquent ces champs.
 2. **Régression introduite puis corrigée** (`462ab55` → `b5ef39e`) : la normalisation transformait « glyphe sans correspondance + espace » en
    deux espaces ; le NER ne trouvait plus le nom ; le nom fuyait dans le PDF caviardé. Trouvée en rejouant le test de bout en bout EXT-35 pendant
    l'étape D, que je n'avais pas rejoué après l'étape B. Test de non-régression ajouté.
@@ -184,8 +188,8 @@ localisation (texte invisible, polices sans table ToUnicode, glyphes réordonné
   supposée.
 - L'écart de latence sur les petites tailles vient des reconnaisseurs ajoutés (§3).
 - Le filtre PROPN ne coûte aucun faux négatif sur des données réelles : observé seulement sur des corpus synthétiques.
-- `X-Auth-Request-User` est renseigné pour un compte sans courriel (supposition de la phase 1, toujours non vérifiée : plus aucun compte de
-  test sans courriel). Observé en revanche : renseigné et distinct pour quatre comptes avec courriel.
+- La supposition de la phase 1 (« `X-Auth-Request-User` renseigné pour un compte sans courriel ») est **levée autrement** (observé) : un compte
+  sans courriel ne passe pas oauth2-proxy (EXT-43) ; pour les comptes avec courriel, l'en-tête est renseigné et distinct (audit).
 - La hausse de latence à plusieurs utilisateurs vient de la sérialisation voulue des analyses (`MAX_TEXT_CONCURRENCY=1`, un worker d'analyseur
   partagé avec les documents) : cohérent avec la conception, non mesuré composant par composant.
 
@@ -238,7 +242,8 @@ Chaque point est une décision humaine : données mesurées, options, et ma reco
 | 6 | **EXT-32 — noms en contexte dense** | NER seul 44/64 noms des invites exposées ; NER + motif « titre ou fonction + Prénom Nom » 57/64, 0 correspondance hors nom sur 257 invites | a) ajouter ce motif aux reconnaisseurs communs ; b) attendre | a, avec test et banc ; les 7 restants relèvent d'EXT-19 (noms anglais) |
 | 7 | **Latence au repos des petites invites** | +5 ms à 200 car. (+25 %), +11 ms à 1 000 car. (+29 %) ; autres tailles ≤ +12 % | a) accepter l'écart ; b) mesurer le coût par reconnaisseur et optimiser | a : écart absolu faible ; b si le pilote le ressent |
 | 8 | **Zone « Antécédents » disparue** du flux documents | Faux positif LOCATION (forme NFD) qui disparaît une fois le texte recomposé ; seule disparition sur 16 cas | a) accepter cet écart à la règle « zones identiques sauf ajouts » ; b) le refuser | a : ce n'est pas une donnée |
-| 9 | **Compte sans courriel** (`X-Auth-Request-User`) | Les 4 comptes de test ont maintenant une adresse ; vérifié renseigné et distinct pour chacun | a) créer un compte de test sans courriel (action humaine) puis vérifier ; b) accepter la supposition | a, avant le pilote : la limitation par utilisateur repose sur cet en-tête |
+| 9 | **Compte sans courriel** (EXT-43) | Testé le 2026-10-05 : connexion refusée par oauth2-proxy (500), application jamais atteinte ; refus fermé | a) documenter pour les administrateurs l'exigence d'un courriel vérifié dans le fournisseur d'identité, et améliorer le message (page d'erreur personnalisée) ; b) autoriser les courriels non vérifiés (`insecure_oidc_allow_unverified_email`) | a ; pas b : l'identité sert à l'audit et à la propriété des tâches |
+| 9 bis | **Version d'oauth2-proxy divulguée** (EXT-44) | « Secured with OAuth2 Proxy version v7.15.4 » sur la page de connexion publique et les pages d'erreur | a) `footer = "-"` dans `oauth2-proxy/oauth2-proxy.cfg` (documentation officielle), à appliquer avec ton accord ; b) laisser | a (une ligne, aucune incidence fonctionnelle ; à vérifier de bout en bout) |
 | 10 | **Plusieurs utilisateurs simultanés** | Aucune famine ; prompt p95 884 ms pendant un traitement avec 3 utilisateurs intensifs (261 ms avec 1) | a) accepter pour le pilote ; b) augmenter `MAX_TEXT_CONCURRENCY` ou les workers de l'analyseur (ressources, D-021) | a pour un pilote restreint ; b à mesurer si le nombre d'utilisateurs grandit |
 | 11 | **Complément de `CLAUDE.md` §1** | Faits nouveaux : fil unique pour PyMuPDF (D-019), point d'entrée `_analyze_normalized` (D-014), `app/tests/fake_secrets.py` (Q5), repli de localisation PDF (D-026), séquences d'échappement imposées pour les caractères invisibles | a) je propose le diff ; b) non | a |
 | 12 | **EXT-39, EXT-40** (caractères bidirectionnels littéraux dans des tests existants ; CSV à une seule colonne reconnue) | Consignés, non corrigés | Les joindre à la phase 2 bis ou les traiter à part | Phase 2 bis |
