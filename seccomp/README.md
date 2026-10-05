@@ -86,14 +86,14 @@ PDF), sans toucher aux autres services du stack.
 
 ## Fichiers
 
-- `app-audit.json` — **profil actuellement déployé** sur le service "app"
-  (`docker-compose.yml`). Action par défaut `SCMP_ACT_LOG` : ne bloque
+- `app-audit.json` — profil de **diagnostic**, plus déployé (voir le statut
+  ci-dessous). Action par défaut `SCMP_ACT_LOG` : ne bloque
   strictement rien, journalise seulement les syscalls hors de la liste
   autorisée (visibles via `dmesg` / `journalctl -k`, entrées
   `audit: type=1326 ... subj=docker-default ... syscall=<numéro>`).
 - `app-enforce.json` — même liste de syscalls, action par défaut
-  `SCMP_ACT_ERRNO` (blocage réel, retourne `ENOSYS`). **Pas encore appliqué
-  au service "app"** — voir statut ci-dessous.
+  `SCMP_ACT_ERRNO` (blocage réel, retourne `ENOSYS`). **Profil déployé** sur
+  le service "app" (`docker-compose.yml`, `seccomp=./seccomp/app-enforce.json`).
 
 ## Résultat de la vérification en mode journalisation (étape 4)
 
@@ -116,7 +116,27 @@ service "app", avec `app-enforce.json`, complète un cycle démarrage →
 Les trois syscalls du tableau ci-dessus y apparaissent bien en `ENOSYS`,
 sans conséquence observable (comportement de repli déjà démontré).
 
-## Statut : prêt pour un passage en blocage réel, à activer manuellement
+## Statut actuel (phase 2 bis, 2026-10-05) : blocage réel en service
+
+`app-enforce.json` est appliqué au service "app" (`docker-compose.yml`) ; vérifié sur le conteneur en service : `Seccomp: 2` dans
+`/proc/1/status` (EXT-12). La section suivante décrit l'état **historique** qui a précédé la bascule.
+
+### Dépendance implicite à uvloop (EXT-11)
+
+Le profil autorise `epoll_pwait`, utilisé par **uvloop** (libuv), mais **ni `epoll_wait`, ni `select`, ni `shutdown`**. Or la boucle
+`asyncio` de la bibliothèque standard (`selectors.EpollSelector`) appelle `epoll_wait` : sous ce profil, elle échoue dès son premier tour
+(`OSError: [Errno 38] Function not implemented`, observé avec `python -c "import asyncio; asyncio.run(asyncio.sleep(0))"`).
+
+La production fonctionne **uniquement** parce qu'uvicorn choisit uvloop quand il est installé (`uvicorn[standard]`, `uvloop` épinglé dans
+`app/requirements.lock`). Conséquences :
+
+- ne jamais lancer uvicorn avec `--loop asyncio`, ni retirer `uvicorn[standard]` ou `uvloop` des dépendances ;
+- tout code ou test qui crée sa propre boucle doit utiliser `uvloop.new_event_loop()` (c'est le cas du harnais de
+  `app/tests/test_text_api.py`) et être exécuté sous ce profil (`app/run-tests.sh`) ;
+- une mise à jour d'uvicorn, d'uvloop ou d'anyio impose de rejouer la suite et les tests de bout en bout sous `app-enforce.json` ; en cas
+  d'échec, suivre la méthode ci-dessus (`app-audit.json`, `dmesg | grep 'audit: type=1326'`) plutôt que d'ajouter `epoll_wait` à l'aveugle.
+
+## Historique : prêt pour un passage en blocage réel, à activer manuellement
 
 **Aucun syscall légitime manquant n'a été détecté.** Sur la base de ce qui
 précède, le profil semble prêt à passer en blocage réel. Conformément à la
