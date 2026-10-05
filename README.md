@@ -6,7 +6,7 @@
 
 Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-hébergé, conçu pour tourner entièrement en local — aucune donnée n'est envoyée à un service tiers. Détecte et caviarde les informations personnelles (noms, dates, identifiants, adresses...) via [Presidio](https://github.com/microsoft/presidio), avec une étape de révision humaine avant validation finale.
 
-> ⚠️ **Avant de déployer cet outil sur des documents réels contenant des données sensibles**, lisez impérativement [`SECURITE.md`](./SECURITE.md) — il détaille les protections en place, les limites connues et les points qui restent sous votre responsabilité (certificat TLS, pentest, supervision).
+> ⚠️ **Avant de déployer cet outil sur des documents réels contenant des données sensibles**, lisez impérativement [`SECURITE.fr.md`](./SECURITE.fr.md) — il détaille les protections en place, les limites connues et les points qui restent sous votre responsabilité (certificat TLS, pentest, supervision).
 
 ## Sommaire
 
@@ -33,7 +33,7 @@ Outil d'anonymisation de documents (PDF, DOCX, CSV et images PNG/JPEG) auto-héb
 ## Prérequis
 
 - **Docker** ≥ 24.0 et **Docker Compose** ≥ v2.20 (plugin `docker compose`, pas l'ancien `docker-compose` autonome).
-- Un serveur/VM avec au minimum **4 vCPU / 8 Go de RAM** pour un usage ponctuel ; voir [`SECURITE.md`](./SECURITE.md#dimensionnement) pour un usage multi-utilisateurs.
+- Un serveur/VM avec au minimum **4 vCPU / 8 Go de RAM** pour un usage ponctuel ; voir [`SECURITE.fr.md`](./SECURITE.fr.md#limites-connues-et-risques-acceptés) pour un usage multi-utilisateurs.
 - Un **fournisseur d'identité OIDC** accessible (Keycloak, Entra ID, Okta, ou équivalent) — l'application ne fonctionne pas sans authentification déléguée.
 - Un **nom de domaine ou entrée DNS interne** pointant vers le serveur (un certificat TLS valide sera nécessaire pour tout usage au-delà d'un lab, voir [Limites connues](#limites-connues)).
 
@@ -45,10 +45,13 @@ Pour un lab ou pour tester vous pouvez aussi suivre le document plus complet: [`
 git clone https://github.com/EpicFail20/obfusk8.git
 cd obfusk8
 
-cp .env.example .env
+cp env.fr.example .env
 # éditez .env avec vos propres valeurs (voir section Configuration ci-dessous)
+./generate-secrets.sh
 
-docker compose pull
+# Les images construites depuis ce dépôt (app, analyseur) se construisent
+# localement ; les images tierces sont épinglées par condensat et tirées.
+docker compose -f docker-compose.yml -f docker-compose.build.yml build
 docker compose up -d
 ```
 
@@ -63,9 +66,9 @@ Rendez-vous ensuite sur `https://<votre-domaine>` — vous devriez être redirig
 
 ## Configuration
 
-Toute la configuration passe par le fichier `.env`, à copier depuis [`.env.example`](./.env.example) puis à remplir. **Ne committez jamais votre `.env` réel** — il est exclu par `.gitignore`.
+Toute la configuration passe par le fichier `.env`, à copier depuis [`env.fr.example`](./env.fr.example) (ou [`env.en.example`](./env.en.example)) puis à remplir. **Ne committez jamais votre `.env` réel** — il est exclu par `.gitignore`.
 
-Chaque variable est documentée directement dans `.env.example`. Les grandes catégories :
+Chaque variable est documentée directement dans `env.fr.example`. Les grandes catégories :
 
 | Catégorie | Ce qu'elle contrôle |
 |---|---|
@@ -75,7 +78,7 @@ Chaque variable est documentée directement dans `.env.example`. Les grandes cat
 | `ALERT_SINK`, `SYSLOG_HOST` | Envoi d'alertes de supervision vers votre SIEM/collecteur syslog |
 | `ENABLE_EXTENSION_API`, `MAX_TEXT_*` | API texte pour une future extension de navigateur (analyse et pseudonymisation de prompts), **désactivée par défaut** — voir [`docs/api-extension.md`](./docs/api-extension.md) |
 
-Les plafonds `MAX_*` ont des valeurs par défaut sûres pour un usage standard ; ne les augmentez qu'en connaissance de cause (voir [`SECURITE.md`](./SECURITE.md)).
+Les plafonds `MAX_*` ont des valeurs par défaut sûres pour un usage standard ; ne les augmentez qu'en connaissance de cause (voir [`SECURITE.fr.md`](./SECURITE.fr.md)).
 
 ## Authentification (SSO / OIDC)
 
@@ -108,9 +111,9 @@ Le comportement de détection est piloté par des **thèmes** (dossier `themes/`
 
 ## Sécurité
 
-Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.md`](./SECURITE.fr.md).
+Ce projet a fait l'objet d'un audit de sécurité approfondi et itératif, dont le résumé public — protections en place, principes de conception, limites connues et recommandations avant mise en production — est disponible dans [`SECURITE.fr.md`](./SECURITE.fr.md).
 
-Si vous découvrez une vulnérabilité, merci de la signaler de façon responsable plutôt que de la publier directement — voir [`SECURITE.md#signaler-une-vulnérabilité`](./SECURITE.md#signaler-une-vulnérabilité).
+Si vous découvrez une vulnérabilité, merci de la signaler de façon responsable plutôt que de la publier directement — voir [`SECURITE.fr.md#signaler-une-vulnérabilité`](./SECURITE.fr.md#signaler-une-vulnérabilité).
 
 ## Limites connues
 
@@ -122,7 +125,7 @@ Si vous découvrez une vulnérabilité, merci de la signaler de façon responsab
 
 ## Mises à jour et versions
 
-Ce projet suit le [versionnage sémantique](https://semver.org/lang/fr/). Consultez le [`CHANGELOG.md`](./CHANGELOG.md) et les [Releases GitHub](../../releases) pour l'historique des versions. Les images Docker sont publiées et taguées automatiquement à chaque release (`ghcr.io/epicfail20/obfusk8:vX.Y.Z`).
+Ce projet suit le [versionnage sémantique](https://semver.org/lang/fr/). Consultez les [Releases GitHub](../../releases) pour l'historique des versions. À chaque étiquette git `vX.Y.Z`, le workflow publie deux images, `ghcr.io/epicfail20/obfusk8-app` et `ghcr.io/epicfail20/obfusk8-presidio-analyzer`, sous les étiquettes `X.Y.Z` et `sha-<commit>` (jamais `latest` ni `main`). `docker-compose.yml` les référence par condensat (`:X.Y.Z@sha256:…`), comme toutes les images tierces. La version en cours de développement, `0.2.0-dev`, n'est construite que localement (`docker-compose.build.yml`) et n'est pas publiée.
 
 ## Licence
 

@@ -68,7 +68,7 @@ Chaque document uploadé passe par plusieurs couches de validation indépendante
 
 ## Gestion des dépendances
 
-- Toutes les dépendances (paquets applicatifs et images de base) sont épinglées à une version précise plutôt que de suivre une étiquette flottante comme `latest`, pour un comportement reproductible et pour éviter qu'une mise à jour amont introduise une régression ou une vulnérabilité sans contrôle préalable.
+- Toutes les dépendances sont épinglées plutôt que de suivre une étiquette flottante comme `latest`, pour un comportement reproductible et pour éviter qu'une mise à jour amont introduise une régression ou une vulnérabilité sans contrôle préalable : images Docker par **condensat** `sha256` (`docker-compose.yml`, `FROM` des Dockerfiles), paquets Python de l'image applicative par un verrou complet **avec empreintes** (`app/requirements.lock`, `--require-hashes`), modèle spaCy de l'analyseur par empreinte, actions GitHub par commit. Les images ne contiennent ni outil de test ni gestionnaire de paquets Python (`pip` retiré après l'installation).
 - Un audit complet des dépendances directes et transitives a été mené (paquets applicatifs et images Docker), avec correction des vulnérabilités critiques identifiées disposant d'un correctif amont.
 - Un script de veille automatisée existe pour détecter les nouvelles vulnérabilités sur les dépendances réellement utilisées — voir [Limites connues](#limites-connues-et-risques-acceptés).
 

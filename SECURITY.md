@@ -68,7 +68,7 @@ Every uploaded document goes through several independent validation layers befor
 
 ## Dependency management
 
-- All dependencies (application packages and base images) are pinned to a precise version rather than following a floating tag such as `latest`, for reproducible behavior and to avoid an upstream update silently introducing a regression or vulnerability.
+- All dependencies are pinned rather than following a floating tag such as `latest`, for reproducible behavior and to avoid an upstream update silently introducing a regression or vulnerability: Docker images by `sha256` **digest** (`docker-compose.yml`, Dockerfile `FROM`), Python packages of the application image by a full lock **with hashes** (`app/requirements.lock`, `--require-hashes`), the analyzer's spaCy model by hash, GitHub actions by commit. The images contain no test tool and no Python package manager (`pip` removed after installation).
 - A full audit of direct and transitive dependencies has been carried out (application packages and Docker images), with critical identified vulnerabilities fixed where an upstream patch was available.
 - An automated monitoring script exists to detect new vulnerabilities in the dependencies actually in use — see [Known limitations](#known-limitations-and-accepted-risks).
 

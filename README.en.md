@@ -31,7 +31,7 @@ Self-hosted document anonymization tool (PDF, DOCX, CSV, and PNG/JPEG images), d
 ## Requirements
 
 - **Docker** ≥ 24.0 and **Docker Compose** ≥ v2.20 (the `docker compose` plugin, not the legacy standalone `docker-compose`).
-- A server/VM with at least **4 vCPU / 8 GB RAM** for occasional use; see [`SECURITY.md`](./SECURITY.md#sizing) for multi-user deployments.
+- A server/VM with at least **4 vCPU / 8 GB RAM** for occasional use; see [`SECURITY.md`](./SECURITY.md#known-limitations-and-accepted-risks) for multi-user deployments.
 - An accessible **OIDC identity provider** (Keycloak, Entra ID, Okta, or equivalent) — the application does not work without delegated authentication.
 - A **domain name or internal DNS entry** pointing to the server (a valid TLS certificate is required for any use beyond a lab, see [Known limitations](#known-limitations)).
 
@@ -43,10 +43,13 @@ For a lab or for testing purposes, you can also refer to the more comprehensive 
 git clone https://github.com/EpicFail20/obfusk8.git
 cd obfusk8
 
-cp .env.example .env
-# edit .env with your own values (see Configuration section below)
+cp env.en.example .env
+# edit .env with your own values (see the Configuration section below)
+./generate-secrets.sh
 
-docker compose pull
+# The images built from this repository (app, analyzer) are built locally;
+# third-party images are pinned by digest and pulled.
+docker compose -f docker-compose.yml -f docker-compose.build.yml build
 docker compose up -d
 ```
 
@@ -61,9 +64,9 @@ Then go to `https://<your-domain>` — you should be redirected to your identity
 
 ## Configuration
 
-All configuration goes through the `.env` file, to be copied from [`.env.example`](./.env.example) and filled in. **Never commit your real `.env`** — it is excluded via `.gitignore`.
+All configuration goes through the `.env` file, to be copied from [`env.en.example`](./env.en.example) (or [`env.fr.example`](./env.fr.example)) and filled in. **Never commit your real `.env`** — it is excluded via `.gitignore`.
 
-Every variable is documented directly in `.env.example`. The main categories:
+Every variable is documented directly in `env.en.example`. The main categories:
 
 | Category | What it controls |
 |---|---|
@@ -120,7 +123,7 @@ If you discover a vulnerability, please report it responsibly rather than disclo
 
 ## Updates and versioning
 
-This project follows [semantic versioning](https://semver.org/). See [`CHANGELOG.md`](./CHANGELOG.md) and the [GitHub Releases](../../releases) for version history. Docker images are automatically built and tagged on every release (`ghcr.io/epicfail20/obfusk8:vX.Y.Z`).
+This project follows [semantic versioning](https://semver.org/). See the [GitHub Releases](../../releases) for version history. For every git tag `vX.Y.Z`, the workflow publishes two images, `ghcr.io/epicfail20/obfusk8-app` and `ghcr.io/epicfail20/obfusk8-presidio-analyzer`, tagged `X.Y.Z` and `sha-<commit>` (never `latest` or `main`). `docker-compose.yml` references them by digest (`:X.Y.Z@sha256:…`), like every third-party image. The version under development, `0.2.0-dev`, is only built locally (`docker-compose.build.yml`) and is not published.
 
 ## License
 
