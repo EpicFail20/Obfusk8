@@ -45,6 +45,10 @@ value is never cut in two by an invisible character it contains.
 Cost: one pass over the text, plus unicodedata.normalize per cluster only
 when the text is not already NFC; a text with nothing to normalize takes the
 identity path (one scan).
+
+NORMALIZATION_VERSION (D-030) enters the detection_config fingerprint of
+/api/v1/version: bump it with ANY change to what this module produces, so
+that a client sees that detection may differ for the same configuration.
 """
 
 import re
@@ -57,6 +61,9 @@ _APOSTROPHES = {"\u2018", "\u2019", "\u02bc"}
 _LIGATURES = {chr(code): unicodedata.normalize("NFKC", chr(code)) for code in range(0xFB00, 0xFB07)}
 # Fast path: only plain printable ASCII and the three kept controls.
 _NOTHING_TO_DO = re.compile(r"[\t\n\r\x20-\x7e]*")
+
+# 1: phase 2 (D-014), the rules listed in the module docstring.
+NORMALIZATION_VERSION = 1
 
 
 @dataclass(frozen=True)

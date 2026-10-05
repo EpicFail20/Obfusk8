@@ -194,6 +194,10 @@ class TextApiDeps:
     analyzer_url: str
     analyzer_language: str
     default_score_threshold: float
+    # Versions of everything outside the configuration that shapes the result
+    # (phase 2 bis step G, D-030): normalization, the other detection steps of
+    # the code, analyzer (Presidio, spaCy, model). See main.detection_versions.
+    detection_versions: Mapping[str, Any]
 
 
 def load_extension_recognizers(extension_dir: Path, themes: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
@@ -249,6 +253,7 @@ def detection_config_fingerprint(deps: TextApiDeps, extension_recognizers: Seque
             "extension": extension_recognizers,
             "default_score_threshold": deps.default_score_threshold,
             "language": deps.analyzer_language,
+            "versions": deps.detection_versions,
         },
         sort_keys=True,
         ensure_ascii=True,

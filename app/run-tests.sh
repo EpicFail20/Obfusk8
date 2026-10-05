@@ -21,6 +21,11 @@ repo=$(cd "$(dirname "$0")/.." && pwd)
 image=${OBFUSK8_TEST_IMAGE:-ghcr.io/epicfail20/obfusk8-app:0.2.0-dev}
 devtools=${OBFUSK8_DEVTOOLS:-$HOME/.cache/obfusk8-devtools}
 
+# The declared analyzer versions (detection_config fingerprint) must be the
+# ones the analyzer image is built with (checked by its Dockerfile).
+cmp -s "$repo/app/analyzer_versions.json" "$repo/presidio/analyzer-build/versions.json" \
+    || { echo "run-tests.sh: app/analyzer_versions.json differs from presidio/analyzer-build/versions.json" >&2; exit 1; }
+
 # The image must stay minimal: fail before running anything if pytest or the
 # test suite came back into it.
 docker run --rm --network none --entrypoint sh "$image" -c \

@@ -173,6 +173,7 @@ def _deps(audit_dir, extension_dir, detect, alerts=None, **overrides):
         analyzer_url="http://presidio-analyzer.invalid:3000",
         analyzer_language="fr",
         default_score_threshold=0.4,
+        detection_versions={"normalization": 1, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.0"}},
     )
     values.update(overrides)
     return text_api.TextApiDeps(**values)
@@ -291,6 +292,35 @@ def test_empreinte_de_configuration_stable_et_sensible(audit_dir, extension_dir)
     assert a == text_api.detection_config_fingerprint(deps, [{"name": "x"}])
     assert a != text_api.detection_config_fingerprint(deps, [{"name": "y"}])
     assert re.fullmatch(r"[0-9a-f]{16}", a)
+
+
+@pytest.mark.parametrize(
+    "versions",
+    [
+        {"normalization": 2, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.0"}},
+        {"normalization": 1, "pipeline": 2, "analyzer": {"presidio_analyzer": "0.0.0"}},
+        {"normalization": 1, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.1"}},
+    ],
+    ids=["normalisation", "chaine", "analyseur"],
+)
+def test_empreinte_sensible_aux_versions_de_detection(audit_dir, extension_dir, versions):
+    """D-030 and phase 2 bis step G: a change of the normalization, of another
+    detection step of the code, or of the analyzer (Presidio, spaCy, model)
+    changes detection_config even when no theme or recognizer changed."""
+    base = _deps(audit_dir, extension_dir, _regex_detector({}))
+    changed = _deps(audit_dir, extension_dir, _regex_detector({}), detection_versions=versions)
+    assert text_api.detection_config_fingerprint(base, []) != text_api.detection_config_fingerprint(changed, [])
+
+
+def test_versions_de_detection_de_l_application():
+    import text_normalization
+
+    versions = main.detection_versions()
+    assert versions["normalization"] == text_normalization.NORMALIZATION_VERSION
+    assert versions["pipeline"] == main.DETECTION_PIPELINE_VERSION
+    analyzer = versions["analyzer"]
+    assert set(analyzer) == {"presidio_analyzer", "spacy", "fr_core_news_md"}
+    assert all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in analyzer.values())
 
 
 # ---------------------------------------------------------------------------

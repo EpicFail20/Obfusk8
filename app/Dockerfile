@@ -64,6 +64,9 @@ COPY branding.py .
 COPY text_api.py text_api_models.py ./
 # Unicode normalization before detection (phase 2, D-014).
 COPY text_normalization.py ./
+# Declared analyzer versions, part of the detection_config fingerprint
+# (phase 2 bis step G; copy of presidio/analyzer-build/versions.json).
+COPY analyzer_versions.json ./
 COPY themes/ ./themes/
 COPY i18n/ ./i18n/
 

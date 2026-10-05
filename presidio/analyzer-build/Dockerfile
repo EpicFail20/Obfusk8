@@ -60,4 +60,17 @@ RUN python3 /tmp/patch_recognizers.py && rm /tmp/patch_recognizers.py
 # final decision in docs/BACKLOG-detection.md.
 COPY patches/spacy_recognizer.py /app/presidio_analyzer/predefined_recognizers/nlp_engine_recognizers/spacy_recognizer.py
 
+# versions.json declares the presidio-analyzer, spaCy and French model
+# versions; app/analyzer_versions.json is its copy, part of the
+# detection_config fingerprint of /api/v1/version (phase 2 bis step G).
+# The build fails if what is installed differs: a base image or model change
+# cannot slip in without updating the declaration (and so the fingerprint).
+COPY versions.json /tmp/versions.json
+RUN python3 -c 'import json, tomllib, importlib.metadata as m; \
+d = json.load(open("/tmp/versions.json")); \
+p = tomllib.load(open("/app/pyproject.toml", "rb"))["project"]["version"]; \
+found = {"presidio_analyzer": p, "spacy": m.version("spacy"), "fr_core_news_md": m.version("fr_core_news_md")}; \
+assert found == d, f"installed {found} != versions.json {d}"' \
+    && rm /tmp/versions.json
+
 USER 1001

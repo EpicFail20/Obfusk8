@@ -54,8 +54,12 @@ All routes go through the existing chain: Traefik → `oidc-auth` (oauth2-proxy)
 ```
 
 - `detection_config`: fingerprint (SHA-256 truncated to 16 hex characters) computed at startup over the canonical content of the themes,
-  the common recognizers, the text-API-specific recognizers, `DEFAULT_SCORE_THRESHOLD` and the analysis language. It changes as soon as any
-  of these changes. The extension can display or log it to know which configuration a text was checked with.
+  the common recognizers, the text-API-specific recognizers, `DEFAULT_SCORE_THRESHOLD`, the analysis language and, since phase 2 bis
+  (D-030), the **versions** of what shapes the result outside the configuration: version of the Unicode normalization
+  (`NORMALIZATION_VERSION`), version of the other detection steps of the code (`DETECTION_PIPELINE_VERSION`: upper case, dashes, block
+  chunking, D-012 propagation, D-004 overlap merge), **declared** versions of presidio-analyzer, spaCy and the French model
+  (`app/analyzer_versions.json`, which the analyzer build checks against what is installed). It changes as soon as any
+  of these changes. Compatible change: same field, same format, more sensitive. The extension can display or log it to know which configuration a text was checked with.
 - `analyzer_recognizers`: fingerprint (16 hex characters) of the list of recognizers actually loaded by `presidio-analyzer` for the analysis
   language, queried on the first call then cached; `null` if the analyzer does not answer (D-013).
 - `presidio_version`: always `null` for now, since Presidio's REST API does not expose its version (D-013).

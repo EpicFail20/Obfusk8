@@ -83,7 +83,7 @@ from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, Uplo
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from branding import install_branding
 from supervision import Alert, AlertSeverity, get_alert_sink
-from text_normalization import normalize_for_analysis
+from text_normalization import NORMALIZATION_VERSION, normalize_for_analysis
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("anonymiseur")
@@ -1398,6 +1398,31 @@ def _analyze_text(text: str, theme: dict | None = None, timeout: float = 30) -> 
         entities = [e for e in entities if e.get("entity_type") not in excluded_types]
 
     return entities
+
+
+# Version of the detection steps of this code OTHER than text_normalization
+# (which has its own NORMALIZATION_VERSION): the upper-case and dash
+# normalizations below, the score re-check and the type filtering of
+# _analyze_text, the block chunking of _detect_text_blocks, and on the text
+# routes the propagation (D-012) and the overlap merge (D-004) of text_api.
+# It enters the detection_config fingerprint (phase 2 bis step G): bump it
+# with any change to what these steps return for the same input.
+DETECTION_PIPELINE_VERSION = 1
+
+# Versions of presidio-analyzer, spaCy and the French model the analyzer
+# image is built with. A copy of presidio/analyzer-build/versions.json (the
+# analyzer build fails if its installed versions differ from that file;
+# app/run-tests.sh fails if the two copies differ): the analyzer's REST API
+# exposes no version (D-013), so this declared value is what the app knows.
+ANALYZER_VERSIONS_FILE = Path(__file__).resolve().parent / "analyzer_versions.json"
+
+
+def detection_versions() -> dict:
+    """Everything outside the configuration that shapes detection results,
+    for the detection_config fingerprint of /api/v1/version."""
+    with open(ANALYZER_VERSIONS_FILE, encoding="utf-8") as f:
+        analyzer = json.load(f)
+    return {"normalization": NORMALIZATION_VERSION, "pipeline": DETECTION_PIPELINE_VERSION, "analyzer": analyzer}
 
 
 def _analyze_normalized(text: str, theme: dict | None = None, **analyze_kwargs) -> list[dict]:
@@ -4538,6 +4563,7 @@ def _build_text_api_router(settings: text_api.TextApiSettings) -> APIRouter:
         analyzer_url=ANALYZER_URL,
         analyzer_language=LANGUAGE,
         default_score_threshold=DEFAULT_SCORE_THRESHOLD,
+        detection_versions=detection_versions(),
     )
     return text_api.create_router(settings, deps)
 

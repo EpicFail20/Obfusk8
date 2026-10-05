@@ -54,8 +54,12 @@ Réponse 200 :
 ```
 
 - `detection_config` : empreinte (SHA-256 tronquée à 16 caractères hexadécimaux) calculée au démarrage sur le contenu canonique des thèmes,
-  des reconnaisseurs communs, des reconnaisseurs propres à l'API texte, de `DEFAULT_SCORE_THRESHOLD` et de la langue d'analyse.
-  Elle change dès qu'un de ces éléments change. L'extension peut l'afficher ou la journaliser pour savoir avec quelle configuration un texte a été vérifié.
+  des reconnaisseurs communs, des reconnaisseurs propres à l'API texte, de `DEFAULT_SCORE_THRESHOLD`, de la langue d'analyse et, depuis la
+  phase 2 bis (D-030), des **versions** de ce qui façonne le résultat hors configuration : version de la normalisation Unicode
+  (`NORMALIZATION_VERSION`), version des autres étapes de détection du code (`DETECTION_PIPELINE_VERSION` : majuscules, tirets,
+  découpage en blocs, propagation D-012, fusion des chevauchements D-004), versions **déclarées** de presidio-analyzer, de spaCy et du
+  modèle français (`app/analyzer_versions.json`, que la construction de l'analyseur vérifie contre ce qui est installé).
+  Elle change dès qu'un de ces éléments change. Changement compatible : même champ, même format, plus sensible. L'extension peut l'afficher ou la journaliser pour savoir avec quelle configuration un texte a été vérifié.
 - `analyzer_recognizers` : empreinte (16 caractères hexadécimaux) de la liste des reconnaisseurs effectivement chargés par `presidio-analyzer`
   pour la langue d'analyse, interrogée au premier appel puis mise en cache ; `null` si l'analyseur ne répond pas (D-013).
 - `presidio_version` : toujours `null` pour l'instant, l'API REST de Presidio n'exposant pas sa version (D-013).
