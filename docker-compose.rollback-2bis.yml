@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Rollback of phase 2 bis (see docs/phase-2-bis-report.md, "Retour arrière").
+# Runs the stack on the images that were in service before the phase, kept
+# under local tags (never pushed, never pulled):
+#   docker compose -f docker-compose.yml -f docker-compose.rollback-2bis.yml up -d
+# Back to the current images:
+#   docker compose up -d
+#
+# Prerequisite, once: the Keycloak 26.0 data, restored from the backup taken
+# before the upgrade into the external volume below (26.0 cannot read the
+# 26.8 database):
+#   docker volume create obfusk8_keycloak-data-avant-2bis
+#   docker run --rm --network none -v obfusk8_keycloak-data-avant-2bis:/dst \
+#     -v ~/obfusk8-backups:/b:ro busybox:1.38.0@sha256:fd7dc986... \
+#     sh -c 'tar -C /dst -xf /b/keycloak-data-avant-2bis-20261005.tar && chown -R 1000:0 /dst'
+#
+# Configuration stays the current one (fixed Traefik address, trusted proxy,
+# no presidio-anonymizer): the previous app image then logs a
+# "presidio-anonymizer unreachable" alert, harmless. A full configuration
+# rollback is `git checkout b96aa54 -- <files>`, outside this file.
+# `pull_policy: never`: these local tags must never be resolved on a registry
+# (a namespace such as obfusk8-local/ could be registered by anyone).
+# ---------------------------------------------------------------------------
+services:
+  app:
+    image: obfusk8-local:avant-2bis-app
+    pull_policy: never
+  presidio-analyzer:
+    image: obfusk8-local:avant-2bis-presidio-analyzer
+    pull_policy: never
+  traefik:
+    image: obfusk8-local:avant-2bis-traefik
+    pull_policy: never
+  keycloak:
+    image: obfusk8-local:avant-2bis-keycloak
+    pull_policy: never
+    volumes:
+      - keycloak-data-avant-2bis:/opt/keycloak/data
+  oauth2-proxy:
+    image: obfusk8-local:avant-2bis-oauth2-proxy
+    pull_policy: never
+  docker-socket-proxy:
+    image: obfusk8-local:avant-2bis-docker-socket-proxy
+    pull_policy: never
+  fix-app-dirs-perms:
+    image: obfusk8-local:avant-2bis-fix-app-dirs-perms
+    pull_policy: never
+
+volumes:
+  keycloak-data-avant-2bis:
+    external: true
+    name: obfusk8_keycloak-data-avant-2bis
