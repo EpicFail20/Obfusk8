@@ -148,7 +148,7 @@ redirections après connexion (encodages, `\`, Unicode), robustesse du 403 face 
    par ligne hors code).
 5. **`ENABLE_EXTENSION_API`** : la pile tournait avec `true` passé à la main lors des bancs de la phase 2 ; mon premier `up -d` l'a recréée avec
    la valeur par défaut `false`. Rétabli à `true` pour les mesures ; **la pile reste avec `ENABLE_EXTENSION_API=true`**.
-6. L'outil d'écriture de fichiers a converti des séquences `‮` en caractères réels ; le test d'hygiène l'a détecté sur son propre fichier.
+6. L'outil d'écriture de fichiers a converti des séquences `\u202e` en caractères réels ; le test d'hygiène l'a détecté sur son propre fichier.
 
 ## 8. Retour arrière
 
