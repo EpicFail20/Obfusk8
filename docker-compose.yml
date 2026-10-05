@@ -27,7 +27,13 @@ networks:
 
 volumes:
   traefik-certs:
-  keycloak-data:
+  # Keycloak 26.8 (phase 2 bis): fresh volume, realm imported from an export
+  # of the 26.0 instance. The dev-file H2 database of 26.0 cannot be migrated
+  # (Keycloak upgrading guide: "Migration is not supported with the default H2
+  # based dev-file database type"; its default credentials changed). The old
+  # `keycloak-data` volume is left untouched (rollback: see the phase 2 bis
+  # report), never declared here any more.
+  keycloak-data-v26-8:
 
 secrets:
   oauth2_client_secret:
@@ -54,7 +60,10 @@ services:
   # VOLUMES, SECRETS, SWARM...) stays blocked by default (403).
   # -------------------------------------------------------------------------
   docker-socket-proxy:
-    image: tecnativa/docker-socket-proxy:v0.5.0
+    # Pinned by digest (EXT-01): v0.5.0, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md).
+    # Fixable Alpine advisories (openssl, pcre2) await an upstream release
+    # (D-040, point 8).
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
     restart: unless-stopped
     logging:
       driver: json-file
@@ -76,7 +85,9 @@ services:
   # Reverse proxy + internal TLS
   # -------------------------------------------------------------------------
   traefik:
-    image: traefik:v3.7.13   # v3.6 EOL since v3.6.25 (2026-07-31, no more patches); 3.7 is the maintained stable line
+    # v3.6 EOL since v3.6.25 (2026-07-31, no more patches); 3.7 is the maintained stable line.
+    # Pinned by digest (EXT-01): v3.7.13, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md).
+    image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a38ba015dea9174c23b20e344a0
     restart: unless-stopped
     logging:
       driver: json-file
@@ -126,7 +137,12 @@ services:
   # Admin console: http://<vm-ip>:8080 (LAB ONLY)
   # -------------------------------------------------------------------------
   keycloak:
-    image: quay.io/keycloak/keycloak:26.0
+    # Pinned by digest (EXT-01): 26.8.0, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md).
+    # 26.0.8 (the former floating `26.0`) carried CVE-2026-18963,
+    # unauthenticated account takeover, fixed in 26.7.2 (D-040). The dev-file
+    # H2 database is not migrated across versions (see the volume below):
+    # upgrade by realm export (old version) and --import-realm (new version).
+    image: quay.io/keycloak/keycloak:26.8.0@sha256:b0f60d489d51c5d113390bdf5461d4c06e6051be026c05549f2e1e10ec352bcc
     restart: unless-stopped
     logging:
       driver: json-file
@@ -150,7 +166,7 @@ services:
     ports:
       - "8080:8080"   # admin console exposed directly for the lab
     volumes:
-      - keycloak-data:/opt/keycloak/data
+      - keycloak-data-v26-8:/opt/keycloak/data
     networks:
       frontend: {}   # needed for publishing port 8080 (browser -> login)
       app-internal:
@@ -175,7 +191,9 @@ services:
   # OIDC authentication in front of the app (Keycloak in lab, Entra ID in prod)
   # -------------------------------------------------------------------------
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4   # v7.6.0 was far behind (CVE + no cookie_secret_file)
+    # Pinned by digest (EXT-01): v7.15.5, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md); fixes
+    # GHSA-63jm-59jj-478j and GHSA-wr5q-7wxw-x568 (authentication bypasses).
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.5@sha256:8498b0d0ef0a7b29686414000a08aee467f02d0299c9ed1e006a8f33fc017916
     restart: unless-stopped
     logging:
       driver: json-file
@@ -248,7 +266,8 @@ services:
   # for an admin to know about or run a manual `chown` before first boot.
   # -------------------------------------------------------------------------
   fix-app-dirs-perms:
-    image: busybox:1.36
+    # Pinned by digest (EXT-01): 1.38.0, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md).
+    image: busybox:1.38.0@sha256:fd7dc98638c8e305f4dc34e979f1c0fdfdcaeb0fbf8fcff77ae834b6da3d7e6e
     command: ["sh", "-c", "chown -R 1000:1000 /data/tmp /data/audit"]
     volumes:
       - /var/lib/anonymiseur/workdir:/data/tmp
@@ -261,8 +280,12 @@ services:
   # Application (frontend + API)
   # -------------------------------------------------------------------------
   app:
-    image: ghcr.io/epicfail20/obfusk8-app:main
-    build: ./app
+    # Built from this repository (D-040, tagging scheme): versioned tag, never
+    # `main`/`latest`. 0.2.0-dev is LOCAL ONLY (never published): build it with
+    #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+    # Once a release is published by the workflow, pin it here by digest
+    # (`:X.Y.Z@sha256:...`), like the third-party images.
+    image: ghcr.io/epicfail20/obfusk8-app:0.2.0-dev
     restart: unless-stopped
     logging:
       driver: json-file
@@ -508,8 +531,12 @@ services:
   # PII detection engine
   # -------------------------------------------------------------------------
   presidio-analyzer:
-    image: ghcr.io/epicfail20/obfusk8-presidio-analyzer:latest
-    build: ./presidio/analyzer-build
+    # Built from this repository (D-040, tagging scheme): versioned tag, never
+    # `main`/`latest`. 0.2.0-dev is LOCAL ONLY (never published): build it with
+    #   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+    # Once a release is published by the workflow, pin it here by digest
+    # (`:X.Y.Z@sha256:...`), like the third-party images.
+    image: ghcr.io/epicfail20/obfusk8-presidio-analyzer:0.2.0-dev
     restart: unless-stopped
     logging:
       driver: json-file

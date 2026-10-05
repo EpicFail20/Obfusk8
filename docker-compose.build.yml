@@ -1,0 +1,19 @@
+# ---------------------------------------------------------------------------
+# Local build of the images built from this repository (D-040).
+# docker-compose.yml pins images by digest, and Compose refuses to build an
+# image whose reference contains a digest ("build tag cannot contain a
+# digest", observed on 2026-10-05): the build context therefore lives here.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose up -d
+#
+# `pull_policy: build`: never pull these tags from a registry, always build
+# them from the Dockerfiles of this checkout.
+# ---------------------------------------------------------------------------
+services:
+  app:
+    build: ./app
+    pull_policy: build
+  presidio-analyzer:
+    build: ./presidio/analyzer-build
+    pull_policy: build
