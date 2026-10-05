@@ -14,6 +14,10 @@ permissions: {}
 jobs:
   build-app:
     runs-on: ubuntu-latest
+    # Deployment environment (D-042): its protection rules (required reviewer,
+    # tag-only deployment) are configured in Settings > Environments >
+    # publication. No publication before the external pentest (D-041).
+    environment: publication
     permissions:
       contents: read
       packages: write
@@ -52,6 +56,10 @@ jobs:
 
   build-presidio-analyzer:
     runs-on: ubuntu-latest
+    # Deployment environment (D-042): its protection rules (required reviewer,
+    # tag-only deployment) are configured in Settings > Environments >
+    # publication. No publication before the external pentest (D-041).
+    environment: publication
     permissions:
       contents: read
       packages: write

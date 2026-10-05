@@ -415,3 +415,15 @@ Recommandations de l'inventaire de l'étape A, toutes validées :
    suppression seulement après sa confirmation explicite.
 7. **Aucune publication avant le pentest** : pas d'étiquette `v0.2.0`. EXT-01 reste ouvert pour `app` et l'analyseur seulement.
 8. **Validation** : l'humain fait le `git merge --ff-only` et le push.
+
+## D-042 — Publication verrouillée — décision humaine du 2026-10-05
+
+- **Contexte** : aucune publication d'image avant le pentest externe (D-041). La branche `main` du dépôt distant porte encore l'ancien workflow,
+  qui publie `main` et `latest` à chaque push sur `main`.
+- **Décision** : GitHub Actions est **désactivé** sur le dépôt (réglage fait par l'humain). En plus, les deux tâches du workflow déclarent
+  l'environnement `publication` ; ses règles de protection se règlent dans *Settings → Environments → publication* : relecteur obligatoire
+  (l'humain), déploiement limité aux étiquettes `v*.*.*` (*Deployment branches and tags → Selected branches and tags*), et
+  *Prevent self-review* désactivé tant qu'un seul relecteur existe.
+- **Conséquences** : même après réactivation des Actions, aucune image n'est poussée sans approbation explicite dans l'interface GitHub.
+  Tant que l'environnement n'est pas créé, GitHub le crée sans protection au premier lancement : le créer **avant** de réactiver les Actions.
+  Vérifié localement : `actionlint` 1.7.12, 0 constat.
