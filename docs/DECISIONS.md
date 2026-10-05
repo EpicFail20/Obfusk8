@@ -286,3 +286,70 @@ relève des règles d'usage, du blocage réseau et de la formation. Tout choix d
   signalé (avertissement, audit). EXT-37 corrigé : `None` traité comme une liste vide.
 - **Alternatives écartées** : R2, découpage de la chaîne recherchée aux U+0000 (fragments courts trouvés ailleurs sur la page, une seule cause
   traitée) ; R3, caviardage de la ligne entière (masque bien plus que la valeur).
+
+---
+
+# Décisions sur le compte rendu de la phase 2 (décision humaine du 2026-10-05)
+
+Consignées depuis `docs/phase-2-report.md` §12. Les points 2, 3, 4, 5, 6 et le contrôle d'identité du point 9 seront mis en œuvre dans une
+**phase 2.1** (branche locale `feat/detection-2-1`, créée depuis `feat/text-api` après la poussée), pas avant l'accord humain.
+
+## D-027 — Filtre PROPN (EXT-18) conservé à titre provisoire — décision humaine du 2026-10-05
+
+- **Contexte** : mesuré en phase 2, aucun faux négatif imputable au filtre sur les corpus synthétiques, 90 faux positifs évités.
+- **Décision** : filtre conservé à titre provisoire. Une variante « noms en minuscules » (style messagerie) est ajoutée au corpus de mesure et son
+  effet est mesuré avec et sans filtre avant une décision définitive (le filtre rejette les entités sans jeton PROPN, ce que des noms en
+  minuscules peuvent provoquer).
+
+## D-028 — Détection des secrets étendue à tous les flux (EXT-42) — décision humaine du 2026-10-05, phase 2.1
+
+- **Décision** : les reconnaisseurs de secrets s'appliquent aussi au flux documents, après mesure des faux positifs sur des documents.
+
+## D-029 — Jonction des lignes d'un même bloc PDF pour l'analyse (EXT-41) — décision humaine du 2026-10-05, phase 2.1
+
+- **Décision** : pour l'analyse, les sauts de ligne internes à un bloc sont joints. Le test vérifie **dans le PDF final** que chaque morceau de
+  la valeur est caviardé sur chaque ligne.
+
+## D-030 — `detection_config` inclut une version de la normalisation — décision humaine du 2026-10-05, phase 2.1
+
+- **Décision** : l'empreinte de `/version` intègre une version de la normalisation ; contrat FR/EN mis à jour.
+
+## D-031 — Type retenu lors d'un chevauchement — décision humaine du 2026-10-05, phase 2.1
+
+- **Décision** : le type le plus spécifique selon un ordre de priorité fixe et documenté (NIR, IBAN, carte, téléphone…). La zone masquée reste
+  **l'union** des détections : le choix du type ne réduit jamais le masquage.
+
+## D-032 — Motif « titre ou fonction + Prénom Nom » (EXT-32) — décision humaine du 2026-10-05, phase 2.1
+
+- **Décision** : reconnaisseur commun avec une liste adaptée au milieu hospitalier (Dr, Pr, Mme, M., IDE, AS, cadre, interne…), faux positifs mesurés.
+
+## D-033 — Objectifs de latence en valeur absolue — décision humaine du 2026-10-05
+
+- **Contexte** : écart de la phase 2 sur les petits prompts (+5 ms à 200 caractères, +11 ms à 1 000), accepté.
+- **Décision** : désormais, objectifs de latence en valeur absolue : **p95 < 100 ms sous 2 000 caractères**.
+
+## D-034 — Zone « Antécédents » disparue : écart accepté — décision humaine du 2026-10-05
+
+- **Décision** : écart accepté (faux positif supprimé par la recomposition NFD), sous réserve de confirmer que c'est la seule zone disparue sur
+  l'ensemble des documents de référence, avec l'image reconstruite depuis le Dockerfile.
+
+## D-035 — Comptes sans courriel et identité obligatoire sur `/api/v1/` — décision humaine du 2026-10-05
+
+- **Décision** : l'humain rend l'attribut email facultatif dans Keycloak et crée le compte de test ; la vérification est faite ensuite.
+  Dans tous les cas, l'application refuse (**403**) toute requête `/api/v1/` dont l'identité `X-Auth-Request-User` est vide ou absente, avec
+  test (phase 2.1).
+
+## D-036 — Latence à plusieurs utilisateurs acceptée pour un pilote restreint — décision humaine du 2026-10-05
+
+- **Décision** : acceptée ; un second worker de l'analyseur sera réévalué avec les métriques du pilote.
+
+## D-037 — Masquage de la version d'oauth2-proxy (EXT-44) — décision humaine du 2026-10-05
+
+- **Décision** : `footer = "-"` dans `oauth2-proxy/oauth2-proxy.cfg` (option documentée : « Use "-" to disable default footer. (Can be used to
+  obfuscate the version) »), appliqué en phase 2.
+
+## D-038 — Jeu de test indépendant (holdout) hors dépôt — décision humaine du 2026-10-05
+
+- **Décision** : un corpus indépendant, `~/obfusk8-holdout.jsonl` (hors dépôt, même format que le corpus de qualité), est mesuré par le banc de
+  qualité sans que son contenu soit jamais affiché ni lu en dehors du banc ; seuls des chiffres agrégés sont rapportés.
+- **Conséquences** : le rapport de ce corpus ne contient ni identifiant d'invite, ni catégorie, ni texte.
