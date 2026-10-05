@@ -70,7 +70,7 @@ DETECTION_DURATION_SECONDS = Histogram(
 PRESIDIO_UP = Gauge(
     "anonymiseur_presidio_up",
     "Availability of the Presidio service (1 = reachable, 0 = unreachable)",
-    ["service"],  # "analyzer" or "anonymizer"
+    ["service"],  # "analyzer" (presidio-anonymizer removed in phase 2 bis, D-040)
 )
 
 AV_SCAN_RESULT = Counter(

@@ -89,7 +89,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 log = logging.getLogger("anonymiseur")
 
 ANALYZER_URL = os.environ.get("PRESIDIO_ANALYZER_URL", "http://presidio-analyzer:3000")
-ANONYMIZER_URL = os.environ.get("PRESIDIO_ANONYMIZER_URL", "http://presidio-anonymizer:3000")
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "25"))
 FILE_TTL_SECONDS = int(os.environ.get("FILE_TTL_SECONDS", "600"))
 JOB_REVIEW_TTL_SECONDS = int(os.environ.get("JOB_REVIEW_TTL_SECONDS", "900"))
@@ -836,7 +835,7 @@ def _check_disk_space(volume: str, path: Path) -> None:
 
 def _check_presidio_health(service: str, base_url: str) -> None:
     """Lightweight health check: a simple HTTP request is enough, no
-    need to reproduce a real analysis/anonymization call here."""
+    need to reproduce a real analysis call here."""
     try:
         resp = requests.get(f"{base_url}/health", timeout=5)
         up = resp.ok
@@ -876,7 +875,6 @@ def _cleanup_sweep_loop(interval_seconds: int = 60):
             for volume, path in _MONITORED_VOLUMES.items():
                 _check_disk_space(volume, path)
             _check_presidio_health("analyzer", ANALYZER_URL)
-            _check_presidio_health("anonymizer", ANONYMIZER_URL)
         except Exception:
             log.error("Erreur inattendue dans la boucle de nettoyage périodique, tour ignoré", exc_info=True)
 
@@ -1422,27 +1420,6 @@ def _analyze_normalized(text: str, theme: dict | None = None, **analyze_kwargs) 
         start, end = normalized.to_original(entity["start"], entity["end"])
         remapped.append({**entity, "start": start, "end": end})
     return remapped
-
-
-def _anonymize_text(text: str, entities: list[dict]) -> str:
-    """Calls presidio-anonymizer to produce an anonymized text version (audit)."""
-    if not entities:
-        return text
-    try:
-        resp = requests.post(
-            f"{ANONYMIZER_URL}/anonymize",
-            json={
-                "text": text,
-                "analyzer_results": entities,
-            },
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json().get("text", text)
-    except requests.RequestException as exc:
-        log.error("Appel presidio-anonymizer échoué: %s", exc)
-        # Non-blocking: PDF redaction does not depend on this call
-        return text
 
 
 PREVIEW_ZOOM = 2.0  # magnification factor for page-to-image rendering

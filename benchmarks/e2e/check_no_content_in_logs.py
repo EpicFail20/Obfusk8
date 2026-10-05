@@ -40,7 +40,7 @@ from build_supplementary_corpus import build as supplementary_records  # noqa: E
 from build_secret_corpus import tp_records  # noqa: E402
 
 PROJECT = "obfusk8"
-SERVICES = ["app", "presidio-analyzer", "presidio-anonymizer", "traefik", "oauth2-proxy", "keycloak"]
+SERVICES = ["app", "presidio-analyzer", "traefik", "oauth2-proxy", "keycloak"]
 AUDIT_FILES = ["/data/audit/audit.log", "/data/audit/audit-extension.log"]
 CANARIES = ["Zébulon", "Zebulon", "Canarihaut", "canarihaut", "06 12 34 56 78", "⟦"]
 MIN_VALUE_CHARS = 8

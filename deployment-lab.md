@@ -121,11 +121,11 @@ docker compose up -d --force-recreate oauth2-proxy
 ## 6. Start the rest of the stack
 
 ```bash
-docker compose up -d --build --scale presidio-analyzer=2 --scale presidio-anonymizer=1
+docker compose up -d --build --scale presidio-analyzer=2
 docker compose ps
 ```
 
-(2 replicas are enough for a functional test; scale up to 6/2 for the 50-concurrent-user load test — 12-16 vCPU / 24-32 GB in that case.)
+(2 replicas are enough for a functional test; scale up to 6 for the 50-concurrent-user load test — 12-16 vCPU / 24-32 GB in that case.)
 
 ```bash
 docker compose ps
