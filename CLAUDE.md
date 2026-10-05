@@ -24,18 +24,19 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) et le 5 octobre 2026 (phases 2 et 2 bis). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
 (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
-`presidio-anonymizer` n'est **pas** appelé pour anonymiser : `_anonymize_text` est du code mort, le service ne sert qu'au contrôle de santé (EXT-20).
-Le caviardage est fait par `app` elle-même.
+Le service `presidio-anonymizer` a été **retiré** (phase 2 bis, D-040 : jamais appelé, EXT-20) ; le caviardage est fait par `app` elle-même.
+Point d'entrée unique vers l'analyseur : `main._analyze_normalized` (normalisation D-014 avec table de correspondance). PyMuPDF ne traite
+qu'un document à la fois, sur un fil dédié (D-019) ; repli de localisation PDF par positions de caractères (D-026).
 
 **Secret de passerelle** (audit 3.7) : `_GatewaySecretMiddleware` vérifie un secret injecté par Traefik (`gateway-secret@file`).
 Toute route de l'application doit rester derrière ce mécanisme et derrière `oidc-auth`. Ne crée jamais de contournement.
 
 **Routage Traefik par labels** : des routeurs dédiés existent pour `/api/detect` et `/api/finalize` (limitation de débit + plafond de corps),
-`/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, limitation de débit **par utilisateur**
+`/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, **désactivée jusqu'à la phase 3**, `ENABLE_EXTENSION_API=false` dans `.env`, D-041 ; limitation de débit **par utilisateur**
 sur `X-Auth-Request-User`, plafond de corps dérivé de `MAX_TEXT_CHARS`, voir `docs/api-extension.md` §7) et `/metrics` (liste d'IP autorisées). **Toute autre route tombe dans le routeur `app` par défaut :
 authentifiée, mais sans limitation de débit ni plafond de corps en bordure.** Toute nouvelle route exposée exige donc son propre routeur.
 
@@ -75,13 +76,27 @@ référence d'audit). Garde ce style : une valeur ou un choix non évident est j
 Le nom du projet Compose est supposé être `obfusk8` (label `traefik.docker.network=obfusk8_app-internal`) et les ports 80, 443 et 8080 sont fixes.
 **Ne lance jamais une seconde pile sur le même hôte** : elle partagerait le journal d'audit et les fichiers de travail, et casserait le routage.
 
+**Images et versions** (phase 2 bis, D-040) : toutes les images tierces sont épinglées par condensat dans `docker-compose.yml` ; les images
+construites (`app`, analyseur) portent une version (`0.2.0-dev`, **locale**, jamais publiée) et se construisent par
+`docker compose -f docker-compose.yml -f docker-compose.build.yml build` (Compose refuse une étiquette de construction avec condensat).
+Paquets Python de `app` : `app/requirements.lock` (empreintes) ; `pip` est retiré des images. Versions de l'analyseur déclarées dans
+`presidio/analyzer-build/versions.json` (vérifiées à sa construction) et copiées dans `app/analyzer_versions.json` (empreinte `detection_config`) :
+les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-2bis.yml`.
+
+**Adresse fixe de Traefik** : `10.89.18.10` sur `app-internal` (`10.89.18.0/24`, hors des pools par défaut de Docker), seule source de confiance
+d'oauth2-proxy pour les en-têtes de transfert (`trusted_proxy_ips`). À changer aux trois endroits ensemble. PKCE S256 exigé entre
+oauth2-proxy (`code_challenge_method`) et le client Keycloak (*PKCE method*) : l'un sans l'autre bloque toute connexion (EXT-49). Keycloak 26.8 sur le volume
+`keycloak-data-v26-8` (la base H2 de développement ne se migre pas d'une version à l'autre : export puis import du royaume).
+
 **Modules existants à réutiliser** : `antivirus.py` (ICAP), `supervision.py` (alertes, syslog), journal d'audit, `branding.py`,
 `text_api.py` (API texte, limiteur et file bornée).
 
-**Tests** : `pytest` est présent dans l'image de production et `tests/` y est copié (EXT-09, non corrigé). **Ne lance jamais la suite dans le
-conteneur `app`** : elle écrirait dans le vrai journal d'audit et les vrais fichiers de travail. Méthode (D-016) : conteneur jetable de l'image de
-production, `--security-opt seccomp=seccomp/app-enforce.json`, `--read-only`, `--network none`, `tmpfs` à la place des volumes, outils de
-`app/requirements-dev.txt` installés hors de l'image et montés en lecture seule. La couverture se mesure hors seccomp (base SQLite de `coverage`
+**Tests** : l'image de production ne contient ni `pytest` ni les tests (EXT-09 corrigé). **Ne lance jamais la suite dans le conteneur `app`** :
+elle écrirait dans le vrai journal d'audit et les vrais fichiers de travail. Méthode (D-016 mis à jour) : `app/run-tests.sh`, conteneur jetable de
+l'image de production sous `seccomp/app-enforce.json`, `--read-only`, `--network none`, `tmpfs`, `app/tests` et le dépôt montés en lecture seule,
+outils de `app/requirements-dev.txt` installés hors de l'image et montés en lecture seule ; le script refuse une image qui contiendrait `pytest`.
+Aucun caractère Unicode de format écrit tel quel dans un fichier (séquences d'échappement, test `test_repo_hygiene.py`, EXT-39) ; jetons de test
+au format réel via `app/tests/fake_secrets.py`. La couverture se mesure hors seccomp (base SQLite de `coverage`
 bloquée), la suite fonctionnelle sous seccomp.
 
 **Mémoire de l'hôte** (EXT-25) : `/tmp` est un tmpfs qui consomme la RAM de la VM, sans swap. Aucun fichier volumineux dedans (archive d'image,
@@ -175,7 +190,7 @@ Pour chaque dépendance ajoutée, mise à jour ou touchée (Python, image Docker
    Jamais un blog ou une réponse de modèle comme source d'une CVE.
 4. **Santé** : dernière publication, maintenance active, obsolescence, **licence compatible avec celle du projet** (AGPL-3.0 selon le README ;
    vérifie le fichier `LICENSE`).
-5. **Compatibilité** : version de Python de l'image, cohérence des versions Presidio entre `presidio/analyzer-build` et l'image `presidio-anonymizer`,
+5. **Compatibilité** : version de Python de l'image, cohérence de `presidio/analyzer-build/versions.json` avec l'image de base et avec `app/analyzer_versions.json`,
    notes de version en cas de changement majeur.
 6. **Épinglage reproductible** avec empreintes si l'outillage le permet ; dépendances de production et de développement séparées.
 7. **Traçabilité** dans `docs/DEPENDENCIES.md` : paquet, version retenue, dernière stable observée, date et source, résultat d'audit, licence, remarque.
