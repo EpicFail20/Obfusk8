@@ -36,6 +36,7 @@ import time
 from pathlib import Path
 
 import pymupdf as fitz
+from docx import Document as WordDocument
 from PIL import Image, ImageDraw, ImageFont
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -72,6 +73,35 @@ CASES = {
     "image": ("f.png", make_png),
 }
 
+# Phase 2 bis: the FINAL file is checked too. Synthetic sensitive values of
+# each input that must be absent from the text extracted from the downloaded
+# document (the image is redacted in pixels: nothing to extract, not checked).
+MUST_BE_GONE = {
+    "pdf": ["FONTAINE", "06 11 22 33 44"],
+    "docx": ["FONTAINE", "06 11 22 33 44", "ROUSSEAU"],
+    "csv": ["marc.dupuis@example-fictif.test", "06 22 33 44 55"],
+}
+
+
+def final_text(kind: str, content: bytes) -> str:
+    if kind == "pdf":
+        with fitz.open(stream=content, filetype="pdf") as doc:
+            return "".join(page.get_text() for page in doc)
+    if kind == "docx":
+        doc = WordDocument(io.BytesIO(content))
+        cells = [cell.text for table in doc.tables for row in table.rows for cell in row.cells]
+        return "\n".join([p.text for p in doc.paragraphs] + cells)
+    return content.decode("utf-8-sig")
+
+
+def leaks(kind: str, content: bytes) -> str:
+    """'-' for the image, else '<leaked>/<checked>' (never the values themselves)."""
+    if kind not in MUST_BE_GONE:
+        return "-"
+    text = final_text(kind, content)
+    return f"{sum(value in text for value in MUST_BE_GONE[kind])}/{len(MUST_BE_GONE[kind])}"
+
+
 # upload-ratelimit (existing): 5/min, burst 10 on detect+finalize — each case
 # costs 2 requests, so pace them (E2E_PACE seconds before each) when needed.
 PACE = float(os.environ.get("E2E_PACE", "0"))
@@ -100,11 +130,13 @@ for theme in THEMES:
         f = s.post(f"{BASE}/api/finalize", data={"job_id": m.group(1), "format": "json"}, timeout=120)
         fj = f.json()
         d = s.get(f"{BASE}{fj['download_url']}", timeout=60)
-        ok = f.status_code == 200 and d.status_code == 200 and len(d.content) > 0
+        leaked = leaks(kind, d.content) if d.status_code == 200 else "?"
+        ok = f.status_code == 200 and d.status_code == 200 and len(d.content) > 0 and leaked[:2] in ("-", "0/")
         failures += not ok
         print(
             f"{kind:6} theme={theme or '-':8} detect={r.status_code} ({dt:.2f}s, {zones} zone(s)) preview={preview} "
-            f"finalize={f.status_code} total={fj.get('total_redactions')} download={d.status_code} {len(d.content)}o"
+            f"finalize={f.status_code} total={fj.get('total_redactions')} download={d.status_code} {len(d.content)}o "
+            f"exposed={leaked}"
         )
 
 ref = s.get(f"{BASE}/api/nexistepas", headers={"Accept": "application/json"}, timeout=30)
