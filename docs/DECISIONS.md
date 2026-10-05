@@ -399,3 +399,19 @@ Recommandations de l'inventaire de l'étape A, toutes validées :
   cohérent, alors que le montage suffit.
 - **Conséquences** : pour tester du code non encore construit, reconstruire l'image (`docker-compose.build.yml`) ou monter `app/` en
   entier (méthode de la phase 2).
+
+## D-041 — Fin de la phase 2 bis — décision humaine du 2026-10-05
+
+1. **API texte désactivée** jusqu'à la phase 3 : `ENABLE_EXTENSION_API=false` inscrit explicitement dans `.env` de la VM, pile redéployée
+   (vérifié : `/api/v1/version` → 401 sans session, 404 avec session).
+2. **Diff de `CLAUDE.md` §1** : relu par l'humain avant application.
+3. **PKCE** : S256 côté oauth2-proxy (`code_challenge_method`) et exigé côté client Keycloak ; appliqué et vérifié de bout en bout (EXT-49).
+4. **Dépendances de production en retard** : phase dédiée (phase 2 ter), sous seccomp ; seule la liste est préparée
+   (`docs/phase-2-ter-dependances.md`).
+5. **Version de l'API** : reste `1.0`. **Règle** : jusqu'à la première publication, le contrat évolue librement ; après la première
+   publication, tout changement visible par un client (nouveau code d'erreur, champ ajouté, retiré ou modifié, changement de sémantique)
+   fait évoluer `api_version` (mineure si compatible, majeure et nouveau préfixe `/api/v2/` sinon, D-001).
+6. **Volumes** `obfusk8_keycloak-data` et `obfusk8-kc-export-src` : conservés ; l'humain copie d'abord la sauvegarde tar hors de la VM ;
+   suppression seulement après sa confirmation explicite.
+7. **Aucune publication avant le pentest** : pas d'étiquette `v0.2.0`. EXT-01 reste ouvert pour `app` et l'analyseur seulement.
+8. **Validation** : l'humain fait le `git merge --ff-only` et le push.
