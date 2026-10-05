@@ -353,3 +353,37 @@ Consignées depuis `docs/phase-2-report.md` §12. Les points 2, 3, 4, 5, 6 et le
 - **Décision** : un corpus indépendant, `~/obfusk8-holdout.jsonl` (hors dépôt, même format que le corpus de qualité), est mesuré par le banc de
   qualité sans que son contenu soit jamais affiché ni lu en dehors du banc ; seuls des chiffres agrégés sont rapportés.
 - **Conséquences** : le rapport de ce corpus ne contient ni identifiant d'invite, ni catégorie, ni texte.
+
+## D-039 — Priorité au prototype sûr ; phase 2.1 annulée — décision humaine du 2026-10-05
+
+- **Contexte** : la phase 2 a atteint ses objectifs de détection mesurés ; il reste des familles de faux négatifs connues (EXT-18, EXT-32,
+  EXT-41, EXT-42, EXT-46…) dont chaque correction demande banc et arbitrage.
+- **Décision** : la priorité du projet est un **prototype fonctionnel, bien conçu et sûr**. La qualité de détection devient de l'amélioration
+  continue et n'est plus un préalable aux phases suivantes. La phase 2.1 est annulée : ses points de sécurité (D-035, EXT-39) passent en
+  phase 2 bis, ses points de qualité au backlog `docs/BACKLOG-detection.md`. D-028 à D-032 restent valables et y sont reportées.
+- **Conséquences** : la révision humaine obligatoire et un avertissement clair à l'utilisateur restent la protection contre les faux négatifs
+  résiduels (doctrine §0.1 inchangée). Ordre des phases de D-021 : la phase 2 bis précède la phase 3.
+
+## D-040 — Choix de l'étape A de la phase 2 bis — décision humaine du 2026-10-05
+
+Recommandations de l'inventaire de l'étape A, toutes validées :
+
+1. **Service `presidio-anonymizer` retiré** (EXT-20) : jamais appelé pour anonymiser ; il ne servait qu'au contrôle de santé, à une jauge et à
+   un `depends_on`. Le contrôle de santé, la jauge pour ce service et `_anonymize_text` (code mort) sont retirés du code applicatif.
+2. **Python 3.12** conservé pour `app` (3.12.15, maintenu en sécurité jusqu'en 2028, même série que l'image Presidio) ; 3.14 écarté pour
+   éviter la revalidation du profil seccomp sur un nouvel interpréteur sans bénéfice de sécurité.
+3. **Keycloak 26.0 → 26.8.0**, après sauvegarde du volume `keycloak-data` (migration de schéma irréversible) : 26.0.8 contient
+   CVE-2026-18963 (prise de contrôle de compte sans authentification, corrigée en 26.7.2).
+4. **oauth2-proxy v7.15.5** (correctifs GHSA-63jm-59jj-478j et GHSA-wr5q-7wxw-x568), **busybox 1.38.0**, actions GitHub aux dernières
+   versions majeures (Node 24).
+5. **Schéma d'étiquetage** : images tierces `nom:version@sha256:…` ; images construites `ghcr.io/epicfail20/obfusk8-<service>:X.Y.Z@sha256:…`
+   une fois publiées, construction locale par `docker-compose.build.yml` (Compose refuse une étiquette de construction contenant un
+   condensat : « build tag cannot contain a digest », observé) ; workflow : `X.Y.Z` et `sha-<commit>` sur une étiquette git `vX.Y.Z`, plus de
+   `latest` ni de `main`. **Version de cette phase : `0.2.0-dev`, en local uniquement** (aucune publication, aucune étiquette git).
+6. **IP fixe pour Traefik** sur le réseau `app-internal` (IPAM), pour restreindre `trusted_proxy_ip` d'oauth2-proxy à Traefik seul.
+7. **`libgl1` retiré** de l'image `app` : chargé par aucun processus (observé dans `/proc/<pid>/maps`), il tire `mesa`, LLVM (qui lie la
+   libxml2 du système) et les bibliothèques X11 ; retrait conditionné aux tests PDF et OCR sous seccomp.
+8. **docker-socket-proxy v0.5.0** : vulnérabilités Alpine corrigeables (openssl, pcre2) sans nouvelle version amont ; pas d'image dérivée
+   maison, surveillance de la publication amont.
+9. **D-035** : 403 sur `/api/v1/` si `X-Auth-Request-User` **ou** `X-Auth-Request-Email` est absent ou vide (l'application identifie
+   l'utilisateur par le courriel) ; le repli « inconnu » du flux documents est consigné (EXT-47), non corrigé.
