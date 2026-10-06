@@ -472,3 +472,74 @@ Inventaire : `docs/phase-2-ter-dependances.md` (2026-10-06).
 5. **Images `obfusk8-local:avant-2ter-*` et volume `obfusk8_keycloak-data-avant-2bis`** : supprimés **après** confirmation de l'humain que
    la pile fonctionne depuis la branche poussée.
 6. **Validation** : l'humain fait le `git merge --ff-only` vers `feat/text-api` et le push.
+
+## D-045 — Préparation du pilote — liste consignée le 2026-10-06 (décisions humaines à prendre, sauf mention)
+
+### A. Exécution de D-044 point 5 (décision humaine du 2026-10-06)
+
+- **Test manuel de l'humain réussi** : la pile fonctionne depuis la branche poussée.
+- **Observé** : les images en service (`obfusk8-app:0.2.0-dev` `3e0b62ee…`, analyseur `b5cef6eb…`) ont été construites le 2026-10-06 à
+  09:36, après passage sur `feat/text-api` (`0cec4c9`, état **2 bis**) ; `feat/dependances` (2 ter) n'est pas sur le dépôt distant
+  (`git ls-remote origin` : `main` et `feat/text-api` seulement). La pile testée est donc celle de la 2 bis, comme les images `avant-2ter`.
+- **Fait** : étiquettes `obfusk8-local:avant-2ter-*` supprimées (`docker rmi`) ; images libérées : app `58540012…` et analyseur `e07bd4f2…`
+  (les cinq autres étiquettes partageaient l'image d'un service en service, simplement désétiquetée). `docker-compose.rollback-2ter.yml` ne
+  fonctionne plus. Pile inchangée (6 conteneurs en service).
+- **Non fait** : volume `obfusk8_keycloak-data-avant-2bis` (suppression de volume interdite à la session, `CLAUDE.md` §9 : à faire par
+  l'humain) ; `~/.cache/obfusk8-devtools.avant-2ter` (hors dépôt) ; anciennes images `avant-2bis`, `obfusk8-app-local:phase2-*`,
+  `ghcr.io/epicfail20/obfusk8-app:main` et `obfusk8-presidio-analyzer:latest` (locales, non demandées).
+
+### B. Port 8080 de Keycloak publié sur toutes les interfaces (EXT-54, EXT-55)
+
+- **Nécessité** : réelle pour la **connexion** tant que Keycloak sert de fournisseur d'identité : l'émetteur
+  `http://keycloak.lab.local:8080/realms/lab` (`oauth2-proxy.cfg`, `KC_HOSTNAME`) doit être joint par le navigateur (redirection de
+  connexion) et par oauth2-proxy (alias sur `app-internal`), avec la même URL. **Aucune nécessité** d'exposer la console d'administration
+  ni le royaume `master` aux utilisateurs, ni d'écouter sur l'IPv6 globale.
+- **Exposition réelle** (observée) : `0.0.0.0:8080` et `[::]:8080` ; console d'administration et `master` répondent 200 sur la boucle
+  locale, l'adresse du LAN et l'adresse IPv6 globale de la VM, en HTTP, mode `start-dev`. Joignabilité depuis Internet : **non vérifiée**
+  (pare-feu de la box et de Proxmox ; à tester par l'humain depuis une machine extérieure, par exemple une connexion mobile en IPv6).
+- **Options** :
+  1. **B1 — restreindre la publication** : `"192.168.1.35:8080:8080"` (IPv4 du LAN seulement). Changement minimal ; supprime l'IPv6
+     globale ; laisse HTTP, la console sur tout le LAN et l'accès sortant (EXT-55) ; fige l'adresse de la VM dans Compose.
+  2. **B2 — Keycloak derrière Traefik en HTTPS (recommandée pour le pilote si Keycloak reste le fournisseur)** : port 8080 retiré,
+     Keycloak seulement sur `app-internal` (plus d'accès sortant), routeur Traefik dédié `Host(keycloak.lab.local)` avec limitation de débit
+     et plafond de corps, `/admin` et `/realms/master` limités par liste d'IP (ou non routés), émetteur passé en `https://…` dans
+     `oauth2-proxy.cfg` et `KC_HOSTNAME`, certificat couvrant ce nom, Keycloak en mode `start` (production) avec une vraie base. Plus de
+     travail ; touche Compose, Traefik et oauth2-proxy (accord requis, `CLAUDE.md` §9) ; options exactes de Keycloak 26.8 à vérifier dans sa
+     documentation, pas de mémoire.
+  3. **B3 — pare-feu de l'hôte** : écarté seul : le chemin IPv6 passe par `INPUT`, le chemin IPv4 par `FORWARD`/`DOCKER-USER` ; deux jeux
+     de règles hors du dépôt, faciles à perdre.
+  4. **B4 — Entra ID pour le pilote** : Keycloak disparaît de la pile ; `app-internal` doit alors joindre Microsoft (avertissement du
+     réseau dans `docker-compose.yml`) : réseau sortant dédié à oauth2-proxy à concevoir.
+- **Recommandation** : B1 tout de suite pour le laboratoire (coupe l'IPv6 globale), puis B2 ou B4 avant le pilote. Rien n'est appliqué.
+
+### C. Liste de préparation du pilote
+
+Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre proposé, à valider.
+
+**Bloquants avant tout utilisateur pilote**
+
+1. **Phase 2 ter validée** : `git merge --ff-only feat/dependances` vers `feat/text-api`, push, reconstruction des images depuis la branche
+   poussée et nouveau test manuel (D-044 point 6 ; la pile actuelle est en 2 bis, voir A).
+2. **EXT-51** : phase dédiée (D-044 point 3, proposition du compte rendu 2 ter §12), avec **EXT-47** (403 pour une tâche sans identité).
+3. **Exposition de Keycloak** : EXT-54 et EXT-55, choix B2 ou B4 ci-dessus.
+4. **Fournisseur d'identité du pilote** : Keycloak en mode production (TLS, base persistante autre que H2 de développement, administrateur
+   permanent à la place du compte d'amorçage) ou Entra ID ; PKCE S256 conservé (EXT-49).
+5. **Comptes** : comptes de test supprimés de Keycloak (D-044 point 4, EXT-53) ; comptes pilotes nominatifs avec adresse de courriel
+   vérifiée (EXT-43 : sans courriel, oauth2-proxy répond 500).
+6. **Données** : pentest externe avant toute donnée réelle (D-021, `CLAUDE.md` §8.3). Sans pentest, pilote sur données synthétiques
+   seulement.
+7. **Certificats TLS de Traefik** : nature (auto-signé ou non), noms couverts et échéance **non vérifiés** dans cette session.
+
+**À traiter avant le pilote, non bloquants pour un pilote restreint sur données synthétiques**
+
+8. **Avertissement aux utilisateurs pilotes** : révision obligatoire et familles de faux négatifs connues (D-039 ; EXT-18, EXT-32,
+   EXT-41, EXT-42, EXT-46).
+9. **Sauvegardes et nettoyage** : sauvegarde de `keycloak-data-v26-8` et du journal d'audit ; suppression par l'humain des volumes
+   `obfusk8_keycloak-data`, `obfusk8-kc-export-src` (D-041 point 6) et `obfusk8_keycloak-data-avant-2bis` après copie hors de la VM.
+10. **Supervision** : destination syslog des alertes vérifiée ; métriques du pilote pour réévaluer un second worker de l'analyseur (D-036).
+11. **Ressources de la VM** : remesurer EXT-25 sur la VM actuelle avant le pilote.
+12. **Images construites** : pas de publication avant le pentest (D-041 point 7, EXT-01) ; le pilote tourne sur des images construites
+    localement depuis une branche poussée, version et condensat notés.
+13. **API texte** : reste désactivée (`ENABLE_EXTENSION_API=false`, D-041 point 1) sauf si le pilote inclut l'extension (phase 3).
+14. **Licence** (EXT-05) : à régler avant toute distribution.
+15. **GitHub Actions** : environnement `publication` créé avec ses protections avant toute réactivation (D-042).
