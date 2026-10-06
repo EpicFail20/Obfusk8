@@ -1,5 +1,7 @@
 # Hash-locked development tools for Python 3.12 (same as the app image).
-# Generated on 2026-10-02 from requirements-dev.in with:
+# Generated on 2026-10-02 from requirements-dev.in, regenerated on 2026-10-06
+# (phase 2 ter: constraints = the previous versions, updated packages pinned
+# to their target, see docs/maintenance-dependances.md) with:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json -r requirements-dev.in
 # inside the app image (python:3.12-slim base), then one line per resolved
 # wheel with its sha256. Install ONLY in an isolated environment:
@@ -73,8 +75,8 @@ pytest-cov==7.1.0 \
     --hash=sha256:a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678
 pyyaml==6.0.3 \
     --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
-regex==2026.7.10 \
-    --hash=sha256:f6222cafe00e072bb2b8f14142cd969637411fbc4dd3b1d73a90a3b817fa046f
+regex==2026.9.29 \
+    --hash=sha256:39ab5894d971f9ac68baa6eca5c50387db579cfcacf36ae8df3feceb1815e6d0
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 rich==15.0.0 \

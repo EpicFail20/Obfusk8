@@ -73,8 +73,8 @@ numpy==2.4.6 \
     --hash=sha256:90f9849678c75fe7afa2d348ac842c168b0a4d3d61919687216dfc547976d853
 packaging==26.3 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
-phonenumbers==9.0.34 \
-    --hash=sha256:1221bf8e65bd2c02770226488af806d4636814bc997104d3a1f7de6ed6410bd2
+phonenumbers==9.0.40 \
+    --hash=sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84
 preshed==3.0.13 \
     --hash=sha256:8b8de3f58043070a354477995acdd98626ce43e4193c708ebd0f694e467f5155
 pydantic==2.13.5 \
@@ -85,8 +85,8 @@ Pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
 PyYAML==6.0.3 \
     --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
-regex==2026.7.10 \
-    --hash=sha256:f6222cafe00e072bb2b8f14142cd969637411fbc4dd3b1d73a90a3b817fa046f
+regex==2026.9.29 \
+    --hash=sha256:39ab5894d971f9ac68baa6eca5c50387db579cfcacf36ae8df3feceb1815e6d0
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 requests-file==3.0.1 \
@@ -99,8 +99,8 @@ shellingham==1.5.4 \
     --hash=sha256:7ecfff8f2fd72616f7481040475a65b2bf8af90a56c89140852d1120324e8686
 smart_open==8.0.2 \
     --hash=sha256:7ff6e4acf454269905db0c747f5d14fdba6056db572c0f8398043676dc91515c
-spacy==3.8.13 \
-    --hash=sha256:32c16f5be8c8006197554da3647d83311fb89bb31bb417d38f0d1da585877b0d
+spacy==3.8.16 \
+    --hash=sha256:8d0f63c3124d0a34a37e9b519d004cee1269744be07f91f843902e6c9f3e557a
 spacy-legacy==3.0.12 \
     --hash=sha256:476e3bd0d05f8c339ed60f40986c07387c0a71479245d6d0f4298dbd52cda55f
 spacy-loggers==1.0.5 \
@@ -109,8 +109,8 @@ srsly==2.5.4 \
     --hash=sha256:bb463e076e5efe61784c439493dc012e27fd05b4ddcf78f3353345c5d7e462c3
 thinc==8.3.13 \
     --hash=sha256:4b5ec9ff313819e7d8667794a3559463fa89ff45aaa73e3fd8d6273b1e0d7a7f
-tldextract==5.3.1 \
-    --hash=sha256:6bfe36d518de569c572062b788e16a659ccaceffc486d243af0484e8ecf432d9
+tldextract==5.4.0 \
+    --hash=sha256:7f02aed30bd3b6ad5717192eb859a39b20aafc7caf3917d9cf6cb00a58efb34f
 tqdm==4.70.1 \
     --hash=sha256:c293e525e6fef9c20e8728fd4612df02a0aa31bb5fe91ecd93e123b1b7bffa73
 typer==0.27.2 \

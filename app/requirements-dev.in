@@ -11,6 +11,7 @@ coverage==7.16.2
 pip-audit==2.10.1
 # Same engine as Presidio for testing the text API recognizers
 # (app/themes/extension/): pinned to the version INSIDE presidio-analyzer
-# (2026.7.10), not the latest (2026.9.29) — parity matters more than
-# recency here (docs/DECISIONS.md D-017).
-regex==2026.7.10
+# (presidio/analyzer-build/requirements.lock, 2026.9.29 since phase 2 ter,
+# also the latest release) — parity matters more than recency here
+# (docs/DECISIONS.md D-017): both move together.
+regex==2026.9.29

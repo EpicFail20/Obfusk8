@@ -4,9 +4,10 @@
 # Pinned by digest (EXT-01, EXT-16). presidio-analyzer 2.2.364, latest stable
 # release (github.com/data-privacy-stack/presidio, the former microsoft/presidio,
 # same repository id); registry ghcr.io/data-privacy-stack, the only one still
-# updated according to the upstream installation guide. Checked 2026-10-05.
-# The base already ships spacy 3.8.13 and PyYAML 6.0.3 from its uv.lock: the
-# former unpinned `pip install spacy` / `pip install pyyaml` were no-ops.
+# updated according to the upstream installation guide. Checked 2026-10-05,
+# still the latest on 2026-10-06 (same digest). The base ships its packages
+# from its uv.lock (spacy 3.8.13 among them); the image's environment is the
+# one declared in requirements.lock (spacy 3.8.16 since phase 2 ter).
 FROM ghcr.io/data-privacy-stack/presidio-analyzer:2.2.364@sha256:ae8f6f111ac2f04e3fec552f7f80edd0dcbfa2dd69ee1b9e030475be31669885
 
 # Build steps run as root, then the image goes back to the upstream non-root
