@@ -451,3 +451,24 @@ Inventaire : `docs/phase-2-ter-dependances.md` (2026-10-06).
 6. **Ordre des lots** validé (base `app`, uvicorn, requests, analyseur service, analyseur détection, outils, images) ; analyseur en deux lots.
 7. **Disque** : jamais `docker image prune -a` ni `docker system prune -a` (ils supprimeraient les images de retour arrière non utilisées) ;
    seules les images intermédiaires construites pendant la phase sont supprimées, par leur identifiant.
+
+## D-044 — Décisions sur le compte rendu de la phase 2 ter — décision humaine du 2026-10-06
+
+1. **`CLAUDE.md`** : diff relu par l'humain avant application (non appliqué par la session). Règle ajoutée au diff, pour **tout secret** et
+   pas seulement les comptes de test : `~/.obfusk8-test-accounts` et tout fichier de secrets ne sont jamais affichés ni lus par une
+   commande dont la sortie s'affiche ; ils sont chargés uniquement par un script qui ne journalise rien ; tout filtre de masquage est
+   d'abord testé sur un faux fichier au même format (incident 1 du compte rendu de la phase 2 ter).
+2. **Cadence de maintenance validée** : revue mensuelle ; vulnérabilité critique : analyse sous 24 h ouvrées, correctif sous 72 h.
+   Source d'alerte : alertes de sécurité GitHub (Dependabot alerts), **sans** correctifs automatiques (pas de Dependabot security
+   updates ni de version updates) ; leur couverture de nos fichiers de verrou est vérifiée, avec une autre source proposée à défaut
+   (`docs/maintenance-dependances.md` §8).
+3. **EXT-51** : corrigé dans une **courte phase dédiée**, avant la phase Python ; rien n'est commencé en phase 2 ter. Proposition préparée
+   dans le compte rendu (§12) : quota de documents en attente par utilisateur, limitation de débit par utilisateur sur les routes de
+   documents, annulation de ses propres documents en attente. **EXT-52** : vérifier qu'aucune mesure publiée des phases 1 à 2 ter n'a été
+   faussée (fait : compte rendu §13).
+4. **Mots de passe des comptes de test** : conservés, **risque accepté** (EXT-53, 🟡 par décision humaine) : comptes de laboratoire sans
+   valeur, voués à disparaître. **Condition** : tous les comptes de test sont supprimés de Keycloak avant tout pilote ou tout environnement
+   réel.
+5. **Images `obfusk8-local:avant-2ter-*` et volume `obfusk8_keycloak-data-avant-2bis`** : supprimés **après** confirmation de l'humain que
+   la pile fonctionne depuis la branche poussée.
+6. **Validation** : l'humain fait le `git merge --ff-only` vers `feat/text-api` et le push.
