@@ -1,21 +1,7 @@
-# Build-time additions to the upstream presidio-analyzer image, installed with
-# `pip install --require-hashes --no-deps` (EXT-16: reproducible build).
-# Versions and SHA-256 checked at the source on 2026-10-05 (PyPI JSON API,
-# GitHub release of explosion/spacy-models); see docs/DEPENDENCIES.md.
-#
-# pip itself (EXT-24: 25.0.1 in the base, 12 PYSEC advisories fixed from 26.2).
+# Build-time installer only (EXT-24: 25.0.1 in the base, 12 PYSEC advisories
+# fixed from 26.2), never kept in the image. 26.2.1 is the latest stable
+# release on PyPI (checked 2026-10-06, no OSV entry). pip only accepts --hash
+# inside a requirements file. The image's Python environment itself is
+# declared in requirements.lock (D-043 point 3).
 pip==26.2.1 \
     --hash=sha256:71138adf1f4ca900cdb7d289c21b7494329f2332b6d85f0e1c42108c0384ed3e
-# Security updates of packages from the upstream uv.lock (trivy 0.75.0 on the
-# previous image): anyio 4.14.1 (CVE-2026-63374 CRITICAL, CVE-2026-63349) and
-# urllib3 2.7.0 (CVE-2026-97687, CVE-2026-97689). Latest stable releases, no
-# OSV entry; `pip check` is run after the install.
-anyio==4.15.1 \
-    --hash=sha256:6152fdbbf9a77fdec97731721bebf7c4c44f7c29b424b0065826173efc7ed101
-urllib3==2.8.0 \
-    --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
-# French spaCy model. 3.8.0 is the only release for spaCy 3.8 (the base ships
-# spacy 3.8.13). Same artifact as the one `python -m spacy download` installed
-# in the previous image: its direct_url.json records this exact SHA-256.
-fr_core_news_md @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl \
-    --hash=sha256:8a70d090a54ef77525c3ffa6a6195b9d365f2cf369ae1cd84ede93f3d709079e

@@ -47,7 +47,7 @@ Python 3.12.13 (fourni par l'image Presidio 2.2.364, contre 3.12.15 dans `app`) 
 | numpy | 2.4.6 | 2.5.3 (2026-09-06) | **2.4.6** | Presidio exige `numpy<2.5.0` : déjà la plus haute autorisée | Aucune |
 | thinc | 8.3.13 | 9.1.1 (2024-09-12) | **8.3.13** | spaCy 3.8.16 exige `thinc<8.4.0` : déjà la plus haute autorisée | Aucune |
 | pydantic / pydantic_core | 2.13.4 / 2.46.4 | 2.13.5 / 2.49.0 | 2.13.5 / 2.46.5 | pydantic épingle pydantic-core | Aucune |
-| **gunicorn** | 25.3.0 | 26.2.2 (2026-09-06) | 26.2.2 | **Majeure** : 26.0.0 retire le worker `eventlet` (non utilisé : worker `sync` par défaut, `entrypoint.sh`) ; durcissement HTTP/1.1 (cible de requête, caractères de contrôle, `Content-Length` en liste, contrebande) ; 26.2.0 HTTP/2 en clair désactivé par défaut | Aucune |
+| **gunicorn** | 25.3.0 | 26.2.0 (PyPI, 2026-08-24) | 26.2.0 | **Majeure**. 26.2.1 et 26.2.2 (GitHub, 2026-09-05/06 : durcissement HTTP/1 et HTTP/2, ASGI) **non publiées sur PyPI** au 2026-10-06 (corrigé pendant l'étape C : la première version de cette ligne citait la version GitHub) ; 26.0.0 retire le worker `eventlet` (non utilisé : worker `sync` par défaut, `entrypoint.sh`) ; durcissement HTTP/1.1 (cible de requête, caractères de contrôle, `Content-Length` en liste, contrebande) ; 26.2.0 HTTP/2 en clair désactivé par défaut | Aucune |
 | filelock | 3.29.7 | 4.0.12 (2026-10-05) | 4.0.12 | **Majeure** ; dépendance de tldextract (cache de la liste des suffixes) | Aucune |
 | setuptools | 83.0.0 | 84.0.0 (2026-08-08) | 84.0.0 | **Majeure** : compilateurs C (sans objet à l'exécution) ; dépendance déclarée de spaCy | Aucune |
 | typer | 0.26.8 | 0.27.2 (2026-08-28) | 0.27.2 | 0.27.0 : affichage des métavariables (CLI de spaCy, non utilisée) | Aucune |

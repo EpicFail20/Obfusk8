@@ -20,19 +20,26 @@ RUN apt-get update \
     && apt-get upgrade -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
-# Hash-pinned additions, pip itself included (requirements-build.txt: pip
-# only accepts --hash inside a requirements file). `uv` (Rust binary used only
-# to install the upstream lock, never at runtime) is removed: it carried
-# quinn-proto and rustls-webpki advisories. `pip check` fails the build on an
-# inconsistent environment. pip itself is then removed: never used at runtime,
-# and even the latest release vendors copies flagged by trivy (urllib3 2.7.0,
-# msgpack 1.1.2, setuptools 70.3.0 in pip/_vendor/vendor.txt of pip 26.2.1).
-COPY requirements-build.txt /tmp/requirements-build.txt
+# Full Python environment from requirements.lock (D-043 point 3, phase 2
+# ter): every distribution of the image is declared there with its SHA-256,
+# installed with --no-deps over the base; pip comes first from
+# requirements-build.txt (pip only accepts --hash inside a requirements file).
+# `uv` (Rust binary used only to install the upstream lock, never at runtime)
+# is removed: it carried quinn-proto and rustls-webpki advisories. `pip check`
+# fails the build on an inconsistent environment. pip itself is then removed:
+# never used at runtime, and even the latest release vendors copies flagged by
+# trivy (urllib3 2.7.0, msgpack 1.1.2, setuptools 70.3.0 in
+# pip/_vendor/vendor.txt of pip 26.2.1). check_lock.py runs last and fails
+# the build unless the installed distributions are exactly the declared ones
+# (versions, and SHA-256 of the spaCy models).
+COPY requirements-build.txt requirements.lock check_lock.py /tmp/
 RUN pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements-build.txt \
+    && pip install --no-cache-dir --require-hashes --no-deps -r /tmp/requirements.lock \
     && pip uninstall -y uv \
     && pip check \
-    && rm /tmp/requirements-build.txt \
-    && python -m pip uninstall -y pip
+    && python -m pip uninstall -y pip \
+    && python3 /tmp/check_lock.py /tmp/requirements.lock \
+    && rm /tmp/requirements-build.txt /tmp/requirements.lock /tmp/check_lock.py
 
 # Our config files (declare the languages + model mapping)
 # Path confirmed via the NLP_CONF_FILE / ANALYZER_CONF_FILE env vars
