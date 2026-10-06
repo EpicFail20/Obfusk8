@@ -427,3 +427,27 @@ Recommandations de l'inventaire de l'étape A, toutes validées :
 - **Conséquences** : même après réactivation des Actions, aucune image n'est poussée sans approbation explicite dans l'interface GitHub.
   Tant que l'environnement n'est pas créé, GitHub le crée sans protection au premier lancement : le créer **avant** de réactiver les Actions.
   Vérifié localement : `actionlint` 1.7.12, 0 constat.
+
+## D-043 — Choix de l'étape A de la phase 2 ter — décision humaine du 2026-10-06
+
+Inventaire : `docs/phase-2-ter-dependances.md` (2026-10-06).
+
+1. **FastAPI reste en 0.141.1** (écart à la dernière version 0.142.2). Cause : 0.142.0 rend `opentelemetry-api` obligatoire (nouvelle
+   dépendance de production) et active par défaut une télémétrie native, capable d'exporter en OTLP si `OTEL_EXPORTER_OTLP_ENDPOINT` est
+   défini et le SDK présent (`fastapi/telemetry/_runtime.py`, lu dans la roue 0.142.2) ; 0.142 n'apporte aucun correctif de sécurité.
+   **Conditions de levée** : un correctif de sécurité disponible seulement à partir de 0.142, ou OpenTelemetry redevenu facultatif.
+   **Réexamen à chaque cycle de maintenance** (`docs/maintenance-dependances.md`). Le jour de la montée : télémétrie désactivée
+   explicitement à la construction de `FastAPI(...)`, avec un test prouvant qu'aucune exportation n'a lieu.
+2. **Analyseur** : gunicorn 26, filelock 4 et setuptools 84 acceptés (versions majeures de paquets).
+3. **Verrou complet de l'analyseur** : ensemble installé déclaré avec empreintes, installé par `--require-hashes --no-deps` sur la base
+   Presidio, comme `app/requirements.lock`.
+4. **uvicorn sans en-têtes de proxy** : `--no-proxy-headers` ajouté à la commande de lancement de `app` (accord donné pour cette
+   modification du Dockerfile), plus un test sur la configuration de confiance. `app` n'utilise pas l'adresse du client. Si elle devient
+   nécessaire, **la seule configuration acceptable** est `forwarded_allow_ips` limité à l'adresse fixe de Traefik (`10.89.18.10`).
+5. **Python inchangé dans cette phase** : l'analyseur reste en 3.12.13 (image Presidio), consigné en EXT-50 avec les vulnérabilités
+   corrigées par 3.12.14 et 3.12.15 (python.org). Préparation de la phase suivante, sans modification : compatibilité des dépendances
+   compilées avec 3.13, 3.14 et suivantes, dans le compte rendu. **Décision prise pour la phase suivante** : l'analyseur sera reconstruit
+   sur une base Python épinglée, installée depuis le verrou complet, et les deux images passeront à la même version de Python.
+6. **Ordre des lots** validé (base `app`, uvicorn, requests, analyseur service, analyseur détection, outils, images) ; analyseur en deux lots.
+7. **Disque** : jamais `docker image prune -a` ni `docker system prune -a` (ils supprimeraient les images de retour arrière non utilisées) ;
+   seules les images intermédiaires construites pendant la phase sont supprimées, par leur identifiant.
