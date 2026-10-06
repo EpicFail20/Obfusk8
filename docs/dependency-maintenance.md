@@ -153,15 +153,42 @@ One account per benchmark run in parallel (per-user rate limit, `MAX_PENDING_JOB
 OpenTelemetry is mandatory; on the day of the upgrade, telemetry explicitly disabled in `FastAPI(...)` and a test proving that nothing is
 exported); docker-socket-proxy (D-040 point 8); capped numpy and thinc; the analyzer's Python (EXT-50).
 
-## 7. Proposed cadence (human decision)
+## 7. Cadence (approved on 2026-10-06, D-044 point 2)
 
 | Trigger | Proposed delay | Content |
 |---|---|---|
 | **Emergency**: CRITICAL advisory, or HIGH exploitable in our use, on a dependency **in production** (`app` or analyzer package, base image, Traefik, oauth2-proxy, Keycloak in production) | Exposure analysis within 24 business hours, fix within 72 h if exposed | Single security batch, full procedure; without an upstream fix, documented compensating measure |
 | HIGH or MODERATE advisory fixed upstream | At the latest at the next monthly cycle; earlier if exposed | Security batch |
-| **Full review** | **Monthly** (first week of the month) | Whole §2, batches of §3, short report |
+| **Full review** | **Monthly** (first week of the month), approved | Whole §2, batches of §3, short report |
 | Minor or major version change (images, Python) | Quarterly, or on decision | Dedicated phase |
 
-Monitoring between cycles (proposed, with no automation added to the application; the test VM has Internet access, the stack does not):
-weekly `tools/dependencies/outdated.py` and `trivy` on the VM, and the administrator subscribed to the GitHub security advisories of the
-upstream repositories (Presidio, spaCy, FastAPI, Starlette, uvicorn, PyMuPDF, Pillow, lxml, Traefik, oauth2-proxy, Keycloak).
+Approved emergency: exposure analysis within **24 business hours**, fix within **72 h** if exposed. Alert sources: §8.
+
+## 8. Alert sources between cycles
+
+**GitHub security alerts** (D-044 point 2): repository *Settings → Code security*, **Dependabot alerts** enabled; **Dependabot security
+updates** and **version updates** disabled (no automatic pull request: every fix follows the procedure above). Coverage, according to the
+official documentation read on 2026-10-06 (*Dependency graph supported package ecosystems*, *Supported ecosystems and repositories*):
+
+| Repository file | Recognized by the dependency graph? | Consequence |
+|---|---|---|
+| `app/requirements.txt` | Yes (`requirements.txt` name, pip ecosystem) | Alerts on the **top-level packages** of `app` only |
+| `app/requirements.lock`, `presidio/analyzer-build/requirements.lock` | **No** according to the documentation (pip: `requirements.txt` and `Pipfile.lock` only) | Neither the transitive dependencies of `app` nor **any** analyzer package are covered |
+| `app/requirements-dev.txt`, `requirements-build.txt` | Not checked (name other than `requirements.txt`) | — |
+| Images (`FROM`, `docker-compose.yml`) | No: Docker is supported for version updates only, not for alerts | No alert on images |
+
+Limits: the graph is only computed on the **default branch** (`main`, behind `feat/text-api` until the merge); not checked by observation
+(the SBOM export `GET /repos/EpicFail20/obfusk8/dependency-graph/sbom` answers 404 without authentication): to be checked by the
+administrator in *Insights → Dependency graph* after the merge into `main`.
+
+**GitHub alerts alone therefore do not cover our locks.** Proposed complementary source (human decision):
+
+1. **OSV on the locks and the installed environments, weekly**, with the tool already in the repository (no new dependency): §2 steps 1
+   and 2 (`tools/dependencies/outdated.py`). OSV aggregates the GitHub Advisory Database and the PyPA advisory database: the same source as
+   the GitHub alerts, applied to **all** our packages. Plus `pip-audit` and `trivy` on the running images (§2 step 6).
+2. **Administrator subscribed** to the security advisories (*Watch → Custom → Security alerts*) of the upstream repositories: Presidio,
+   spaCy, FastAPI, Starlette, uvicorn, PyMuPDF, Pillow, lxml, Traefik, oauth2-proxy, Keycloak, and to python.org security announcements.
+3. Option to assess (not adopted without a decision): rename the locks to `requirements.txt` in dedicated directories so that GitHub reads
+   them; a file-naming convention change, to be checked after the merge into `main`, with no effect on the images.
+
+The stack stays without Internet access: these checks run on the VM, never from a container of the stack.

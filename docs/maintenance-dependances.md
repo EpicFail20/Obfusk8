@@ -155,15 +155,43 @@ Un compte par banc lancé en parallèle (limitation de débit par utilisateur, `
 dans 0.142+ et qu'OpenTelemetry est obligatoire ; le jour de la montée, télémétrie désactivée explicitement dans `FastAPI(...)` et test
 prouvant qu'aucune exportation n'a lieu) ; docker-socket-proxy (D-040 point 8) ; numpy et thinc plafonnés ; Python de l'analyseur (EXT-50).
 
-## 7. Cadence proposée (décision humaine)
+## 7. Cadence (validée le 2026-10-06, D-044 point 2)
 
 | Déclencheur | Délai proposé | Contenu |
 |---|---|---|
 | **Urgence** : avis CRITICAL, ou HIGH exploitable dans notre usage, sur une dépendance **en production** (paquet de `app` ou de l'analyseur, image de base, Traefik, oauth2-proxy, Keycloak en production) | Analyse d'exposition sous 24 h ouvrées, correctif sous 72 h si exposé | Lot unique de sécurité, procédure complète ; à défaut de correctif amont, mesure compensatoire documentée |
 | Avis HIGH ou MODERATE corrigé en amont | Au plus tard au cycle mensuel suivant ; plus tôt si exposé | Lot de sécurité |
-| **Revue complète** | **Mensuelle** (première semaine du mois) | §2 entier, lots du §3, compte rendu court |
+| **Revue complète** | **Mensuelle** (première semaine du mois), validée | §2 entier, lots du §3, compte rendu court |
 | Changement de version mineure ou majeure (images, Python) | Trimestriel, ou sur décision | Phase dédiée |
 
-Surveillance entre deux cycles (proposée, sans automatisation ajoutée à l'application ; la VM de test a accès à Internet, pas la pile) :
-`tools/dependencies/outdated.py` et `trivy` hebdomadaires sur la VM, et abonnement de l'administrateur aux avis de sécurité GitHub des
-dépôts amont (Presidio, spaCy, FastAPI, Starlette, uvicorn, PyMuPDF, Pillow, lxml, Traefik, oauth2-proxy, Keycloak).
+Urgence validée : analyse d'exposition sous **24 h ouvrées**, correctif sous **72 h** si exposé. Sources d'alerte : §8.
+
+## 8. Sources d'alerte entre deux cycles
+
+**Alertes de sécurité GitHub** (D-044 point 2) : *Settings → Code security* du dépôt, **Dependabot alerts** activées ;
+**Dependabot security updates** et **version updates** désactivées (aucune demande de fusion automatique : chaque correctif suit la
+procédure ci-dessus). Couverture, d'après la documentation officielle consultée le 2026-10-06 (*Dependency graph supported package
+ecosystems*, *Supported ecosystems and repositories*) :
+
+| Fichier du dépôt | Reconnu par le graphe de dépendances ? | Conséquence |
+|---|---|---|
+| `app/requirements.txt` | Oui (nom `requirements.txt`, écosystème pip) | Alertes sur les **paquets de premier niveau** de `app` seulement |
+| `app/requirements.lock`, `presidio/analyzer-build/requirements.lock` | **Non** d'après la documentation (pip : `requirements.txt` et `Pipfile.lock` seulement) | Ni les dépendances transitives de `app`, ni **aucun** paquet de l'analyseur ne sont couverts |
+| `app/requirements-dev.txt`, `requirements-build.txt` | Non vérifié (nom différent de `requirements.txt`) | — |
+| Images (`FROM`, `docker-compose.yml`) | Non : Docker n'est pris en charge que pour les mises à jour de version, pas pour les alertes | Aucune alerte sur les images |
+
+Limites : le graphe n'est calculé que sur la **branche par défaut** (`main`, en retard sur `feat/text-api` jusqu'à la fusion) ; non vérifié
+par l'observation (l'export SBOM `GET /repos/EpicFail20/obfusk8/dependency-graph/sbom` répond 404 sans authentification) : à contrôler
+par l'administrateur dans *Insights → Dependency graph* après la fusion dans `main`.
+
+**Les alertes GitHub seules ne couvrent donc pas nos verrous.** Source proposée en complément (décision humaine) :
+
+1. **OSV sur les verrous et les environnements installés, hebdomadaire**, avec l'outil déjà présent (aucune dépendance nouvelle) : §2 étapes
+   1 et 2 (`tools/dependencies/outdated.py`). OSV agrège la GitHub Advisory Database et la base d'avis PyPA : même source que les alertes
+   GitHub, appliquée à **tous** nos paquets. Plus `pip-audit` et `trivy` sur les images en service (§2 étape 6).
+2. **Abonnement de l'administrateur** aux avis de sécurité (*Watch → Custom → Security alerts*) des dépôts amont : Presidio, spaCy, FastAPI,
+   Starlette, uvicorn, PyMuPDF, Pillow, lxml, Traefik, oauth2-proxy, Keycloak, et aux annonces de sécurité de python.org.
+3. Option à évaluer (non retenue sans décision) : renommer les verrous en `requirements.txt` dans des répertoires dédiés pour que GitHub les
+   lise ; changement de convention de fichiers à vérifier après fusion dans `main`, et sans effet sur les images.
+
+La pile reste sans accès à Internet : ces contrôles se lancent sur la VM, jamais depuis un conteneur de la pile.
