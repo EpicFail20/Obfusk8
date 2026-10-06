@@ -1,0 +1,105 @@
+{
+  "generated_at": "2026-10-06T08:07:11+0000",
+  "api": {
+    "api_version": "1.0",
+    "detection_config": "1a04111540221092",
+    "analyzer_recognizers": "51fa36bee769596e"
+  },
+  "stack": {},
+  "per_size": {
+    "analyze": {
+      "200": {
+        "n": 20,
+        "p50_ms": 19.1,
+        "p95_ms": 22.3,
+        "max_ms": 22.3
+      },
+      "1000": {
+        "n": 20,
+        "p50_ms": 40.9,
+        "p95_ms": 45.5,
+        "max_ms": 45.5
+      },
+      "5000": {
+        "n": 20,
+        "p50_ms": 174.7,
+        "p95_ms": 180.0,
+        "max_ms": 180.0
+      },
+      "10000": {
+        "n": 20,
+        "p50_ms": 386.6,
+        "p95_ms": 405.9,
+        "max_ms": 405.9
+      },
+      "20000": {
+        "n": 20,
+        "p50_ms": 991.7,
+        "p95_ms": 1108.1,
+        "max_ms": 1108.1
+      }
+    },
+    "pseudonymize": {
+      "1000": {
+        "n": 10,
+        "p50_ms": 41.3,
+        "p95_ms": 43.5,
+        "max_ms": 43.5
+      },
+      "10000": {
+        "n": 10,
+        "p50_ms": 389.7,
+        "p95_ms": 413.2,
+        "max_ms": 413.2
+      }
+    }
+  },
+  "contention": {
+    "rounds": 1,
+    "documents_per_round": 3,
+    "document_detect": {
+      "alone": {
+        "n": 3,
+        "p50_ms": 1582.3,
+        "p95_ms": 1606.1,
+        "max_ms": 1606.1
+      },
+      "with_prompt_flow": {
+        "n": 3,
+        "p50_ms": 1667.4,
+        "p95_ms": 1701.8,
+        "max_ms": 1701.8
+      },
+      "prompt_flow_rate_per_s": 0.94,
+      "processing_seconds_total": 5.0
+    },
+    "prompts_2000_chars": {
+      "outside_document_processing": {
+        "n": 61,
+        "p50_ms": 72.5,
+        "p95_ms": 76.1,
+        "max_ms": 77.4
+      },
+      "overlapping_document_processing": {
+        "n": 4,
+        "p50_ms": 144.4,
+        "p95_ms": 269.7,
+        "max_ms": 269.7
+      }
+    },
+    "health": {
+      "outside_document_processing": {
+        "n": 253,
+        "p50_ms": 3.1,
+        "p95_ms": 4.1,
+        "max_ms": 5.4
+      },
+      "overlapping_document_processing": {
+        "n": 20,
+        "p50_ms": 3.4,
+        "p95_ms": 9.0,
+        "max_ms": 9.0
+      }
+    }
+  }
+}
