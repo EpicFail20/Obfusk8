@@ -1,0 +1,39 @@
+# ---------------------------------------------------------------------------
+# Rollback of phase 2 ter (dependency updates, see docs/phase-2-ter-report.md,
+# "Retour arrière"). Runs the stack on the images that were in service before
+# the phase, kept under local tags (never pushed, never pulled):
+#   docker compose -f docker-compose.yml -f docker-compose.rollback-2ter.yml up -d
+# Back to the current images:
+#   docker compose up -d
+#
+# Image IDs at tagging time (2026-10-06): app 58540012..., analyzer
+# e07bd4f2..., traefik 24841fe2..., keycloak b0f60d48..., oauth2-proxy
+# 8498b0d0..., docker-socket-proxy 1f5038b5..., busybox fd7dc986...
+# Keycloak stays 26.8.0 on the same volume: no data restore is needed.
+# Configuration stays the current one; a full configuration rollback is
+# `git checkout 0cec4c9 -- <files>`, outside this file.
+# `pull_policy: never`: these local tags must never be resolved on a registry
+# (a namespace such as obfusk8-local/ could be registered by anyone).
+# ---------------------------------------------------------------------------
+services:
+  app:
+    image: obfusk8-local:avant-2ter-app
+    pull_policy: never
+  presidio-analyzer:
+    image: obfusk8-local:avant-2ter-presidio-analyzer
+    pull_policy: never
+  traefik:
+    image: obfusk8-local:avant-2ter-traefik
+    pull_policy: never
+  keycloak:
+    image: obfusk8-local:avant-2ter-keycloak
+    pull_policy: never
+  oauth2-proxy:
+    image: obfusk8-local:avant-2ter-oauth2-proxy
+    pull_policy: never
+  docker-socket-proxy:
+    image: obfusk8-local:avant-2ter-docker-socket-proxy
+    pull_policy: never
+  fix-app-dirs-perms:
+    image: obfusk8-local:avant-2ter-fix-app-dirs-perms
+    pull_policy: never
