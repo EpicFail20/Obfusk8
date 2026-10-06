@@ -3,7 +3,7 @@
 # header); regenerate the lock after any change here. Test and development
 # tools live in requirements-dev.in / requirements-dev.txt, never here (EXT-09).
 fastapi==0.141.1
-uvicorn[standard]==0.35.0
+uvicorn[standard]==0.54.0
 python-multipart==0.0.32
 requests==2.33.1
 PyMuPDF==1.28.2

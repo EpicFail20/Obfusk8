@@ -1,12 +1,14 @@
 # Hash-locked production dependencies of the app image (EXT-01, phase 2 bis).
-# Generated on 2026-10-05 from requirements.txt (top-level pins) with:
+# Regenerated on 2026-10-06 (phase 2 ter, docs/maintenance-dependances.md)
+# from requirements.txt (top-level pins) with:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \
 #       -r requirements.txt -c constraints.txt
-# inside python:3.12-slim@sha256:02108f5d... (the image base), constraints =
-# the versions installed in the previous image (`pip list --format=freeze`,
-# minus pip and pytest with its dependencies): no version changes, only the
-# full transitive set made explicit and hash-checked. Newer releases are
-# listed in docs/DEPENDENCIES.md (phase 2 bis), not applied here.
+# inside the image base (FROM line of the Dockerfile), with pip from
+# requirements-build.txt. constraints.txt = the previous lock's versions, minus
+# the packages being updated (pinned to their target version), so that an
+# update only moves what it is meant to move; then one line per entry of the
+# report's "install" list: name==version and the SHA-256 of the chosen wheel.
+# Deliberate gaps to the latest release: docs/DECISIONS.md (D-043: fastapi).
 # Installed by the Dockerfile with:
 #   pip install --require-hashes --no-deps -r requirements.lock
 annotated-doc==0.0.5 \
@@ -65,11 +67,11 @@ typing_extensions==4.16.0 \
     --hash=sha256:481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8
 urllib3==2.8.0 \
     --hash=sha256:0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3
-uvicorn==0.35.0 \
-    --hash=sha256:197535216b25ff9b785e29a0b79199f55222193d47f820816e7da751e9bc8d4a
+uvicorn==0.54.0 \
+    --hash=sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf
 uvloop==0.23.0 \
     --hash=sha256:090865d8ce7a03986755a3ce711b7dd0d4b44eb14ab74368b717f3fad1180208
 watchfiles==1.3.0 \
     --hash=sha256:b5768b49e426fd5b550b012c866db347cdf15c398ef98dc557b6e6b72fa74cd1
-websockets==17.1 \
-    --hash=sha256:0c863507ada5805517ca6dff1c524dcd42942efe6304dacf06700878398d21a6
+websockets==17.2 \
+    --hash=sha256:6627b913b8586b1c06db9516b31dd0dfbc621de3bb9312616d92a7e44f268a5b

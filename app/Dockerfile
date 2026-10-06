@@ -90,4 +90,13 @@ ENV PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# --no-proxy-headers (phase 2 ter, D-043): the app never uses the client
+# address, and only Traefik may speak for the client (EXT-48). uvicorn
+# otherwise trusts X-Forwarded-For/-Proto from its default FORWARDED_ALLOW_IPS
+# (127.0.0.1, plus ::1 since 0.53.0), with a handling of duplicated headers
+# that changed in 0.48.0 and 0.49.0; with 0.35.0, a header sent from the
+# loopback did replace the client address (tests/test_proxy_headers_trust.py,
+# observed failing before this flag). If the client address is ever needed,
+# the only acceptable setting is --forwarded-allow-ips limited to Traefik's
+# fixed address (10.89.18.10).
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
