@@ -198,7 +198,7 @@ application ; aucune modification de `CLAUDE.md` dans cette phase.
  ## 1. Particularités de ce dépôt
  
 -Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) et le 5 octobre 2026 (phases 2 et 2 bis). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
-+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) le 5 octobre 2026 (phases 2 et 2 bis) et le 6 octobre 2026 (phase 2 ter). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
++Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 6 octobre 2026 (phase 2 ter). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
  
  **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
  (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
@@ -239,11 +239,12 @@ application ; aucune modification de `CLAUDE.md` dans cette phase.
  
  ---
  
-@@ -157,6 +166,10 @@
+@@ -157,6 +166,11 @@
  ## 5. Sécurité (non négociable)
  
  - **Aucun secret dans le dépôt** : Docker secrets uniquement, générés par `generate-secrets.sh`. Fichiers d'exemple avec des valeurs factices évidentes.
-+- **Fichiers de secrets** (`~/.obfusk8-test-accounts`, `secrets/`, `.env`, export de royaume, sauvegardes…) : **jamais affichés**, ni lus
++- **Fichiers de secrets** (`~/.obfusk8-test-accounts`, `secrets/`, export de royaume, sauvegardes, et tout fichier qui contiendrait un
++  secret ; `.env` n'en contient pas au 2026-10-06, vérifié par les seuls noms de clés) : **jamais affichés**, ni lus
 +  par une commande dont la sortie s'affiche (`cat`, `grep`, `sed`, `head`…), même filtrée ; chargés uniquement par un script qui ne
 +  journalise rien (variables exportées, aucune sortie) ; tout filtre de masquage est d'abord testé sur un **faux fichier au même format**.
 +  Pour en connaître la structure : nombre de lignes, de champs, longueur, jamais le contenu (D-044, EXT-53).
