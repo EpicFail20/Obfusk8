@@ -5,7 +5,7 @@
 fastapi==0.141.1
 uvicorn[standard]==0.54.0
 python-multipart==0.0.32
-requests==2.33.1
+requests==2.34.2
 PyMuPDF==1.28.2
 python-docx==1.2.0
 lxml==6.1.3
