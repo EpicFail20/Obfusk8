@@ -132,7 +132,8 @@ HTTP/1.1) puis uvicorn 0.54 ; saturation du quota de tâches (EXT-51) dans une c
    ne correspondait pas au format du fichier (`libellé, mot de passe`) : le mot de passe commun des comptes de test s'est affiché dans la
    sortie de la session. Il n'a été écrit dans aucun fichier du dépôt, aucun journal, aucun commit (vérifiable : `git log -p` de la
    branche). Ensuite, lecture uniquement par un script qui exporte les variables sans rien afficher. Recommandation : changer ce mot de
-   passe de laboratoire (même nature qu'EXT-36).
+   passe de laboratoire (même nature qu'EXT-36). Décision humaine (D-044 point 4) : conservé, risque accepté (EXT-53), comptes
+   supprimés de Keycloak avant tout pilote ; règle des fichiers de secrets ajoutée au diff de `CLAUDE.md` (§10).
 2. **Premier lancement des bancs du lot 4 sans identifiant.** Script lancé par `sh` (dash) : un fichier lu par `.` n'y reçoit pas
    d'arguments, l'identifiant était vide (`user_not_found` dans Keycloak). `login()` du client des bancs ne l'a pas vu (EXT-52). Relancé
    sous bash.
@@ -184,33 +185,140 @@ Roues Linux x86_64 publiées sur PyPI pour les versions des verrous (ou celle vi
 spaCy (`<3.15`) et par l'absence de roues de la pile spaCy. Le passage à 3.14 imposera la revalidation du profil seccomp sur le nouvel
 interpréteur (D-040 point 2) et des bancs complets.
 
-## 10. Proposition de mise à jour de `CLAUDE.md` §1 (non appliquée)
+## 10. Proposition de mise à jour de `CLAUDE.md` (non appliquée, relue par l'humain)
+
+Faits de la phase 2 ter (§1) et règle des fichiers de secrets demandée par D-044 point 1 (§5, rappel au §1). Relue par l'humain avant
+application ; aucune modification de `CLAUDE.md` dans cette phase.
 
 ```diff
--Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) et le 5 octobre 2026 (phases 2 et 2 bis).
-+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 6 octobre 2026 (phase 2 ter).
-@@ Images et versions
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -24,7 +24,7 @@
+ 
+ ## 1. Particularités de ce dépôt
+ 
+-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) et le 5 octobre 2026 (phases 2 et 2 bis). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
++Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) le 5 octobre 2026 (phases 2 et 2 bis) et le 6 octobre 2026 (phase 2 ter). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+ 
+ **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
+ (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
+@@ -79,9 +79,14 @@
+ **Images et versions** (phase 2 bis, D-040) : toutes les images tierces sont épinglées par condensat dans `docker-compose.yml` ; les images
+ construites (`app`, analyseur) portent une version (`0.2.0-dev`, **locale**, jamais publiée) et se construisent par
+ `docker compose -f docker-compose.yml -f docker-compose.build.yml build` (Compose refuse une étiquette de construction avec condensat).
 -Paquets Python de `app` : `app/requirements.lock` (empreintes) ; `pip` est retiré des images. Versions de l'analyseur déclarées dans
-+Paquets Python de `app` : `app/requirements.lock` (empreintes) ; de l'analyseur : `presidio/analyzer-build/requirements.lock` (environnement
-+complet, contrôlé à la construction par `check_lock.py`) ; `pip` est retiré des images. Mise à jour : `docs/maintenance-dependances.md`
-+(outils `tools/dependencies/`). FastAPI volontairement en 0.141.1 (D-043). Versions de l'analyseur déclarées dans
++Paquets Python de `app` : `app/requirements.lock` (empreintes) ; de l'analyseur : `presidio/analyzer-build/requirements.lock`
++(environnement complet, contrôlé à la construction par `check_lock.py`) ; `pip` est retiré des images. Mises à jour :
++`docs/maintenance-dependances.md` (outils `tools/dependencies/`, cadence mensuelle, D-044) ; FastAPI volontairement en 0.141.1 (D-043).
++Versions de l'analyseur déclarées dans
  `presidio/analyzer-build/versions.json` (vérifiées à sa construction) et copiées dans `app/analyzer_versions.json` (empreinte `detection_config`) :
 -les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-2bis.yml`.
 +les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-2ter.yml` (et `-2bis`).
-+**uvicorn sans en-têtes de proxy** (`--no-proxy-headers`, D-043, `test_proxy_headers_trust.py`) : si l'adresse du client devient
++**uvicorn sans en-têtes de proxy** (`--no-proxy-headers`, D-043, `app/tests/test_proxy_headers_trust.py`) : si l'adresse du client devient
 +nécessaire, seule configuration acceptable : `forwarded_allow_ips` limité à l'adresse fixe de Traefik.
-@@ Tests
-+**Bancs** : le quota de tâches en attente (`MAX_PENDING_JOBS=20`, 600 s) est **global** (EXT-51) : bancs de documents en série, pas en
-+parallèle ; le quatrième compte de test est le compte sans courriel (refusé par oauth2-proxy) ; scripts de bancs sous bash.
+ 
+ **Adresse fixe de Traefik** : `10.89.18.10` sur `app-internal` (`10.89.18.0/24`, hors des pools par défaut de Docker), seule source de confiance
+ d'oauth2-proxy pour les en-têtes de transfert (`trusted_proxy_ips`). À changer aux trois endroits ensemble. PKCE S256 exigé entre
+@@ -98,6 +103,9 @@
+ Aucun caractère Unicode de format écrit tel quel dans un fichier (séquences d'échappement, test `test_repo_hygiene.py`, EXT-39) ; jetons de test
+ au format réel via `app/tests/fake_secrets.py`. La couverture se mesure hors seccomp (base SQLite de `coverage`
+ bloquée), la suite fonctionnelle sous seccomp.
++**Bancs** : le quota de documents en attente (`MAX_PENDING_JOBS=20`, 600 s) est **global** (EXT-51) : bancs de documents en série, jamais en
++parallèle ; le quatrième compte de test n'a pas de courriel (refusé par oauth2-proxy, EXT-43) ; `login()` du client des bancs ne détecte pas
++un échec de connexion (EXT-52) ; scripts de bancs sous bash.
+ 
+ **Mémoire de l'hôte** (EXT-25) : `/tmp` est un tmpfs qui consomme la RAM de la VM, sans swap. Aucun fichier volumineux dedans (archive d'image,
+ cache d'outil) ; vérifie `free -m` avant un outil lourd ; conteneurs d'outils avec limite mémoire et cache sur disque. Un OOM global tue en priorité
+@@ -106,7 +114,8 @@
+ **Données fictives** : n'utilise **jamais** une valeur trouvée dans l'environnement (mot de passe, jeton, identifiant de compte) comme exemple
+ « fictif ». Les jetons de test au format réel (Stripe, Slack, GitHub…) sont **générés à l'exécution** (préfixe + remplissage déterministe), jamais
+ écrits en littéral dans le dépôt, **sans exception** : les exemples publiés par les fournisseurs (`AKIA…EXAMPLE`, clé Azurite…) suivent
+-la même règle (décision humaine du 2026-10-04). Les comptes de test sont lus à l'exécution depuis `~/.obfusk8-test-accounts`, hors dépôt, et désignés par un libellé.
++la même règle (décision humaine du 2026-10-04). Les comptes de test sont lus à l'exécution depuis `~/.obfusk8-test-accounts`, hors dépôt, et désignés par un libellé ; ce fichier suit la
++règle des fichiers de secrets (§5). Les comptes de test sont supprimés de Keycloak avant tout pilote ou environnement réel (EXT-53, D-044).
+ 
+ ---
+ 
+@@ -157,6 +166,10 @@
+ ## 5. Sécurité (non négociable)
+ 
+ - **Aucun secret dans le dépôt** : Docker secrets uniquement, générés par `generate-secrets.sh`. Fichiers d'exemple avec des valeurs factices évidentes.
++- **Fichiers de secrets** (`~/.obfusk8-test-accounts`, `secrets/`, `.env`, export de royaume, sauvegardes…) : **jamais affichés**, ni lus
++  par une commande dont la sortie s'affiche (`cat`, `grep`, `sed`, `head`…), même filtrée ; chargés uniquement par un script qui ne
++  journalise rien (variables exportées, aucune sortie) ; tout filtre de masquage est d'abord testé sur un **faux fichier au même format**.
++  Pour en connaître la structure : nombre de lignes, de champs, longueur, jamais le contenu (D-044, EXT-53).
+ - **Aucun contenu utilisateur dans les logs ni dans le journal d'audit** : ni texte, ni entités détectées, ni noms de fichiers sensibles.
+   Seules des métadonnées (utilisateur, type d'entité, nombre, longueur, durée, identifiant de corrélation). Démontre-le par un test.
+ - **Toute nouvelle route** : derrière `oidc-auth` et le secret de passerelle, avec **son propre routeur Traefik** (limitation de débit et plafond de corps),
 ```
 
-## 11. Décisions en attente
+## 11. Décisions (D-044, 2026-10-06)
 
-| # | Sujet | Recommandation |
+| # | Sujet | Décision |
 |---|---|---|
-| 1 | Appliquer le diff de `CLAUDE.md` (§10) | Oui |
-| 2 | Cadence de maintenance (`docs/maintenance-dependances.md` §7) | Revue mensuelle, urgence sous 24 h ouvrées / 72 h |
-| 3 | EXT-51 (quota global de tâches) | Phase dédiée ou phase 3 : quota par utilisateur et limite Traefik par `X-Auth-Request-User` |
-| 4 | Mot de passe des comptes de test du laboratoire | Le changer (incident 1) |
-| 5 | Suppression des images `avant-2ter` et de `~/.cache/obfusk8-devtools.avant-2ter` | Après validation de la phase |
-| 6 | Validation de la phase | `git merge --ff-only feat/dependances` sur `feat/text-api`, puis push |
+| 1 | Diff de `CLAUDE.md` (§10) | Relu par l'humain, règle des fichiers de secrets ajoutée |
+| 2 | Cadence de maintenance | Validée : revue mensuelle ; critique : analyse sous 24 h ouvrées, correctif sous 72 h ; alertes GitHub sans correctifs automatiques, couverture vérifiée (`docs/maintenance-dependances.md` §8) |
+| 3 | EXT-51 | Courte phase dédiée avant la phase Python (proposition §12) ; EXT-52 vérifié (§13) |
+| 4 | Mot de passe des comptes de test | Conservé, risque accepté (EXT-53) ; comptes supprimés de Keycloak avant tout pilote |
+| 5 | Images `avant-2ter`, volume `obfusk8_keycloak-data-avant-2bis` | Suppression après confirmation de l'humain que la pile fonctionne depuis la branche poussée |
+| 6 | Validation de la phase | `git merge --ff-only` et push par l'humain |
+
+## 12. Proposition pour EXT-51 (phase dédiée, rien n'est commencé)
+
+**Constat** : `MAX_PENDING_JOBS=20` est un quota **global**, chaque tâche vit `JOB_REVIEW_TTL_SECONDS=600` s, et la limitation de débit de
+Traefik sur `/api/detect` et `/api/finalize` est **par adresse IP** (5/min, rafale 10, sans `sourceCriterion`). Un seul compte bloque
+le flux documents de tous en deux à trois minutes, de façon répétable.
+
+**Proposition** (trois mesures complémentaires, chacune testée) :
+
+1. **Quota par utilisateur** dans `app` : `MAX_PENDING_JOBS_PER_USER` (valeur proposée : 3, à mesurer sur l'usage réel), compté sur le
+   champ `user_email` déjà présent dans chaque tâche, vérifié **dans le même verrou** (`_PENDING_JOBS_LOCK`) et **avant** tout traitement,
+   comme le quota global, qui reste en dernier rempart. Réponse distincte : 429 avec `Retry-After` (le temps restant avant expiration de
+   la plus ancienne tâche de l'utilisateur) et message i18n FR/EN propre (« Tu as déjà N documents en attente de révision : termine-les
+   ou annule-les »), contre 503 pour le quota global. Une tâche sans identité (repli « inconnu », EXT-47) est refusée en 403, comme sur
+   `/api/v1/` (D-035), plutôt que de partager un quota commun.
+2. **Limitation de débit par utilisateur** sur les routes de documents, sur le modèle du routeur `app-text` : un second middleware
+   `ratelimit` avec `sourceCriterion.requestHeaderName=X-Auth-Request-User` (en-tête posé par oauth2-proxy après authentification, donc
+   non forgeable par le client), **chaîné** avec la limite par IP existante (qui reste utile avant authentification). Mêmes valeurs
+   proposées (5/min, rafale 10) ; à appliquer à `/api/detect`, `/api/finalize` et à la nouvelle route d'annulation.
+3. **Annulation de ses propres documents en attente** : `POST /api/cancel/{job_id}`, propriétaire seulement (même contrôle que
+   `/api/download` et `/api/preview_image`), **404 générique** pour une tâche inconnue, expirée ou d'un autre utilisateur (pas
+   d'énumération), suppression immédiate de la tâche et de ses fichiers, événement d'audit `annulation` (métadonnées seules) ; bouton
+   « Annuler » sur la page de révision. Nouvelle route : **son propre routeur Traefik** (limitation par utilisateur, plafond de corps
+   minimal), plafond identique dans l'application (`CLAUDE.md` §5).
+
+**Compatibilité** (`CLAUDE.md` §2.6 et §3) : drapeau désactivé par défaut pour l'annulation (`ENABLE_JOB_CANCEL=false`) ; pour le quota
+par utilisateur, qui corrige un défaut de sécurité, proposition `MAX_PENDING_JOBS_PER_USER=0` = désactivé, comportement strictement
+identique, et une valeur recommandée dans les fichiers d'exemple (décision humaine : activé par défaut ou non).
+
+**Modèle de menace** : un utilisateur qui épuise son propre quota ne gêne que lui ; plusieurs comptes coordonnés restent bornés par le
+quota global (inchangé) ; l'annulation ne doit ni révéler l'existence d'une tâche d'autrui, ni accepter un `job_id` non conforme (format
+validé avant toute recherche) ; concurrence : aujourd'hui le contrôle (début du traitement) et l'insertion (fin) ne peuvent pas se croiser, car toute détection passe
+par le fil documents unique (`max_workers=1`, D-019) ; le quota par utilisateur doit rester correct si ce parallélisme change (option
+multiprocessus différée par D-019) : réserver la place sous `_PENDING_JOBS_LOCK` au contrôle et la libérer en cas d'échec.
+
+**Tests** : écrits avant le correctif (le scénario EXT-51 doit échouer d'abord) ; quota par utilisateur et global, 429 et 503, `Retry-After` ;
+annulation par le propriétaire, par un tiers (404), tâche expirée, identifiant malformé ; aucun contenu dans l'audit ; de bout en bout sous
+seccomp avec deux comptes (le compte 1 sature son quota, le compte 2 envoie toujours).
+
+**Changements soumis à accord** : `docker-compose.yml` (labels Traefik, variables), `env.*.example`, nouvelle route, page de révision.
+
+## 13. Vérification EXT-52 : aucune mesure publiée faussée
+
+Défaut : `login()` ne détecte pas un échec de connexion. Une mesure serait faussée si un script continuait avec une session non
+authentifiée et en tirait des chiffres. Vérifié le 2026-10-06 sur **toutes les versions historiques** (`git log`) des scripts de mesure :
+
+| Script | Garde-fou avant ou pendant la mesure (toutes versions) | Conséquence d'une session non authentifiée |
+|---|---|---|
+| `run_quality_bench.py`, `run_secrets_bench.py`, `run_latency_bench.py` | `api.version()` exige 200 sur `/api/v1/version` puis du JSON ; chaque appel exige 200 | Arrêt (`RuntimeError` ou `JSONDecodeError`) avant tout résultat ; aucun fichier écrit |
+| `doc_zones_snapshot.py`, `doc_quality_bench.py`, `_detect` (latence, multi-utilisateurs) | 200 **et** `name="job_id"` dans la page de révision (absent de la page de connexion) | Arrêt |
+| `multi_user_bench.py` (flux de prompts) | Échantillons non 200 écartés des statistiques mais **comptés** par utilisateur dans le rapport | Visible dans le rapport |
+| `e2e_text_api.py`, `e2e_document_flow.py`, `e2e_pdf_localization.py` | Chaque vérification exige le bon code et un `job_id` | Échec affiché |
+| `pdf_localization_bench.py`, `propn_filter_bench.py` | Pas de connexion (analyseur appelé directement sur `backend`) | Non concernés |
+
+Résultats publiés (`benchmarks/results/`) : les 13 rapports de qualité et les 13 de secrets portent l'empreinte `detection_config`, renvoyée
+seulement par `/api/v1/version` à une session authentifiée ; les 6 bancs de latence n'ont aucun statut non 200 ni aucun échantillon vide ;
+le banc multi-utilisateurs du 2026-10-05 (05:55 UTC) compte `{'200 app': 318}` pour chacun des comptes 1 à 3, ses seuls statuts non 200
+sont les 10 `429 edge` **attendus** du test de limitation de débit, et ses 18 détections du compte 4 ont chacune exigé un `job_id` ; le
+compte 4 n'a perdu son courriel que plus tard ce jour-là (commit `4eb7a9a`, 06:39 UTC). **Conclusion (observé) : aucune mesure publiée
+des phases 1 à 2 ter n'a été faussée par EXT-52.**
