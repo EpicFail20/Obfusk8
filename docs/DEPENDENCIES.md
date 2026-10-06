@@ -122,3 +122,67 @@ la détection). À décider.
 | docker/login-action | v4.6.0 | `dbcb8138…` | Apache-2.0 |
 | docker/metadata-action | v6.2.0 | `dc802804…` | Apache-2.0 |
 | docker/build-push-action | v7.4.0 | `c3c9e263…` | Apache-2.0 |
+
+## Phase 2 ter — mise à jour des dépendances (2026-10-06)
+
+Méthode : `docs/maintenance-dependances.md`. Inventaire complet : `docs/phase-2-ter-dependances.md`. Sources interrogées le 2026-10-06 :
+API JSON de PyPI (`tools/dependencies/outdated.py`), API OSV, versions GitHub et notes de version, `docker buildx imagetools inspect`,
+python.org. Scans des images finales : `pip-audit` 2.10.1 (OSV) sur les environnements installés, `trivy` 0.75.0 (HIGH, CRITICAL).
+**Aucune nouvelle dépendance**. Licences relues sur PyPI (`license_expression`, à défaut `license` ou classificateurs) pour chaque paquet
+mis à jour : MIT (gunicorn, filelock, setuptools, cloudpathlib, spacy), BSD-3-Clause (Werkzeug, tldextract, uvicorn, websockets),
+BSD-2-Clause (wrapt), Apache-2.0 (phonenumbers, requests), Apache-2.0 AND CNRI-Python (regex, inchangée) ; compatibles avec l'AGPL-3.0
+et la GPL-3.0 (EXT-05).
+
+### Production — image `app`
+
+| Paquet | Avant | Retenue | Dernière stable observée | Audit | Remarque |
+|---|---|---|---|---|---|
+| python (base) | 3.12.15, `02108f5d…` | 3.12.15, `ddb0207a…` | 3.12.15 (étiquette reconstruite) | trivy : 0 corrigeable | Lot 0 ; aucun paquet Debian ni Python changé |
+| uvicorn (`[standard]`) | 0.35.0 | **0.54.0** | 0.54.0 (2026-09-25) | OSV : aucune | Lot 1 ; `--no-proxy-headers` (D-043) ; aucun appel système nouveau |
+| websockets | 17.1 | **17.2** | 17.2 (2026-10-03) | OSV : aucune | Lot 1 ; tirée par `uvicorn[standard]` |
+| requests | 2.33.1 | **2.34.2** | 2.34.2 (2026-05-14) | OSV : aucune | Lot 2 |
+| fastapi | 0.141.1 | 0.141.1 | 0.142.2 (2026-09-30) | OSV : aucune | **Écart** D-043 point 1 (`opentelemetry-api` obligatoire, télémétrie active par défaut) |
+| pydantic-core | 2.46.5 | 2.46.5 | 2.49.0 | OSV : aucune | Épinglée par pydantic 2.13.5 (dernière) |
+| 28 autres paquets | — | inchangés | déjà les dernières | OSV : aucune | `app/requirements.lock` |
+
+`pip-audit --path /usr/local/lib/python3.12/site-packages` sur l'image finale (`73b5a666…`) : *No known vulnerabilities found*.
+
+### Production — image de l'analyseur
+
+Environnement entier déclaré dans `presidio/analyzer-build/requirements.lock` (55 paquets et 2 modèles, empreintes), contrôlé à la
+construction par `check_lock.py` (D-043 point 3). Base Presidio 2.2.364 inchangée (dernière, même condensat).
+
+| Paquet | Avant | Retenue | Dernière stable observée | Audit (version avant) | Remarque |
+|---|---|---|---|---|---|
+| Werkzeug | 3.1.8 | **3.1.9** | 3.1.9 (2026-09-27) | **GHSA-g6x2-hccm-hh4m** (CVE-2026-102598, MODERATE, Windows) | Lot 4, correctif de sécurité |
+| gunicorn | 25.3.0 | **26.2.0** | 26.2.0 sur PyPI (2026-08-24) ; 26.2.1 et 26.2.2 GitHub seulement | OSV : aucune | Lot 4, majeure acceptée (D-043) |
+| filelock | 3.29.7 | **4.0.12** | 4.0.12 (2026-10-05) | OSV : aucune | Lot 4, majeure acceptée |
+| setuptools | 83.0.0 | **84.0.0** | 84.0.0 (2026-08-08) | OSV : aucune | Lot 4, majeure acceptée |
+| cloudpathlib | 0.24.0 | **0.26.0** | 0.26.0 (2026-10-02) | OSV : aucune (GHSA-r4f8-3xc4-c8vw corrigé en 0.25.0) | Lot 4 |
+| pydantic / pydantic-core | 2.13.4 / 2.46.4 | **2.13.5 / 2.46.5** | 2.13.5 | OSV : aucune | Lot 4 |
+| 16 autres (MarkupSafe 3.0.4, Pygments 2.21.0, annotated-doc 0.0.5, annotated-types 0.8.0, certifi 2026.7.22, charset-normalizer 3.5.2, click 8.5.0, idna 3.20, packaging 26.3, smart_open 8.0.2, srsly 2.5.4, tqdm 4.70.1, typer 0.27.2, typing-inspection 0.4.4, wrapt 2.5.0) | — | dernières | dernières | OSV : aucune | Lot 4 |
+| spacy | 3.8.13 | **3.8.16** | 3.8.16 (2026-08-24) | OSV : aucune | Lot 5 ; `versions.json`, `detection_config` → `1a04111540221092` |
+| regex | 2026.7.10 | **2026.9.29** | 2026.9.29 | OSV : aucune | Lot 5 ; copie de développement alignée (D-017) |
+| phonenumbers | 9.0.34 | **9.0.40** | 9.0.40 (2026-09-24) | OSV : aucune | Lot 5 |
+| tldextract | 5.3.1 | **5.4.0** | 5.4.0 (2026-10-03) | OSV : aucune | Lot 5 |
+| numpy | 2.4.6 | 2.4.6 | 2.5.3 | OSV : aucune | Plafonnée par Presidio (`<2.5.0`) |
+| thinc | 8.3.13 | 8.3.13 | 9.1.1 | OSV : aucune | Plafonnée par spaCy 3.8 (`<8.4.0`) |
+| Python (base Presidio) | 3.12.13 | 3.12.13 | 3.12.15 | voir EXT-50 | D-043 point 5 |
+
+`pip-audit` sur l'image finale (`878fa63b…`) : *No known vulnerabilities found* (modèles spaCy absents de PyPI, non audités).
+Effet sur la détection : **nul** (qualité, secrets et zones identiques aux références hors empreinte).
+
+### Développement (jamais dans les images)
+
+regex 2026.7.10 → 2026.9.29 (D-017), ast_serialize 0.11.2 → 0.12.1, filelock 4.0.9 → 4.0.12, platformdirs 4.12.2 → 4.12.3 ; outils de
+premier niveau déjà aux dernières versions. `pip-audit -r app/requirements-dev.txt` : aucune vulnérabilité.
+
+### Images (trivy, images finales)
+
+| Image | Corrigeables | Sans correctif | Remarque |
+|---|---|---|---|
+| app 0.2.0-dev (`73b5a666…`) | 0 | 76 HIGH, 1 CRITICAL | Inchangé (paquets Debian, EXT-33) |
+| analyseur 0.2.0-dev (`878fa63b…`) | 0 | 52 HIGH | Inchangé |
+| traefik v3.7.13, oauth2-proxy v7.15.5, busybox 1.38.0 | 0 | 0 | Dernières versions, condensats inchangés |
+| keycloak 26.8.0 | 0 | 6 HIGH | Dernière version |
+| docker-socket-proxy v0.5.0 | **6** | 0 | Toujours sans version amont (D-040 point 8) |
