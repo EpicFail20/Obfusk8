@@ -22,7 +22,9 @@ outdated.py are replaced by canned answers.
 
 import importlib.util
 import io
+import json
 import os
+import runpy
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -81,6 +83,16 @@ def test_lock_refuse_source_ou_empreinte_inconnue(url: str, sha: str | None) -> 
         lock_from_report.lock_lines({"install": [_item("pkg", "1.0", url, sha)]})
 
 
+def test_lock_point_d_entree(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({"install": [_item("anyio", "4.15.1", "https://f/anyio-4.15.1-py3-none-any.whl")]}))
+    monkeypatch.setattr(sys, "argv", ["lock_from_report.py", str(report)])
+    runpy.run_path(str(lock_from_report.__file__), run_name="__main__")
+    assert capsys.readouterr().out == f"anyio==4.15.1 \\\n    --hash=sha256:{_SHA}\n"
+
+
 # --- outdated.py --------------------------------------------------------------
 
 
@@ -101,10 +113,23 @@ def test_derniere_version_ignore_preversions_retirees_et_invalides(monkeypatch: 
         "2.0.dev1": [_file("2026-05-02")],
         "1.4": [],
         "not-a-version": [_file("2026-06-01")],
+        "0.9": [_file("2025-01-01")],
     }
     monkeypatch.setattr(outdated, "_get", lambda url, payload=None: _pypi(releases))
     version, date = outdated.latest_release("pkg")
     assert (str(version), date) == ("1.2", "2026-03-01")
+
+
+def test_requete_https_json(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: dict[str, Any] = {}
+
+    def fake_urlopen(request: Any, timeout: int) -> io.BytesIO:
+        sent.update(url=request.full_url, body=request.data, timeout=timeout)
+        return io.BytesIO(b'{"vulns": []}')
+
+    monkeypatch.setattr(outdated.urllib.request, "urlopen", fake_urlopen)
+    assert outdated._get("https://api.osv.dev/v1/query", {"version": "1.0"}) == {"vulns": []}
+    assert sent == {"url": "https://api.osv.dev/v1/query", "body": b'{"version": "1.0"}', "timeout": 30}
 
 
 def test_schema_autre_que_https_refuse() -> None:
@@ -134,6 +159,13 @@ def test_inventaire_ligne_par_paquet(monkeypatch: pytest.MonkeyPatch, capsys: py
     assert lines[0] == "ana\twerkzeug\t3.1.8\t3.1.9\t2026-09-27\tOUTDATED\tGHSA-test"
     assert lines[1] == "app\twerkzeug\t3.1.9\t3.1.9\t2026-09-27\t\t-"
     assert lines[2].startswith("ana\tbroken\t1.0\tERROR")
+
+
+def test_inventaire_point_d_entree(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO(""))
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_path(str(outdated.__file__), run_name="__main__")
+    assert exit_info.value.code == 0
 
 
 # --- check_lock.py -------------------------------------------------------------
