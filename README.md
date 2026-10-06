@@ -127,6 +127,8 @@ Si vous découvrez une vulnérabilité, merci de la signaler de façon responsab
 
 Ce projet suit le [versionnage sémantique](https://semver.org/lang/fr/). Consultez les [Releases GitHub](../../releases) pour l'historique des versions. À chaque étiquette git `vX.Y.Z`, le workflow publie deux images, `ghcr.io/epicfail20/obfusk8-app` et `ghcr.io/epicfail20/obfusk8-presidio-analyzer`, sous les étiquettes `X.Y.Z` et `sha-<commit>` (jamais `latest` ni `main`). `docker-compose.yml` les référence par condensat (`:X.Y.Z@sha256:…`), comme toutes les images tierces. La version en cours de développement, `0.2.0-dev`, n'est construite que localement (`docker-compose.build.yml`) et n'est pas publiée.
 
+Les dépendances (paquets Python, images de base et tierces) se mettent à jour selon la procédure de [maintenance des dépendances](docs/maintenance-dependances.md) : inventaire à la source, lots testés sous seccomp, garde-fou de détection, retour arrière, cadence proposée.
+
 ## Licence
 
 This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).

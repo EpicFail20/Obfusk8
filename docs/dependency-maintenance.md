@@ -1,0 +1,167 @@
+# Dependency maintenance
+
+*Version française : [maintenance-dependances.md](maintenance-dependances.md).*
+
+Procedure set up in phase 2 ter (2026-10-06, D-043) so that updating dependencies is a **routine operation** that can be replayed
+without reinventing the method. It complements `CLAUDE.md` §6 (version checks), §7 (bugs) and §9 (approvals). Version register:
+`docs/DEPENDENCIES.md`; justified gaps: `docs/DECISIONS.md`.
+
+Every command runs from the repository root, on the test VM, with **a single stack** (`CLAUDE.md` §1). `$SCRATCH` is a working directory
+on disk, **outside** the `/tmp` tmpfs (EXT-25) and outside the repository.
+
+## 1. What is maintained
+
+| Set | Files | Note |
+|---|---|---|
+| `app` Python packages | `app/requirements.txt` (top level), `app/requirements.lock` (full set, hashes) | Installed with `--require-hashes --no-deps` |
+| Analyzer Python packages | `presidio/analyzer-build/requirements.lock` (full set, hashes, spaCy models included) | `check_lock.py` fails the build if the installed environment differs |
+| Detection versions | `presidio/analyzer-build/versions.json` = `app/analyzer_versions.json` | `detection_config` fingerprint; both copies stay identical (checked by `app/run-tests.sh`) |
+| Build-time pip | `app/requirements-build.txt`, `presidio/analyzer-build/requirements-build.txt` | Removed from the images after installation |
+| Development tools | `app/requirements-dev.in`, `app/requirements-dev.txt` | Never in the images; installed in `~/.cache/obfusk8-devtools`; `regex` follows the analyzer's version (D-017) |
+| Base images | `FROM` of `app/Dockerfile` and `presidio/analyzer-build/Dockerfile` | Pinned by digest |
+| Third-party images | `docker-compose.yml` (and the `docker-compose.rollback-*.yml` overrides) | Pinned by digest |
+| Debian packages | `apt-get upgrade` on every build | Follow the rebuild |
+| GitHub Actions | `.github/workflows/` | Pinned by commit; workflow disabled (D-042) |
+
+## 2. Listing outdated dependencies and their vulnerabilities
+
+1. **Installed environments** (not only the files):
+
+   ```sh
+   docker run --rm --network none --entrypoint python ghcr.io/epicfail20/obfusk8-presidio-analyzer:0.2.0-dev -c \
+     'import importlib.metadata as m; [print("ana", d.metadata["Name"], d.version) for d in m.distributions()]' \
+     | grep -vE 'en_core_web_lg|fr_core_news_md' > "$SCRATCH/list.txt"
+   grep -E '^[a-zA-Z]' app/requirements.lock     | sed -E 's/^([^=]+)==([^ ]+).*/app \1 \2/' >> "$SCRATCH/list.txt"
+   grep -E '^[a-zA-Z]' app/requirements-dev.txt  | sed -E 's/^([^=]+)==([^ ]+).*/dev \1 \2/' >> "$SCRATCH/list.txt"
+   ```
+
+2. **Latest stable release and vulnerabilities of the installed version**, at the source (PyPI JSON API, OSV API):
+
+   ```sh
+   PYTHONPATH=~/.cache/obfusk8-devtools python3 tools/dependencies/outdated.py < "$SCRATCH/list.txt" > "$SCRATCH/inventory.tsv"
+   grep -E 'OUTDATED|ERROR' "$SCRATCH/inventory.tsv"; awk -F'\t' '$7 != "-"' "$SCRATCH/inventory.tsv"
+   ```
+
+   For each advisory: OSV record (`https://api.osv.dev/v1/vulns/<id>`), cross-checked with the GitHub Advisory Database or the NVD; never a blog.
+3. **Caps**: an "outdated" version may be capped by a dependent (`numpy<2.5.0` by Presidio, `thinc<8.4.0` by spaCy 3.8, `pydantic-core==` by
+   pydantic): read the `requires_dist` (`https://pypi.org/pypi/<package>/<version>/json`).
+4. **Release notes read** for each jump: GitHub releases, project changelog, otherwise the commit comparison. Also read the new version's
+   **dependencies** (`requires_dist`): FastAPI 0.142 made `opentelemetry-api` mandatory (D-043). Check that the version is **published on
+   PyPI** (gunicorn 26.2.1 and 26.2.2 were GitHub releases only on 2026-10-06).
+5. **Images**: upstream version (GitHub releases or registry) and current digest of the pinned tag
+   (`docker buildx imagetools inspect <image>:<version>`): a tag can be rebuilt without a version change (`python:3.12-slim`, 2026-10-06).
+6. **Scans**: `trivy` (HIGH, CRITICAL) on every running image, in a throwaway memory-limited container, cache on disk:
+
+   ```sh
+   docker run --rm --memory 2g -v /var/run/docker.sock:/var/run/docker.sock:ro -v ~/.cache/obfusk8-trivy/cache:/root/.cache \
+     aquasec/trivy@<digest> image --quiet --scanners vuln --severity HIGH,CRITICAL <image>
+   ```
+
+7. Record the list in a working document (template: `docs/phase-2-ter-dependances.md`).
+
+## 3. Grouping into batches, and in which order
+
+A batch = a separately testable set, one commit, one rollback. Phase 2 ter order (D-043), from the most isolated to the widest:
+
+| Order | Batch | Why this rank | Specific checks |
+|---|---|---|---|
+| 0 | `app` base image (digest, Debian packages) | Changes the ground of every later batch | `dpkg-query` difference, OCR, document flow |
+| 1 | `app` HTTP server (uvicorn, uvloop, httptools, websockets, anyio) | Event loop under seccomp (EXT-11), header trust | Trace under `app-audit.json`, `test_proxy_headers_trust.py`, forged header end to end, latency |
+| 2 | Web framework (FastAPI, Starlette, python-multipart, pydantic) | Body caps (EXT-22), error format, strict models | Full suite, text and document end to end |
+| 3 | `app` clients and utilities (requests…) | Low risk | End to end |
+| 4 | Document processing (PyMuPDF, python-docx, Pillow, pytesseract, lxml) | Content of the final files | Document-flow zones, final files (`e2e_document_flow.py`) |
+| 5 | Analyzer, serving (gunicorn, Flask, Werkzeug, and everything that does not touch detection) | Detection must stay **identical** | Quality and secret benchmarks identical line by line |
+| 6 | Analyzer, detection (spaCy and models, regex, phonenumbers, tldextract, Presidio) | Changes detection and `detection_config` | Benchmarks with the safeguard (§5) |
+| 7 | Development tools | Outside the images | ruff, mypy, bandit, suite |
+| 8 | Third-party images (patch releases only) | No code | Test account logins, trivy |
+
+A **security fix** goes first, alone in its batch.
+
+## 4. Updating, rebuilding, testing
+
+**Before the first batch**: tag the running images (`obfusk8-local:avant-<phase>-<service>`), write the
+`docker-compose.rollback-<phase>.yml` override (template: `docker-compose.rollback-2ter.yml`, `pull_policy: never`) and **test the rollback**
+both ways (test account logins, `Seccomp: 2` in `/proc/1/status` of the `app` container).
+
+**`app` lock** (same method for `requirements-dev.txt`, with `requirements-dev.in`):
+
+```sh
+# constraints.txt = the current lock's versions, the updated packages pinned to their target version
+grep -E '^[a-zA-Z]' app/requirements.lock | sed -E 's/ .*//' | grep -v '^uvicorn==' > "$SCRATCH/constraints.txt"
+echo 'uvicorn==<target>' >> "$SCRATCH/constraints.txt"     # and the top level in app/requirements.txt
+docker run --rm --memory 1g -v "$PWD/app:/src:ro" -v "$SCRATCH:/out" python:3.12-slim@<digest of the FROM line> sh -c '
+  pip install -q --root-user-action=ignore --no-cache-dir --require-hashes --no-deps -r /src/requirements-build.txt &&
+  pip install -q --root-user-action=ignore --no-cache-dir --dry-run --ignore-installed --only-binary=:all: \
+      --report /out/report.json -r /src/requirements.txt -c /out/constraints.txt && chmod 644 /out/report.json'
+python3 tools/dependencies/lock_from_report.py "$SCRATCH/report.json" > "$SCRATCH/body.txt"
+# replace the lock entries with body.txt, keeping the header; check that only the intended packages move:
+git diff app/requirements.lock | grep '^[-+][a-zA-Z]'
+```
+
+**Analyzer lock**: same principle inside the Presidio base image (`--entrypoint sh --user root`), with `-r names.txt` (names of every entry
+but the models) and `-c constraints.txt`. The resolution must return **exactly** the constrained set (no package added or dropped); the two
+spaCy model lines are kept by hand. If spaCy, Presidio or the model changes: `versions.json` **and** `app/analyzer_versions.json`, then
+rebuild `app` **as well** (`detection_config` fingerprint).
+
+**Build and tests**:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.build.yml build --no-cache <service>
+app/run-tests.sh                       # under seccomp/app-enforce.json; never inside the app container
+ENABLE_EXTENSION_API=true docker compose up -d <service>   # text API enabled for the measurements only
+```
+
+**System calls** (batches 0 to 4, and any compiled library of `app`): `app` under `app-audit.json` through a Compose override kept outside
+the repository (`security_opt: !override`), scenarios replayed (`benchmarks/e2e/e2e_text_api.py`, `benchmarks/e2e/e2e_document_flow.py`,
+clean restart), then `sudo dmesg | grep 'audit: type=1326'`. Known and deliberately not allowed: `io_uring_setup`, `io_uring_enter`,
+`openat2`. Any other call: method of `seccomp/README.md`, justified addition; **stop** before a sensitive call (`ptrace`, `mount`, `bpf`,
+`unshare`, `setns`, `keyctl`, `perf_event_open`, `process_vm_*`).
+
+**Benchmarks** (test accounts read at run time from `~/.obfusk8-test-accounts`, by a script that prints nothing, under **bash**):
+`benchmarks/quality/run_quality_bench.py`, `benchmarks/secret_detection/run_secrets_bench.py`,
+`benchmarks/documents/doc_zones_snapshot.py` (then `--compare` against the reference), `benchmarks/latency/run_latency_bench.py`
+(`BENCH_CONTENTION_ROUNDS=1 BENCH_CONTENTION_DOCUMENTS=3`), `benchmarks/e2e/check_no_content_in_logs.py`.
+One account per benchmark run in parallel (per-user rate limit, `MAX_PENDING_JOBS`).
+
+**Final scans**: `trivy` on every built image; `pip-audit` on the installed environments
+(`pip-audit --path <site-packages> --vulnerability-service osv`, in a container of the image, tools mounted).
+
+**Commit**: one per batch; the message says what changed and what was checked (figures). `docs/DEPENDENCIES.md` updated.
+
+## 5. Safeguards and rollback
+
+- **Detection**: if masking on the main corpus drops by more than **0.02** from the reference (0.973 on 2026-10-06), or if a secret is no
+  longer detected: **stop**, present the figures, human decision. A smaller variation is reported, not corrected.
+- **Two failed attempts** on a batch (`CLAUDE.md` §7): back to the previous version for that batch, gap in `DECISIONS.md` (target version,
+  cause, lifting condition), next batch.
+- **Rolling back a batch**: `git revert <batch commit>` then rebuild; **the whole phase**:
+  `docker compose -f docker-compose.yml -f docker-compose.rollback-<phase>.yml up -d`.
+- **Disk**: never `docker image prune -a` nor `docker system prune -a` (D-043); delete by ID only the intermediate images built during the work.
+- **End of work**: `ENABLE_EXTENSION_API=false` in `.env`, stack redeployed in that state.
+
+## 6. What requires a human decision
+
+- **Minor or major** version of a third-party image (Keycloak, oauth2-proxy, Traefik…); **Python** version.
+- **New production dependency**, including one imposed by an update (FastAPI 0.142 and `opentelemetry-api`).
+- **Major** version of a package (gunicorn 26, filelock 4, setuptools 84 in phase 2 ter).
+- Any gap to the latest stable release, and its lifting condition.
+- Any **detection change** beyond the measured effect of an update; any crossing of the safeguard.
+- Any sensitive system call added to the seccomp profile.
+- Changes to `docker-compose.yml`, `oauth2-proxy.cfg`, Traefik or a Dockerfile beyond versions (`CLAUDE.md` §9).
+
+**Systematic review at every cycle**: FastAPI (D-043 point 1: stay on 0.141.1 as long as no security fix exists only in 0.142+ and
+OpenTelemetry is mandatory; on the day of the upgrade, telemetry explicitly disabled in `FastAPI(...)` and a test proving that nothing is
+exported); docker-socket-proxy (D-040 point 8); capped numpy and thinc; the analyzer's Python (EXT-50).
+
+## 7. Proposed cadence (human decision)
+
+| Trigger | Proposed delay | Content |
+|---|---|---|
+| **Emergency**: CRITICAL advisory, or HIGH exploitable in our use, on a dependency **in production** (`app` or analyzer package, base image, Traefik, oauth2-proxy, Keycloak in production) | Exposure analysis within 24 business hours, fix within 72 h if exposed | Single security batch, full procedure; without an upstream fix, documented compensating measure |
+| HIGH or MODERATE advisory fixed upstream | At the latest at the next monthly cycle; earlier if exposed | Security batch |
+| **Full review** | **Monthly** (first week of the month) | Whole §2, batches of §3, short report |
+| Minor or major version change (images, Python) | Quarterly, or on decision | Dedicated phase |
+
+Monitoring between cycles (proposed, with no automation added to the application; the test VM has Internet access, the stack does not):
+weekly `tools/dependencies/outdated.py` and `trivy` on the VM, and the administrator subscribed to the GitHub security advisories of the
+upstream repositories (Presidio, spaCy, FastAPI, Starlette, uvicorn, PyMuPDF, Pillow, lxml, Traefik, oauth2-proxy, Keycloak).
