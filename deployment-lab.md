@@ -57,6 +57,8 @@ cp env.en.example .env
 
 Edit `.env` — `APP_DOMAIN` and `OAUTH2_PROXY_CLIENT_ID` are the two values to change first; the others have safe defaults.
 
+`BIND_ADDRESS` is the only host address on which Traefik (80, 443) and Keycloak (8080) are published. It defaults to `127.0.0.1`: the application is then reachable from the VM only. For access from other workstations, set the VM's local network address (for example `BIND_ADDRESS=192.168.1.35`). Never set it to `0.0.0.0`: that would publish the ports on every interface, public IPv6 address included (EXT-56).
+
 ## 5. Start Keycloak alone and configure it
 
 ```bash

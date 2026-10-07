@@ -133,9 +133,13 @@ services:
       - "--accesslog=true"
       - "--global.checknewversion=false"
       - "--global.sendanonymoususage=false"
+    # Published on BIND_ADDRESS only, never on 0.0.0.0 / [::] (EXT-56):
+    # a bare "443:443" also listened on the VM's global IPv6 address.
+    # Unset -> 127.0.0.1 (safe default); set the LAN address in .env for
+    # access from other workstations.
     ports:
-      - "443:443"
-      - "80:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:443:443"
+      - "${BIND_ADDRESS:-127.0.0.1}:80:80"
     volumes:
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/traefik/certs:ro
@@ -180,8 +184,10 @@ services:
       - KC_HOSTNAME=http://keycloak.lab.local:8080
     secrets:
       - keycloak_admin_password
+    # Same BIND_ADDRESS as Traefik (EXT-56): the browser must reach the
+    # OIDC issuer (KC_HOSTNAME) for login, but on no other address.
     ports:
-      - "8080:8080"   # admin console exposed directly for the lab
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
     volumes:
       - keycloak-data-v26-8:/opt/keycloak/data
     networks:
