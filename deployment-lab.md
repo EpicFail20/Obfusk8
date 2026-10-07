@@ -146,6 +146,41 @@ docker compose ps
 
 Every service should show `Up`/`Running`/`Healthy`, with no restart counter that keeps increasing.
 
+## 6 bis. Lab certificate (CA restricted to `.lab.local`)
+
+Without this step, Traefik serves its default certificate: regenerated at every start and not naming the service, it forces you to
+accept a warning after each restart, and **the browser extension cannot reach the server** (an extension request fails on an
+untrusted certificate; observed on 2026-10-07).
+
+1. On the VM, once (then every 397 days for the server certificate):
+   ```bash
+   sudo chown "$USER" traefik/certs     # once, if the folder belongs to root
+   traefik/generate-lab-cert.sh
+   ```
+   - The CA (`~/.obfusk8-lab-ca/ca.crt`) carries a critical name constraint: it can vouch **only** for `.lab.local` names. A
+     certificate it would sign for any other domain is refused by the browser (checked in Chromium: `ERR_CERT_INVALID` for
+     `evil.example.com` and `lab.local.example.com`).
+   - Its **private key** (`~/.obfusk8-lab-ca/ca.key`) never leaves the VM and never enters the repository.
+   - Traefik picks up the new certificate without a restart (`traefik/dynamic/lab-tls.yml`).
+2. On the workstation, copy **only** `ca.crt` and compare its fingerprint with the one shown on the VM:
+   ```bash
+   scp debian@<VM>:.obfusk8-lab-ca/ca.crt obfusk8-lab-ca.crt
+   openssl x509 -in obfusk8-lab-ca.crt -noout -subject -fingerprint -sha256   # on the workstation AND on the VM
+   ```
+3. Import it as a **user** root authority (Chrome and Edge use the system store):
+   - **Windows** (PowerShell, no administrator rights):
+     `Import-Certificate -FilePath .\obfusk8-lab-ca.crt -CertStoreLocation Cert:\CurrentUser\Root` (confirm the dialog);
+   - **macOS**: `security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db obfusk8-lab-ca.crt`;
+   - **Linux** (NSS store of Chrome and Edge; package `libnss3-tools`):
+     `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "obfusk8 lab CA" -i obfusk8-lab-ca.crt`.
+   Restart the browser, then open `https://<APP_DOMAIN>`: no more warning.
+4. **End of the lab**: remove the CA from the workstation, then destroy `~/.obfusk8-lab-ca` with the VM (D-049):
+   - **Windows**: `Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -like '*obfusk8 lab CA*' | Remove-Item`;
+   - **macOS**: `security delete-certificate -c "obfusk8 lab CA (lab.local only)" ~/Library/Keychains/login.keychain-db`;
+   - **Linux**: `certutil -d sql:$HOME/.pki/nssdb -D -n "obfusk8 lab CA"`.
+
+Pilot and production: the establishment's certificate, never this CA.
+
 ## 7. Verify and log in
 
 ```bash
@@ -153,14 +188,17 @@ docker compose logs -f app
 docker compose logs -f oauth2-proxy
 ```
 
-Open `https://anonymiseur.lab.local` (make sure it's `https`). Accept the certificate warning (self-signed in the lab). You should be redirected to Keycloak, log in with a test user, and land on the app.
+Open `https://anonymiseur.lab.local` (make sure it's `https`). With the lab CA imported (§6 bis) there is no certificate warning; otherwise, accept it. You should be redirected to Keycloak, log in with a test user, and land on the app.
 
 ## 8. (Optional) Enable the text API for the browser extension
 
-Disabled by default. It lets a future browser extension analyze or pseudonymize a prompt before it is sent to an AI service.
-Full contract: [`docs/api-extension.en.md`](./docs/api-extension.en.md).
+Disabled by default. It lets the browser extension (separate `obfusk8-extension` repository, side panel) analyze a prompt
+before it is sent to an AI service. Full contract: [`docs/api-extension.en.md`](./docs/api-extension.en.md).
 
-1. In `.env`: `ENABLE_EXTENSION_API=true`. The `MAX_TEXT_*` limits have measured defaults (see `env.en.example`).
+1. In `.env`: `ENABLE_EXTENSION_API=true`, and the extension's origin in `EXTENSION_ALLOWED_ORIGINS` (phase 3, D-054). Lab
+   extension (stable identifier, public key in its `config/lab.json`):
+   `EXTENSION_ALLOWED_ORIGINS=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa`. Empty: every analysis is refused (403).
+   The `MAX_TEXT_*` limits have measured defaults (see `env.en.example`).
 2. Recreate the application container:
    ```bash
    docker compose up -d app
@@ -175,6 +213,9 @@ Good to know:
   `12 x MAX_TEXT_CHARS + 4096`.
 - Prompt requests are recorded in a separate audit log, `/var/log/anonymiseur-audit/audit-extension.log` (metadata only: user, entity
   types and counts, length, duration; never the text).
+- `POST /api/v1/text/*` requires the `Origin` of an allowed extension (`chrome-extension://<id>`, sent by Chrome from the side
+  panel); `GET /api/v1/version` accepts a request without `Origin`. Any other origin: 403, audit outcome `origin_refused`.
+  The extension can only reach a server whose certificate the browser trusts: see §6 bis.
 - An unauthenticated request on `/api/v1/` gets a plain text **401** (`Unauthorized`), without redirect: the `app-text` router does not
   use `oauth2-errors` (D-010 option 1, D-020). The web interface keeps the redirect to the sign-in page. `oidc-auth` and the gateway
   secret are still required.

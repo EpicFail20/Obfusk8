@@ -148,6 +148,41 @@ docker compose ps
 
 Tous les services doivent afficher `Up`/`Running`/`Healthy`, sans compteur de redémarrage qui augmente.
 
+## 6 bis. Certificat du laboratoire (autorité restreinte à `.lab.local`)
+
+Sans cette étape, Traefik sert son certificat par défaut : régénéré à chaque démarrage et sans le nom du service, il impose
+d'accepter un avertissement à chaque redémarrage, et **l'extension de navigateur ne peut pas joindre le serveur** (une requête
+d'extension échoue sur un certificat non reconnu ; constaté le 2026-10-07).
+
+1. Sur la VM, une seule fois (puis tous les 397 jours pour le certificat serveur) :
+   ```bash
+   sudo chown "$USER" traefik/certs     # une seule fois, si le dossier appartient à root
+   traefik/generate-lab-cert.sh
+   ```
+   - L'autorité (`~/.obfusk8-lab-ca/ca.crt`) porte une contrainte de noms critique : elle ne peut garantir **que** des noms en
+     `.lab.local`. Un certificat qu'elle signerait pour un autre domaine est refusé par le navigateur (vérifié dans Chromium :
+     `ERR_CERT_INVALID` pour `evil.example.com` et `lab.local.example.com`).
+   - Sa **clé privée** (`~/.obfusk8-lab-ca/ca.key`) ne quitte jamais la VM et n'entre jamais dans le dépôt.
+   - Traefik prend le nouveau certificat sans redémarrage (`traefik/dynamic/lab-tls.yml`).
+2. Sur le poste, copier **seulement** `ca.crt` et vérifier son empreinte avec celle affichée sur la VM :
+   ```bash
+   scp debian@<VM>:.obfusk8-lab-ca/ca.crt obfusk8-lab-ca.crt
+   openssl x509 -in obfusk8-lab-ca.crt -noout -subject -fingerprint -sha256   # sur le poste ET sur la VM
+   ```
+3. L'importer comme autorité racine **de l'utilisateur** (Chrome et Edge utilisent le magasin du système) :
+   - **Windows** (PowerShell, sans droits d'administrateur) :
+     `Import-Certificate -FilePath .\obfusk8-lab-ca.crt -CertStoreLocation Cert:\CurrentUser\Root` (confirmer la fenêtre) ;
+   - **macOS** : `security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db obfusk8-lab-ca.crt` ;
+   - **Linux** (magasin NSS de Chrome et d'Edge ; paquet `libnss3-tools`) :
+     `certutil -d sql:$HOME/.pki/nssdb -A -t "C,," -n "obfusk8 lab CA" -i obfusk8-lab-ca.crt`.
+   Redémarrer le navigateur, puis ouvrir `https://<APP_DOMAIN>` : plus d'avertissement.
+4. **Fin du laboratoire** : retirer l'autorité du poste, puis détruire `~/.obfusk8-lab-ca` avec la VM (D-049) :
+   - **Windows** : `Get-ChildItem Cert:\CurrentUser\Root | Where-Object Subject -like '*obfusk8 lab CA*' | Remove-Item` ;
+   - **macOS** : `security delete-certificate -c "obfusk8 lab CA (lab.local only)" ~/Library/Keychains/login.keychain-db` ;
+   - **Linux** : `certutil -d sql:$HOME/.pki/nssdb -D -n "obfusk8 lab CA"`.
+
+Pilote et production : certificat de l'établissement, jamais cette autorité.
+
 ## 7. Vérifier et se connecter
 
 ```bash
@@ -155,14 +190,17 @@ docker compose logs -f app
 docker compose logs -f oauth2-proxy
 ```
 
-Ouvre `https://anonymiseur.lab.local` (bien `https`). Accepte l'avertissement de certificat (auto-signé en lab). Tu dois être redirigé vers Keycloak, te connecter avec un utilisateur de test, puis atterrir sur l'app.
+Ouvre `https://anonymiseur.lab.local` (bien `https`). Avec l'autorité du laboratoire importée (§6 bis), aucun avertissement de certificat ; sinon, accepte-le. Tu dois être redirigé vers Keycloak, te connecter avec un utilisateur de test, puis atterrir sur l'app.
 
 ## 8. (Facultatif) Activer l'API texte pour l'extension de navigateur
 
-Désactivée par défaut. Elle permet à une future extension de navigateur d'analyser ou de pseudonymiser un prompt avant son envoi
-à un service d'IA. Contrat complet : [`docs/api-extension.md`](./docs/api-extension.md).
+Désactivée par défaut. Elle permet à l'extension de navigateur (dépôt séparé `obfusk8-extension`, panneau latéral) d'analyser un
+prompt avant son envoi à un service d'IA. Contrat complet : [`docs/api-extension.md`](./docs/api-extension.md).
 
-1. Dans `.env` : `ENABLE_EXTENSION_API=true`. Les plafonds `MAX_TEXT_*` ont des valeurs par défaut mesurées (voir `env.fr.example`).
+1. Dans `.env` : `ENABLE_EXTENSION_API=true`, et l'origine de l'extension dans `EXTENSION_ALLOWED_ORIGINS` (phase 3, D-054).
+   Extension du laboratoire (identifiant stable, clé publique dans son `config/lab.json`) :
+   `EXTENSION_ALLOWED_ORIGINS=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa`. Vide : toute analyse est refusée (403).
+   Les plafonds `MAX_TEXT_*` ont des valeurs par défaut mesurées (voir `env.fr.example`).
 2. Recréer le conteneur de l'application :
    ```bash
    docker compose up -d app
@@ -177,6 +215,9 @@ Désactivée par défaut. Elle permet à une future extension de navigateur d'an
   `text-bodylimit` dans `docker-compose.yml` : `12 × MAX_TEXT_CHARS + 4096`.
 - Les requêtes de prompts sont journalisées dans un journal d'audit séparé, `/var/log/anonymiseur-audit/audit-extension.log`
   (métadonnées seulement : utilisateur, types et nombres d'entités, longueur, durée ; jamais le texte).
+- `POST /api/v1/text/*` exige l'`Origin` d'une extension autorisée (`chrome-extension://<id>`, envoyée par Chrome depuis le panneau
+  latéral) ; `GET /api/v1/version` accepte une requête sans `Origin`. Toute autre origine : 403, issue d'audit `origin_refused`.
+  L'extension ne joint qu'un serveur dont le navigateur reconnaît le certificat : voir §6 bis.
 - Une requête non authentifiée sur `/api/v1/` reçoit un **401** en texte brut (`Unauthorized`), sans redirection : le routeur `app-text`
   n'utilise pas `oauth2-errors` (D-010 option 1, D-020). L'interface web garde la redirection vers la page de connexion.
   `oidc-auth` et le secret de passerelle restent exigés.

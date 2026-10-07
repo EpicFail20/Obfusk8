@@ -3,6 +3,7 @@
 > Version française : [`api-extension.md`](./api-extension.md).
 > Status: **implemented** (phase 1), extended in phase 2 (D-014 normalization, D-020 401 without redirect) and in phase 2 bis
 > (D-035 403 on missing identity, D-030 fingerprint). Reviewed end to end from a client's point of view on 2026-10-05 (§3.1).
+> Phase 3 (D-054): extension origin required (§8.1), prototype authenticated by the session cookie (§8).
 > The reasoning behind each choice is in [`DECISIONS.md`](./DECISIONS.md).
 
 ## 1. Purpose
@@ -169,6 +170,7 @@ Same format as the application's existing errors (`detail` field), plus the corr
 | 401 | Missing or wrong gateway secret (request bypassing Traefik) — existing application response, without `request_id` |
 | 401 | **Unauthenticated** (no session, expired session): oauth2-proxy's response relayed as is by Traefik, `Content-Type: text/plain`, body `Unauthorized`, **no redirect, no JSON, no `request_id`** (D-020). The client relies on the **HTTP status alone**; expected behavior in §8 |
 | 403 | **Identity missing** (phase 2 bis, D-035): `X-Auth-Request-User` or `X-Auth-Request-Email` header missing, empty, or made only of control, format or white-space characters. Refused before the body is read, on all three routes (`/version` included); JSON with `request_id`; audit line `forbidden` (analyze and pseudonymize). Does not happen for a normally signed-in user: oauth2-proxy always sets these headers. Expected behaviour: do not retry; offer to sign in again, then to contact the administrator with the `request_id` |
+| 403 | **Origin refused** (phase 3, D-054, §8.1): `POST` without an `Origin` header, or with an origin absent from `EXTENSION_ALLOWED_ORIGINS`; `GET /version` with a present but not allowed origin; several `Origin` headers. Checked after the identity, before the body is read; JSON with `request_id`; audit line `origin_refused` (analyze and pseudonymize). Expected behaviour: do not retry; contact the administrator with the `request_id` (extension identifier to allow) |
 | 404 | `ENABLE_EXTENSION_API=false` (standard FastAPI response `{"detail":"Not Found"}`, identical to today) |
 | 413 | Body beyond the cap (at the edge by Traefik, otherwise by the application), or `text` beyond `MAX_TEXT_CHARS` |
 | 415 | `Content-Type` other than `application/json` (also protects against cross-site form posts, §6) |
@@ -190,7 +192,7 @@ with a `request_id`; Traefik's and oauth2-proxy's do not: the client relies on t
 | 200 | application | JSON (§2) | — |
 | 400, 415, 422 | application | JSON `detail` + `request_id` | The client's own error: do not retry; log the `request_id` (never the text) |
 | 401 | oauth2-proxy | `Unauthorized` (plain text) | No or expired session: do not retry in a loop, offer to open the sign-in page (§8), then resend once |
-| 403 | application | JSON `detail` + `request_id` | Identity missing (D-035): do not retry; offer to sign in again, then to contact the administrator with the `request_id` |
+| 403 | application | JSON `detail` + `request_id` | Identity missing (D-035) or origin refused (D-054): do not retry; offer to sign in again, then to contact the administrator with the `request_id`. The two cases differ only by their (translated) `detail`: the client does not need to tell them apart |
 | 404 | application | JSON `{"detail":"Not Found"}`, no `request_id` | API disabled (`ENABLE_EXTENSION_API=false`) or unknown path: tell the user the server does not offer the API |
 | 405 | application | JSON `{"detail":"Method Not Allowed"}`, no `request_id` | Client bug (wrong method) |
 | 413 | Traefik **or** application | Traefik: `Request Entity Too Large` (plain text, no `Content-Type`); application: JSON + `request_id` | Text too long: the client checks `max_text_chars` itself (code points, `GET /version`) before sending; do not resend as is |
@@ -202,7 +204,7 @@ with a `request_id`; Traefik's and oauth2-proxy's do not: the client relies on t
 In **every** failure case the text has not been pseudonymized: the extension must **never** send the original text to the AI service as a
 silent fallback (doctrine: a false negative is worse than a false positive).
 
-What a client cannot learn from the API and must take from its configuration: the server URL, the sign-in URL (§8), Traefik's rate limits
+What a client cannot learn from the API and must take from its configuration: the server URL, the allowance of its identifier (§8.1), the sign-in URL (§8), Traefik's rate limits
 (§7, not exposed by `/version`).
 
 ## 4. Limits and environment variables
@@ -215,6 +217,7 @@ All declared in `docker-compose.yml` and in `env.fr.example` / `env.en.example`.
 | `MAX_TEXT_CHARS` | `20000` | Measured on 2026-10-02 on the VM (analyzer alone, no theme, median of 5 calls): 0.29 s at 10,000 characters, **0.71 s at 20,000**, 2.7 s at 50,000 (worse than linear). The analyzer has **a single worker** shared with the document flow: 20,000 characters keep the wait a text request imposes on a document batch under one second. A typical prompt is under 5,000 characters. |
 | `MAX_TEXT_ANALYSIS_SECONDS` | `10` | Total time of a request (queue wait included), and the timeout of the HTTP call to Presidio. About 14 times the time measured at the size cap: covers waiting behind a document batch (at most 8,000 characters, about 0.25 s) without leaving an interactive client hanging. |
 | `MAX_TEXT_CONCURRENCY` | `1` | Number of text analyses **in progress** at once. The analyzer handles requests one at a time; more than one text analysis in flight speeds nothing up and lengthens the wait of document batches. With 1, a document batch waits for at most one text analysis (under 1 s at the cap). |
+| `EXTENSION_ALLOWED_ORIGINS` | empty | `chrome-extension://<32-letter a-p identifier>` origins allowed on `/api/v1/`, comma-separated (phase 3, D-054, §8.1). Empty: every analysis refused (403). Malformed entry: startup fails. |
 | `MAX_TEXT_QUEUE` | `8` | Text requests allowed to **wait** for their turn. Beyond: immediate 429. Bounds the memory held by waiting requests (at most 8 bodies of 244 KiB). |
 
 Body cap, **derived** and not separately configurable (D-006):
@@ -244,7 +247,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 bytes (238 KiB) by de
    "duration_ms": 42, "outcome": "ok"}
   ```
 
-  `outcome`: `ok`, or a closed category (`forbidden`, `too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
+  `outcome`: `ok`, or a closed category (`forbidden`, `origin_refused`, `too_large`, `invalid`, `busy`, `analyzer_unavailable`, `timeout`, `error`).
 - **Never** any text, detected value, placeholder or `mapping`: metadata only (user, types and counts, length, duration, identifier). A test will
   demonstrate it on the audit log **and** on the container logs (`app`, `presidio-analyzer`, Traefik).
 - Application logs: one line per request (`request_id`, route, status, duration, number of entities).
@@ -257,6 +260,7 @@ MAX_TEXT_BODY_BYTES = 12 × MAX_TEXT_CHARS + 4096 = 244096 bytes (238 KiB) by de
 | Unauthenticated access | Existing `oidc-auth` chain. Bypassing Traefik from a neighboring container: gateway secret (401). |
 | Identity spoofing through headers | `forwardAuth` deletes then sets `X-Auth-Request-*` from oauth2-proxy's response (checked in Traefik 3.7 code, `pkg/middlewares/auth/forward.go`). |
 | Cross-site request (CSRF) with the session cookie | `Content-Type: application/json` required (415 otherwise): a cross-site form cannot send it, and a cross-site `fetch` with that type triggers a CORS preflight the server refuses (no CORS headers, no allowed origin). `SameSite=Lax` cookie on top. |
+| Another browser extension using the session cookie (option 3, phase 3) | An extension holding a host permission on the server gets the cookie with its requests (`Sec-Fetch-Site: none`, observed): `EXTENSION_ALLOWED_ORIGINS` allow-list, `Origin` required on `POST` (§8.1). An extension cannot forge the `Origin` header with `fetch` (forbidden header); a bypass through other browser APIs is to be tested by the penetration test. |
 | Giant input | Body cap at the edge and in the application (reading interrupted), `MAX_TEXT_CHARS`, maximum duration. |
 | Malicious JSON (deep nesting, duplicates) | Pydantic's JSON parser, bounded by the body cap; strict schema, unknown fields refused. |
 | Tricky Unicode (lone surrogates, zero-width, NFD, non-breaking spaces, bidirectional controls) | Lone surrogates rejected. The others are accepted, then normalized before detection with a position map (D-014, phase 2): offsets and pseudonymization refer to the text received, inner invisible characters included. The text is never written to a log, so no visual log spoofing risk. |
@@ -310,12 +314,36 @@ gateway secret are still required; the other routes (web interface) keep the red
 What the client must do on a 401: not retry in a loop; offer the user to **open the Obfusk8 sign-in page** in a tab
 (`https://<domain>/oauth2/start?rd=%2F`), then send the request again once the session is open. No text was analyzed or kept by the server.
 
-Phase 3: choice between options 2 (Bearer tokens accepted by oauth2-proxy, `skip_jwt_bearer_tokens`) and 3 (reuse of the browser's session
-cookie) of D-010; option 4 (Obfusk8-specific API tokens) remains rejected.
+**Phase 3 (D-054)**: the **prototype** uses **option 3** of D-010: oauth2-proxy's session cookie (`_oauth2_proxy`, `Secure`,
+`HttpOnly`, `SameSite=Lax`) rides along with the extension's requests thanks to its host permission. Observed on 2026-10-07 (Chromium,
+side panel): cookie sent with `fetch(…, {credentials: "include"})`, `Sec-Fetch-Site: none`, no CORS response needed; cookie settings
+unchanged. The client signs in by opening `/oauth2/start?rd=%2F` in a tab; the session lasts `cookie_expire` (1 h), then 401. **Option 2**
+(an OIDC token of the extension's own) is **mandatory for production** (D-045 §C point 18): oauth2-proxy configuration prepared, not
+enabled, in [`extension-oidc.en.md`](./extension-oidc.en.md). Option 4 (Obfusk8's own API tokens) remains ruled out.
+
+### 8.1 Extension origin (phase 3, D-054 point 6)
+
+With the session cookie, **any** browser extension holding a host permission on the server could call the API as the user. The server
+therefore accepts only the origins listed in `EXTENSION_ALLOWED_ORIGINS`:
+
+| Request | `Origin` absent | `Origin` present, not allowed | `Origin` allowed |
+|---|---|---|---|
+| `POST /api/v1/text/analyze`, `/pseudonymize` | 403 | 403 | served |
+| `GET /api/v1/version` | served | 403 | served |
+
+- What the client sends: nothing more; Chrome itself sets `Origin: chrome-extension://<identifier>` on a `POST` from an extension page,
+  and none on a `GET` (observed). A non-browser client (benchmarks) sends the lab extension's `Origin`.
+- Exact comparison (lowercase, no trailing slash); several `Origin` headers: refused. The web interface's origin (`https://<domain>`) is
+  refused: the interface does not call the API.
+- Checked after the identity (D-035), before the body is read; 403, JSON with `request_id`, audit `origin_refused`.
+- This is **not** authentication (a non-browser client forges `Origin`): the rule protects a user's session against the other extensions
+  of **their** browser. It targets cookie authentication and **must be reviewed for tokens** (option 2,
+  [`extension-oidc.en.md`](./extension-oidc.en.md)).
+- Firefox: the `moz-extension://` origin is per installation (assumed); not covered by this list, planned with option 2.
 
 ## 9. Open decisions
 
 - Source of `presidio_version` (D-013): still `null`, Presidio's REST API not exposing its version; the analyzer's **declared** versions
   enter `detection_config` (phase 2 bis).
 - Type kept on an overlap (D-031): in the detection backlog (`docs/BACKLOG-detection.md`), current rule unchanged (§2.3).
-- Extension authentication: choice between options 2 and 3 of D-010 in phase 3 (§8).
+- Extension authentication: option 3 for the prototype (phase 3, D-054); **option 2 mandatory before production** (§8).
