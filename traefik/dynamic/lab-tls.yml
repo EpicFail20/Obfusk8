@@ -10,7 +10,3 @@ tls:
       defaultCertificate:
         certFile: /etc/traefik/certs/lab-server.pem
         keyFile: /etc/traefik/certs/lab-server.key
-  options:
-    default:
-      minVersion: VersionTLS12
-      sniStrict: false
