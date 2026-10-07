@@ -543,6 +543,8 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 13. **API texte** : reste désactivée (`ENABLE_EXTENSION_API=false`, D-041 point 1) sauf si le pilote inclut l'extension (phase 3).
 14. **Licence** (EXT-05) : à régler avant toute distribution.
 15. **GitHub Actions** : environnement `publication` créé avec ses protections avant toute réactivation (D-042).
+16. **Secrets neufs** (D-049) : le pilote est une nouvelle installation avec des secrets générés pour lui ; aucun secret du
+    laboratoire (passerelle, comptes de test, Keycloak, oauth2-proxy) n'est réutilisé.
 
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
@@ -576,3 +578,33 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     Keycloak (EXT-55) ; traités par les suites de D-046 ;
   - si le test depuis l'extérieur montre que l'exposition était effective, renouvellement des secrets à décider (mot de passe
     administrateur de Keycloak, secret du client OIDC, secret de cookie d'oauth2-proxy, secret de passerelle).
+
+## D-048 — Décisions sur l'étape A de la phase « disponibilité » — décision humaine du 2026-10-07
+
+1. **Lot 3 (Keycloak de laboratoire)** : conception validée. Keycloak seulement sur `app-internal` (plus d'accès sortant, EXT-55) ;
+   Traefik relaie le port 8080 (point d'entrée dédié, publié sur `BIND_ADDRESS`, routeur défini par les labels de Keycloak) ; profil
+   Compose `lab` ; `COMPOSE_PROFILES=lab` dans le `.env` du laboratoire. Essai préalable (Docker 29.8.1) : un conteneur attaché seulement à un
+   réseau `internal: true` ne publie aucun port, d'où le relais. **Condition** : avec `KC_PROXY_HEADERS=xforwarded`, tester qu'un
+   `X-Forwarded-For` envoyé par le client est remplacé par Traefik et ne parvient pas tel quel à Keycloak.
+2. **Identifiant mal formé** : `/api/download` garde son 400 ; le 404 générique ne s'applique qu'à `/api/cancel`.
+3. **Protection contre la falsification de requête** : vérification stricte d'`Origin` (à défaut `Referer`), égal à `https://${APP_DOMAIN}`, sur
+   toutes les requêtes qui modifient un état : `/api/detect`, `/api/finalize`, `/api/cancel` ; en plus, en-tête `X-Obfusk8-Action` exigé pour
+   `/api/cancel`. L'interface actuelle (formulaires) doit continuer de fonctionner, avec un test par route.
+4. **Écart « onglet fermé »** (un utilisateur qui a quitté la page de révision ne connaît plus ses `job_id`) : accepté ; une page « mes documents
+   en attente » va au backlog.
+5. Rappel des décisions du prompt de phase : quota par utilisateur activé par défaut (`MAX_PENDING_JOBS_PER_USER=3`), annulation activée par
+   défaut, 429 avec `Retry-After` pour le quota (503 conservé pour le plafond commun), limitation de débit par utilisateur (5/min, rafale 10)
+   en plus de la limite par IP, EXT-47 refusé en 403.
+
+## D-049 — Secrets du laboratoire jetables — décision humaine du 2026-10-07 (risque accepté 🟡)
+
+- **Contexte** : trois expositions de secrets du laboratoire dans des sessions Claude Code, dont celle du secret de passerelle le
+  2026-10-07 (recherche récursive dans `traefik/dynamic/` pendant l'étape A de la phase « disponibilité »). Régénération et règles
+  d'interdiction de lecture (`.claude/settings.json`) proposées, puis abandonnées par cette décision.
+- **Décision** (valable jusqu'à la fin du projet sur cette VM) : les secrets du laboratoire (secret de passerelle, comptes de test, Keycloak,
+  oauth2-proxy) sont jetables : générés localement, jamais poussés, détruits avec la VM en fin de travail. Une exposition dans une session
+  n'est plus un incident bloquant : elle est signalée en une ligne dans le compte rendu, sans arrêt ni proposition de régénération.
+- **Exigence maintenue** : aucun secret dans le dépôt git ni dans un commit (vérification avant chaque commit).
+- **Conséquences** : pas de régénération du secret de passerelle exposé le 2026-10-07 ; pas de `.claude/settings.json` ; dossier de leurres
+  `leurre-claude/` supprimé (absent de tout commit : `git log --all -- leurre-claude` vide) ; D-045 §C point 16 : le pilote utilise des secrets
+  neufs, jamais ceux du laboratoire.
