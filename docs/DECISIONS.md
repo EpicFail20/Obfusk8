@@ -652,3 +652,29 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
    ligne `COPY` explicite dans `app/Dockerfile`, sans demander d'accord ; plus de nouveau code dans `main.py` quand il forme un ensemble
    cohérent (lève la contrainte de D-050 point 1 pour les phases suivantes).
 6. **Suite** : l'humain suit la procédure de test manuel (`docs/phase-disponibilite-report.md` §9), puis fait la fusion et le push.
+
+## D-052 — Décisions sur l'étape A de la phase « Python » — décision humaine du 2026-10-07
+
+Inventaire présenté en session (étape A) : image Presidio publiée reproduite sur notre base, Python 3.14.8 (python.org, 2026-09-30 ;
+3.15 en version candidate, exclu par Presidio et la pile spaCy, `<3.15`), roues cp314 publiées pour toutes les dépendances compilées.
+
+1. **Forme de l'image de l'analyseur validée** : Presidio installé comme distribution depuis la roue PyPI `presidio_analyzer-2.2.364`
+   (empreinte dans le verrou ; ses 179 fichiers sont identiques au code de l'image publiée), fichiers du serveur (`app.py`,
+   `logging.ini`, `entrypoint.sh`, licence MIT) copiés dans `presidio/analyzer-build/server/` (identiques à l'étiquette `2.2.364` de
+   GitHub), configuration effective dans `/app/conf/`, `/app` appartenant à `root`. **Condition** : à chaque mise à jour de Presidio,
+   ces fichiers sont recopiés depuis la nouvelle étiquette et comparés (`docs/maintenance-dependances.md`).
+2. **Contrôle de santé en Python** (`urllib`), sans `curl`, mêmes délais que l'image amont.
+3. **gunicorn ramené à la dernière 25.x** (25.3.0, PyPI 2026-03-27, aucun avis OSV au 2026-10-07) pour respecter la contrainte de
+   Presidio (`gunicorn<26.0.0`, extra `server`) et garder un `pip check` strict, sans exception (EXT-60). **Condition** : `pip-audit`
+   sans vulnérabilité sur cette version ; sinon arrêt et présentation de l'alternative (26.2.0 avec exception documentée).
+   Revient sur D-043 point 2 pour gunicorn seulement.
+4. **Version de Python dans `versions.json` et `app/analyzer_versions.json`** : elle entre dans l'empreinte `detection_config`
+   (l'interpréteur peut changer la détection : base Unicode 15.0 en 3.12, 16.0 en 3.14).
+5. **Paramètre unique, option A** : ancre YAML dans `docker-compose.build.yml`, argument de construction `PYTHON_BASE` sans valeur
+   par défaut dans les deux Dockerfiles. Autorisation de modifier `.github/workflows/` pour les seules lignes qui passent
+   `PYTHON_BASE` ; GitHub Actions reste désactivé (D-042), syntaxe validée par `actionlint`.
+6. **Outils** : `ruff target-version = "py314"` et `mypy python_version = "3.14"` ; nouveaux constats signalés, sans reformatage global.
+7. **Disque** : suppression des images `obfusk8-local:avant-2bis-*`, des étiquettes locales `:main`, `:latest` et `phase2-*`, et du
+   cache de construction (`docker builder prune`). Les images `avant-py314` de l'étape B sont conservées.
+8. **Modèles spaCy** : empreinte actuelle acceptée, avec contrôle octet par octet des modèles installés au lot 1. **Limite consignée** :
+   GitHub ne publie aucun condensat pour ces fichiers ; l'empreinte garantit « même fichier qu'avant », pas l'authenticité à l'origine.
