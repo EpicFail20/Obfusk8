@@ -49,7 +49,7 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from obfusk8_client import BASE_URL, HTTP_OK, TextApi, login  # noqa: E402
+from obfusk8_client import BASE_URL, HTTP_OK, TextApi, cancel_job, login  # noqa: E402
 
 RESULTS = HERE.parent / "results"
 SIZES = [200, 1000, 5000, 10000, 20000]
@@ -121,7 +121,8 @@ def _csv_document() -> bytes:
     return ("\n".join(rows) + "\n").encode("utf-8")
 
 
-def _detect(session: Any) -> float:
+def _detect(session: Any) -> tuple[float, str]:
+    """(duration, review page) of one document detection."""
     started = time.monotonic()
     response = session.post(
         f"{BASE_URL}/api/detect", files={"file": ("bench.csv", _csv_document())}, data={"theme": ""}, timeout=180
@@ -129,7 +130,14 @@ def _detect(session: Any) -> float:
     elapsed = time.monotonic() - started
     if response.status_code != HTTP_OK or not re.search(r'name="job_id"', response.text):
         raise RuntimeError(f"detect: HTTP {response.status_code}")
-    return elapsed
+    return elapsed, response.text
+
+
+def _release(session: Any, review_page: str) -> None:
+    """One pending document at a time (per-user quota, D-048), outside the
+    measured windows, paced like the uploads under the cancel route's limit."""
+    time.sleep(UPLOAD_PACING_SECONDS)
+    cancel_job(session, review_page)
 
 
 Sample = tuple[float, float, float]  # (start, end, duration) of one request
@@ -168,7 +176,9 @@ def _round(documents: int) -> dict[str, list[Any]]:
     alone = []
     for _ in range(documents):
         time.sleep(UPLOAD_PACING_SECONDS)
-        alone.append(_detect(doc_session))
+        elapsed, page = _detect(doc_session)
+        alone.append(elapsed)
+        _release(doc_session, page)
 
     prompts: list[Sample] = []
     health: list[Sample] = []
@@ -192,8 +202,10 @@ def _round(documents: int) -> dict[str, list[Any]]:
     for _ in range(documents):
         time.sleep(UPLOAD_PACING_SECONDS)
         start = time.monotonic()
-        loaded.append(_detect(doc_session))
+        elapsed, page = _detect(doc_session)
         windows.append((start, time.monotonic()))
+        loaded.append(elapsed)
+        _release(doc_session, page)
     time.sleep(10)
     stop.set()
     for worker in workers:

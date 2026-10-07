@@ -71,7 +71,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-from obfusk8_client import BASE_URL, HTTP_OK, login  # noqa: E402
+from obfusk8_client import BASE_URL, HTTP_OK, cancel_job, login  # noqa: E402
 
 sys.path.insert(0, str(HERE.parent / "quality"))
 from build_quality_corpus import jsonl, records  # noqa: E402
@@ -227,6 +227,10 @@ def snapshot() -> dict[str, Any]:
                 raise RuntimeError(f"detect {kind} theme={theme or '-'}: HTTP {response.status_code}")
             zones = parse(response.text)
             cases[f"{kind}/{theme or 'aucun'}"] = zones
+            # One pending document at a time (per-user quota, D-048), paced
+            # like the uploads under the rate limit of the cancel route.
+            time.sleep(PACE)
+            cancel_job(session, response.text)
             print(f"{kind:6} theme={theme or '-':8} {len(zones)} zone(s)", flush=True)
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),

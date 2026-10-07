@@ -146,3 +146,43 @@ def test_adresse_de_resolution_des_noms_du_laboratoire(
     """Since D-047 the stack listens on BIND_ADDRESS only, not on 127.0.0.1."""
     client = _client(monkeypatch, **env)
     assert client.lab_address() == expected
+
+
+# --- Releasing a benchmark's pending documents (Python phase) -----------------
+# Since D-048 a user may hold MAX_PENDING_JOBS_PER_USER (3) documents awaiting
+# review: doc_zones_snapshot.py (16 detections) and run_latency_bench.py (6)
+# stopped at the 4th with a 429. They now cancel each job once measured.
+
+_REVIEW_PAGE = '<input type="hidden" name="job_id" value="' + "a" * 32 + '">'
+
+
+class _CancelSession:
+    def __init__(self, status: int) -> None:
+        self.status = status
+        self.posts: list[tuple[str, dict[str, str]]] = []
+
+    def post(self, url: str, headers: dict[str, str] | None = None, **kwargs: Any) -> _Response:
+        self.posts.append((url, dict(headers or {})))
+        return _Response(self.status, '{"detail": "ok"}')
+
+
+def test_annulation_du_document_mesure(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    session = _CancelSession(200)
+    client.cancel_job(session, _REVIEW_PAGE)
+    expected_headers = {"X-Obfusk8-Action": "cancel", "Accept": "application/json"}
+    assert session.posts == [(f"{BASE}/api/cancel/{'a' * 32}", expected_headers)]
+
+
+def test_annulation_refusee_arrete_le_banc(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    with pytest.raises(RuntimeError, match="cancel: HTTP 404"):
+        client.cancel_job(_CancelSession(404), _REVIEW_PAGE)
+
+
+def test_annulation_sans_identifiant_de_tache(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = _client(monkeypatch)
+    session = _CancelSession(200)
+    with pytest.raises(RuntimeError, match="no job_id"):
+        client.cancel_job(session, "<html>login</html>")
+    assert session.posts == []

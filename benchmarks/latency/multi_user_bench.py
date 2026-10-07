@@ -46,7 +46,7 @@ from typing import Any
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
-from run_latency_bench import UPLOAD_PACING_SECONDS, _detect, _stats, _text  # noqa: E402
+from run_latency_bench import UPLOAD_PACING_SECONDS, _detect, _release, _stats, _text  # noqa: E402
 
 from obfusk8_client import BASE_URL, HTTP_OK, login, read_accounts  # noqa: E402
 
@@ -98,7 +98,9 @@ def _round(users: list[tuple[str, Any]], documents_session: Any) -> dict[str, An
     alone = []
     for _ in range(DOCUMENTS):
         time.sleep(UPLOAD_PACING_SECONDS)
-        alone.append(_detect(documents_session))
+        elapsed, page = _detect(documents_session)
+        alone.append(elapsed)
+        _release(documents_session, page)
     samples: dict[str, list[Sample]] = {label: [] for label, _ in users}
     stop = threading.Event()
     workers = [
@@ -112,8 +114,10 @@ def _round(users: list[tuple[str, Any]], documents_session: Any) -> dict[str, An
     for _ in range(DOCUMENTS):
         time.sleep(UPLOAD_PACING_SECONDS)
         start = time.monotonic()
-        loaded.append(_detect(documents_session))
+        elapsed, page = _detect(documents_session)
         windows.append((start, time.monotonic()))
+        loaded.append(elapsed)
+        _release(documents_session, page)
     time.sleep(10)
     stop.set()
     for worker in workers:

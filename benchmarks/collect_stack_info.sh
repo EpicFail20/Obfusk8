@@ -7,11 +7,10 @@
 set -eu
 PROJECT=${COMPOSE_PROJECT_NAME:-obfusk8}
 img() { docker inspect "$PROJECT-$1-1" --format '{{.Config.Image}}@{{.Image}}'; }
+# presidio-analyzer is an installed distribution since the Python phase (D-052).
 analyzer=$(docker exec "$PROJECT-presidio-analyzer-1" python -c '
-import importlib.metadata as m, re, json
-toml = open("/app/pyproject.toml", encoding="utf-8").read()
-v = re.search(r"^version = \"([^\"]+)\"", toml, re.M).group(1)
-print(json.dumps({"presidio_analyzer": v, "spacy": m.version("spacy"),
+import importlib.metadata as m, json, platform
+print(json.dumps({"presidio_analyzer": m.version("presidio_analyzer"), "python": platform.python_version(), "spacy": m.version("spacy"),
                   "fr_core_news_md": m.version("fr_core_news_md"), "en_core_web_lg": m.version("en_core_web_lg"),
                   "regex": m.version("regex")}))')
 app=$(docker exec "$PROJECT-app-1" python -c '

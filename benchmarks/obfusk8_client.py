@@ -118,6 +118,24 @@ def login(user: str | None = None, password: str | None = None) -> requests.Sess
     return session
 
 
+_JOB_ID = re.compile(r'name="job_id" value="([0-9a-f]{32})"')
+
+
+def cancel_job(session: Any, review_page: str) -> None:
+    """Cancels the document whose review page is given, so that a benchmark
+    never holds more than one pending document: since D-048 a user may hold
+    MAX_PENDING_JOBS_PER_USER (3) of them, and a fourth upload gets a 429.
+    Needs ENABLE_JOB_CANCEL=true (the default). Stops the benchmark on any
+    failure rather than measuring with jobs piling up."""
+    match = _JOB_ID.search(review_page)
+    if match is None:
+        raise RuntimeError("cancel: no job_id in the review page")
+    headers = {"X-Obfusk8-Action": "cancel", "Accept": "application/json"}
+    response = session.post(f"{BASE_URL}/api/cancel/{match.group(1)}", headers=headers, timeout=30)
+    if response.status_code != HTTP_OK:
+        raise RuntimeError(f"cancel: HTTP {response.status_code}")
+
+
 class TextApi:
     """Calls /api/v1/text/* with pacing below the per-user Traefik rate limit
     (60/min, burst 20): a 429 from Traefik is waited out and retried, never
