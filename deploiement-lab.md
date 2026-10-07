@@ -1,5 +1,10 @@
 # Anonymiseur - déploiement lab sur VM Docker (Proxmox)
 
+> **Laboratoire uniquement.** Ce guide installe un Keycloak de **laboratoire** : mode développement (`start-dev`), HTTP sans TLS, base H2
+> de développement, compte administrateur d'amorçage. Ce Keycloak ne doit **jamais** servir à un pilote ni en production (D-046) : un
+> déploiement réel utilise le fournisseur d'identité de l'établissement, voir [Déploiement réel](#déploiement-réel-fournisseur-didentité-de-létablissement).
+> Keycloak ne démarre qu'avec le profil Compose `lab`.
+
 Ce guide part du principe d'une installation **entièrement neuve**, sur une VM qui n'a jamais fait tourner ce projet. Suis les étapes dans l'ordre. En cas de blocage à n'importe quelle étape, consulte directement la table de [Dépannage](#dépannage) en fin de document — chaque erreur rencontrée en lab y est référencée avec sa cause exacte.
 
 ## 0. Prérequis VM Proxmox
@@ -59,12 +64,20 @@ cp env.fr.example .env
 
 `BIND_ADDRESS` est la seule adresse de l'hôte sur laquelle Traefik (80, 443) et Keycloak (8080) sont publiés. Par défaut `127.0.0.1` : l'application n'est alors joignable que depuis la VM. Pour y accéder depuis d'autres postes, mets l'adresse de la VM sur le réseau local (par exemple `BIND_ADDRESS=192.168.1.35`). Ne la remplace jamais par `0.0.0.0` : cela publierait aussi les ports sur toutes les interfaces, adresse IPv6 publique comprise (EXT-56).
 
+Ajoute `COMPOSE_PROFILES=lab` à `.env` : le Keycloak de laboratoire démarre alors avec la pile, et les commandes `docker compose` habituelles
+fonctionnent sans option. Sans cette ligne, ajoute `--profile lab` à chaque commande `docker compose` (sinon Keycloak ne démarre pas,
+et oauth2-proxy redémarre en boucle faute de fournisseur d'identité). Les fichiers d'exemple ne contiennent pas cette ligne : un déploiement
+réel n'en veut pas.
+
 ## 5. Démarrer Keycloak seul et le configurer
 
 ```bash
-docker compose up -d keycloak
+docker compose --profile lab up -d keycloak traefik
 docker compose logs -f keycloak
 ```
+
+Keycloak n'a pas de port publié ni d'accès à Internet (réseau interne `app-internal`) : Traefik relaie vers lui le port 8080 de
+`BIND_ADDRESS`, d'où le démarrage de `traefik` avec lui.
 
 Attends `Keycloak ... started in ...s. Listening on: http://0.0.0.0:8080` (ou `docker compose ps` → `healthy`).
 
@@ -123,7 +136,7 @@ docker compose up -d --force-recreate oauth2-proxy
 ## 6. Démarrer le reste du stack
 
 ```bash
-docker compose up -d --build --scale presidio-analyzer=2
+docker compose --profile lab up -d --build --scale presidio-analyzer=2
 docker compose ps
 ```
 
@@ -205,9 +218,27 @@ Si le nom du dossier du projet change également, les labels `traefik.docker.net
 | `failed to create network obfusk8_app-internal ... networks have overlapping IPv4` au démarrage | Le réseau `app-internal` a un sous-réseau fixe (`10.89.18.0/24`, phase 2 bis) pour que Traefik ait l'adresse `10.89.18.10`, seule source de confiance d'oauth2-proxy (`trusted_proxy_ips`). Un réseau existant de l'hôte utilise déjà cette plage | Choisir une plage libre hors des pools par défaut de Docker (172.17.0.0/12, 192.168.0.0/16) et la reporter aux **trois** endroits : `networks.app-internal.ipam` et `ipv4_address` de Traefik dans `docker-compose.yml`, `trusted_proxy_ips` dans `oauth2-proxy/oauth2-proxy.cfg` |
 | `[AuthFailure] Invalid authentication via OAuth2: unauthorized` (logs oauth2-proxy), **alors que l'utilisateur est bien membre du groupe et que le mapper existe** | Champ *Token Claim Name* du mapper *Group Membership* resté vide — le texte grisé affiché ("groups") est un exemple de placeholder, pas une valeur réellement saisie ; le claim `groups` n'apparaît alors nulle part dans le token, sans erreur visible | Décoder le token pour vérifier (`curl` vers `/realms/lab/protocol/openid-connect/token` avec `grant_type=password`, puis décodage base64 du payload de l'`id_token`) ; si `groups` est absent, rouvrir chaque mapper *Group Membership* (scope dédié ET Client Scope `groups`) et retaper `groups` explicitement dans *Token Claim Name* |
 | `500 Internal Server Error` / `email in id_token isn't verified` après une authentification Keycloak par ailleurs réussie | Case *Email verified* non cochée sur l'utilisateur | Étape 5.6 — cocher *Email verified* sur la fiche utilisateur |
+| `Bind for 192.168.1.35:8080 failed: port is already allocated` en recréant la pile après la mise à jour du profil `lab` | L'ancien conteneur Keycloak publiait lui-même le port 8080, désormais relayé par Traefik | `docker compose stop keycloak`, puis `docker compose --profile lab up -d` |
+| oauth2-proxy redémarre en boucle, `Performing OIDC Discovery...` puis erreur de connexion | Pile démarrée sans le profil `lab` et sans fournisseur d'identité réel | Laboratoire : `COMPOSE_PROFILES=lab` dans `.env` (ou `--profile lab`). Déploiement réel : voir [Déploiement réel](#déploiement-réel-fournisseur-didentité-de-létablissement) |
 | Page inaccessible sur `http://anonymiseur.lab.local` | Traefik ne sert qu'en HTTPS | Utiliser `https://` |
 | `git clone`/`docker pull` demande un login alors que le repo/package est censé être public | Le changement de visibilité n'a pas été validé jusqu'au bout côté GitHub | Revérifier `Settings → Danger Zone` (repo) ou `Package settings` (package), refaire la confirmation jusqu'au bout |
 
-## Bascule vers Entra ID plus tard
+## Déploiement réel (fournisseur d'identité de l'établissement)
+
+Un pilote ou une production **n'utilise pas** le Keycloak de laboratoire (D-046) et ne réutilise **aucun** secret du laboratoire : nouvelle
+installation, secrets neufs (`./generate-secrets.sh` sur la nouvelle machine, D-049).
+
+1. **Pas de profil `lab`** : ne mets pas `COMPOSE_PROFILES=lab` dans `.env` et n'utilise pas `--profile lab`. Keycloak ne démarre pas ; le
+   port 8080 de Traefik répond alors 404.
+2. **oauth2-proxy** (`oauth2-proxy/oauth2-proxy.cfg`) : `provider` et `oidc_issuer_url` du fournisseur de l'établissement, `client_id` dans
+   `.env` (`OAUTH2_PROXY_CLIENT_ID`), secret du client dans `secrets/oauth2_client_secret.txt`, `allowed_groups` au nom du groupe réel. Garde
+   `code_challenge_method = "S256"` : le client doit exiger PKCE S256 côté fournisseur (EXT-49). Les comptes doivent porter une adresse de
+   courriel vérifiée (EXT-43).
+3. **Accès sortant dédié et limité à ce fournisseur** : oauth2-proxy est sur le réseau interne `app-internal`, sans accès à Internet. Il
+   doit joindre le fournisseur (découverte OIDC, jetons) **et lui seul** : réseau sortant dédié à oauth2-proxy, filtré vers les adresses du
+   fournisseur. Ce branchement est conçu et testé pendant la phase du pilote ; ne rattache pas `app-internal` ni `app` à un réseau ouvert.
+4. Tant que le fournisseur n'est pas configuré, oauth2-proxy redémarre en boucle (échec de la découverte OIDC) : c'est attendu.
+
+### Exemple : Entra ID
 
 Dans `oauth2-proxy/oauth2-proxy.cfg`, remplacer `provider = "oidc"` par `provider = "entra-id"` et pointer `oidc_issuer_url` vers `https://login.microsoftonline.com/<tenant-id>/v2.0`, avec le vrai `client_id`/`client_secret` Entra (ce dernier remplace le contenu de `secrets/oauth2_client_secret.txt`, même mécanique qu'à l'étape 5.7). `redirect_url` n'a rien à faire ici (déjà dérivé d'`APP_DOMAIN`) ; seul `allowed_groups` dans ce même fichier doit être adapté au nom du groupe réel côté Entra ID.

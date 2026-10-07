@@ -50,6 +50,8 @@ cp env.en.example .env
 # The images built from this repository (app, analyzer) are built locally;
 # third-party images are pinned by digest and pulled.
 docker compose -f docker-compose.yml -f docker-compose.build.yml build
+# Lab: add --profile lab (lab Keycloak, development mode, never in
+# production) or set COMPOSE_PROFILES=lab in .env.
 docker compose up -d
 ```
 
@@ -84,7 +86,8 @@ The application never handles passwords itself: all authentication goes through 
 
 ### Example with Keycloak (test or lab)
 
-1. Start Keycloak alone: `docker compose up -d keycloak`
+1. Start Keycloak alone: `docker compose --profile lab up -d keycloak traefik` (**lab** Keycloak only, in development mode: never for a
+   pilot or production, see `deployment-lab.md`, "Real deployment")
 2. Open the admin console, create a dedicated realm.
 3. Create a confidential OIDC client, with this redirect URI:
    `https://<your-domain>/oauth2/callback`

@@ -52,6 +52,8 @@ cp env.fr.example .env
 # Les images construites depuis ce dépôt (app, analyseur) se construisent
 # localement ; les images tierces sont épinglées par condensat et tirées.
 docker compose -f docker-compose.yml -f docker-compose.build.yml build
+# Laboratoire : ajoutez --profile lab (Keycloak de laboratoire, mode développement,
+# jamais en production) ou mettez COMPOSE_PROFILES=lab dans .env.
 docker compose up -d
 ```
 
@@ -86,7 +88,8 @@ L'application ne gère jamais elle-même les mots de passe : toute l'authentific
 
 ### Exemple avec Keycloak (test ou lab)
 
-1. Démarrez Keycloak seul : `docker compose up -d keycloak`
+1. Démarrez Keycloak seul : `docker compose --profile lab up -d keycloak traefik` (Keycloak de **laboratoire** uniquement, en mode
+   développement : jamais pour un pilote ni en production, voir `deploiement-lab.md`, « Déploiement réel »)
 2. Ouvrez la console d'administration, créez un realm dédié.
 3. Créez un client OIDC confidentiel, avec comme redirect URI :
    `https://<votre-domaine>/oauth2/callback`
