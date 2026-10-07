@@ -212,7 +212,7 @@ seules les empreintes des roues compilées changent avec l'interpréteur.
 | gunicorn | 26.2.0 | **25.3.0** | 26.2.0 ; dernière 25.x : 25.3.0 (2026-03-27) | OSV : aucune ; `pip-audit` : aucune | MIT | Lot 1 ; contrainte `<26.0.0` de `presidio-analyzer[server]` (EXT-60, D-052 point 3) |
 | 14 paquets compilés (blis, charset-normalizer, cymem, MarkupSafe, murmurhash, numpy, preshed, pydantic-core, PyYAML, regex, spacy, srsly, thinc, wrapt) | roues cp312 | **mêmes versions**, roues cp314 | inchangé | OSV : aucune | inchangées | Lot 3 |
 | en_core_web_lg, fr_core_news_md | 3.8.0 | 3.8.0, mêmes empreintes | seules versions pour spaCy 3.8 | non audités (hors PyPI) | MIT (`en_core_web_lg`), LGPL-LR (`fr_core_news_md`), d'après leur `meta.json` | Fichiers installés identiques octet par octet ; GitHub ne publie aucun condensat (D-052 point 8). Licences inchangées (LGPL-LR déjà consignée en phase 2 bis) |
-| curl (Debian) | présent (contrôle de santé amont) | **retiré** | — | trivy : 52 → 44 HIGH sans correctif | — | Contrôle de santé en Python (D-052 point 2) |
+| curl (Debian) | présent (contrôle de santé amont) | **retiré** | — | trivy (image entière) : 52 → 44 HIGH sans correctif | — | Contrôle de santé en Python (D-052 point 2) |
 
 `pip-audit --path /usr/local/lib/python3.14/site-packages` sur l'image finale : 58 distributions, *No known vulnerabilities found*.
 
@@ -233,4 +233,4 @@ aucun ajouté (`open` de mimalloc, refusé sans effet, `seccomp/README.md`).
 | Image | Corrigeables | Sans correctif | Taille | Remarque |
 |---|---|---|---|---|
 | app 0.2.0-dev (Python 3.14.8) | 0 | 76 HIGH, 1 CRITICAL | 544 Mo (541 avant) | Inchangé (paquets Debian, EXT-33) |
-| analyseur 0.2.0-dev (Python 3.14.8) | 0 | 44 HIGH | 1,63 Go (2,03 avant) | 52 avant (curl et ses bibliothèques retirés) |
+| analyseur 0.2.0-dev (Python 3.14.8) | 0 | 44 HIGH | 1,63 Go (2,03 avant) | 52 avant (curl retiré, base Python différente ; écart non ventilé) |
