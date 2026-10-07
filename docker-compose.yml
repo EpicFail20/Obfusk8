@@ -127,6 +127,14 @@ services:
       - "--providers.file.watch=true"
       - "--entrypoints.websecure.address=:443"
       - "--entrypoints.web.address=:80"
+      # Lab Keycloak (profile `lab`, D-046/D-048): Keycloak sits on the
+      # internal app-internal network only (no outbound access, EXT-55), and
+      # Docker publishes no port of a container attached only to an
+      # internal network (tested on Docker 29.8.1). Traefik relays this
+      # entry point to it, so the OIDC issuer keeps its URL
+      # (http://keycloak.lab.local:8080). Without the profile no router
+      # uses it: 404.
+      - "--entrypoints.keycloak.address=:8080"
       - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
       - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
       - "--log.level=INFO"
@@ -140,6 +148,7 @@ services:
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:443:443"
       - "${BIND_ADDRESS:-127.0.0.1}:80:80"
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
     volumes:
       - ./traefik/dynamic:/etc/traefik/dynamic:ro
       - ./traefik/certs:/etc/traefik/certs:ro
@@ -154,10 +163,14 @@ services:
       - docker-socket-proxy
 
   # -------------------------------------------------------------------------
-  # Keycloak - simulates Entra ID in lab via the standard OIDC protocol
-  # Admin console: http://<vm-ip>:8080 (LAB ONLY)
+  # Keycloak - LAB ONLY identity provider (D-046): development mode (start-dev,
+  # HTTP, H2 database), never in a pilot or in production, which use the
+  # establishment's identity provider. Started only with the `lab` profile
+  # (`docker compose --profile lab up -d`, or COMPOSE_PROFILES=lab in .env).
+  # Login and admin console: http://keycloak.lab.local:8080, through Traefik.
   # -------------------------------------------------------------------------
   keycloak:
+    profiles: ["lab"]
     # Pinned by digest (EXT-01): 26.8.0, latest release, checked on the official registry on 2026-10-05 (docs/DEPENDENCIES.md).
     # 26.0.8 (the former floating `26.0`) carried CVE-2026-18963,
     # unauthenticated account takeover, fixed in 26.7.2 (D-040). The dev-file
@@ -182,19 +195,41 @@ services:
     environment:
       - KC_BOOTSTRAP_ADMIN_USERNAME=admin
       - KC_HOSTNAME=http://keycloak.lab.local:8080
+      # Behind Traefik: client address taken from X-Forwarded-For (the login
+      # events used to show the Docker gateway only, EXT-56), trusted ONLY
+      # from Traefik's fixed address — by default Keycloak trusts these
+      # headers from any address (keycloak.org/server/reverseproxy).
+      - KC_PROXY_HEADERS=xforwarded
+      - KC_PROXY_TRUSTED_ADDRESSES=10.89.18.10
     secrets:
       - keycloak_admin_password
-    # Same BIND_ADDRESS as Traefik (EXT-56): the browser must reach the
-    # OIDC issuer (KC_HOSTNAME) for login, but on no other address.
-    ports:
-      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    # No published port: Traefik relays BIND_ADDRESS:8080 (entry point
+    # `keycloak` above). app-internal only: no outbound access (EXT-55).
     volumes:
       - keycloak-data-v26-8:/opt/keycloak/data
     networks:
-      frontend: {}   # needed for publishing port 8080 (browser -> login)
       app-internal:
         aliases:
           - keycloak.lab.local   # so oauth2-proxy can reach it internally
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=obfusk8_app-internal"
+      - "traefik.http.routers.keycloak.rule=Host(`keycloak.lab.local`)"
+      - "traefik.http.routers.keycloak.entrypoints=keycloak"
+      - "traefik.http.routers.keycloak.middlewares=keycloak-ratelimit,keycloak-bodylimit"
+      - "traefik.http.routers.keycloak.service=keycloak"
+      - "traefik.http.services.keycloak.loadbalancer.server.port=8080"
+      # Per client address. A sign-in costs about ten requests, an admin
+      # console page load more (static assets): bounds a password-guessing
+      # or flooding client without hindering the console (values checked
+      # against a measured console load, see the phase report).
+      - "traefik.http.middlewares.keycloak-ratelimit.ratelimit.average=300"
+      - "traefik.http.middlewares.keycloak-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.keycloak-ratelimit.ratelimit.burst=300"
+      # Login forms and admin API calls are small; 10 MiB leaves room for a
+      # realm partial import through the console.
+      - "traefik.http.middlewares.keycloak-bodylimit.buffering.maxRequestBodyBytes=10485760"
+      - "traefik.http.middlewares.keycloak-bodylimit.buffering.memRequestBodyBytes=1048576"
     # Without this, `depends_on` (on the oauth2-proxy side) only waits for the
     # CONTAINER to start, not for the HTTP port to respond — Keycloak (JVM) takes
     # significantly longer to initialize than oauth2-proxy waits before attempting its
@@ -259,6 +294,10 @@ services:
     depends_on:
       keycloak:
         condition: service_healthy
+        # Lab profile only: without it oauth2-proxy starts alone and keeps
+        # failing its OIDC discovery until a real identity provider is
+        # configured (expected, see the deployment guides).
+        required: false
     networks:
       - app-internal
     labels:
