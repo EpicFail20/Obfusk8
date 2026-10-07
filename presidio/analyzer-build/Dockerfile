@@ -5,9 +5,9 @@
 # 2.2.364), its REST server files from server/ (unmodified upstream copies),
 # French support and our configuration from conf/ and patches/.
 
-# Same digest-pinned base as app/Dockerfile: python:3.12-slim = Python 3.12.15
-# on Debian 13 (trixie), checked on Docker Hub on 2026-10-06.
-FROM python:3.12-slim@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c
+# Same digest-pinned base as app/Dockerfile: python:3.14.8-slim = Python
+# 3.14.8 on Debian 13 (trixie), checked on Docker Hub on 2026-10-07 (D-052).
+FROM python:3.14.8-slim@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2
 
 # Debian security updates available at build time (EXT-33). No curl: the
 # health check below uses Python (D-052 point 2), one package less to patch.

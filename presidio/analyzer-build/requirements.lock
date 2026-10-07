@@ -7,8 +7,9 @@
 # The compiled wheels are specific to the Python minor version of that base:
 # changing Python means regenerating this file (docs/maintenance-dependances.md).
 #
-# Generated on 2026-10-07 inside the Dockerfile's base image, with pip from
-# requirements-build.txt:
+# Generated on 2026-10-07 inside the Dockerfile's base image (Python 3.14.8;
+# same versions as for 3.12.15, only the compiled wheels changed), with pip
+# from requirements-build.txt:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \
 #       -r names.txt -c constraints.txt
 # names.txt = every entry of this file except the two models; constraints.txt =
@@ -28,13 +29,13 @@ anyio==4.15.1 \
 blinker==1.9.0 \
     --hash=sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc
 blis==1.3.3 \
-    --hash=sha256:1ef6d6e2b599a3a2788eb6d9b443533961265aa4ec49d574ed4bb846e548dcdb
+    --hash=sha256:f36c0ca84a05ee5d3dbaa38056c4423c1fc29948b17a7923dd2fed8967375d74
 catalogue==2.0.10 \
     --hash=sha256:58c2de0020aa90f4a2da7dfad161bf7b3b054c86a5f09fcedc0b2b740c109a9f
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
 charset-normalizer==3.5.2 \
-    --hash=sha256:3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649
+    --hash=sha256:34276fd796040bf0993ab33a369aa572e6979c7aab225a88893667ad8eac8f7a
 click==8.5.0 \
     --hash=sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360
 cloudpathlib==0.26.0 \
@@ -42,7 +43,7 @@ cloudpathlib==0.26.0 \
 confection==1.3.3 \
     --hash=sha256:b9fef9ee84b237ef4611ec3eb5797b70e13063e6310ad9f15536373f5e313c82
 cymem==2.0.13 \
-    --hash=sha256:f190a92fe46197ee64d32560eb121c2809bb843341733227f51538ce77b3410d
+    --hash=sha256:68489bf0035c4c280614067ab6a82815b01dc9fcd486742a5306fe9f68deb7ef
 filelock==4.0.12 \
     --hash=sha256:5f17ee83ecee8a6f3e389c75822fb70a1c2f0506b99438a6dffa1d56793588c8
 Flask==3.1.3 \
@@ -64,31 +65,31 @@ Jinja2==3.1.6 \
 markdown-it-py==4.2.0 \
     --hash=sha256:9f7ebbcd14fe59494226453aed97c1070d83f8d24b6fc3a3bcf9a38092641c4a
 MarkupSafe==3.0.4 \
-    --hash=sha256:8e124f974786f831d6043728e38296969d3579db8896fe004682f5758e613581
+    --hash=sha256:a8e9f292fcda89b324f2f5c91d13f1424a153e40fc2756f38ee23b15835ff300
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
 murmurhash==1.0.15 \
-    --hash=sha256:5a301decfaccfec70fe55cb01dde2a012c3014a874542eaa7cc73477bb749616
+    --hash=sha256:d7e47c5746785db6a43b65fac47b9e63dd71dfbd89a8c92693425b9715e68c6e
 numpy==2.4.6 \
-    --hash=sha256:90f9849678c75fe7afa2d348ac842c168b0a4d3d61919687216dfc547976d853
+    --hash=sha256:a2c306dea656c12c68f51f4cea133cbe78ca7435eb28c735eac1d3ebe73be6e8
 packaging==26.3 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
 phonenumbers==9.0.40 \
     --hash=sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84
 preshed==3.0.13 \
-    --hash=sha256:8b8de3f58043070a354477995acdd98626ce43e4193c708ebd0f694e467f5155
+    --hash=sha256:d4ae5cfe075bb7a07982e382bca44f41ddf041f4d24cbd358e8cccfc049259b8
 presidio_analyzer==2.2.364 \
     --hash=sha256:0a9eeb60ccc416c505367b4989d056becb84ef082703ee3361c046fb75941739
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73
 pydantic_core==2.46.5 \
-    --hash=sha256:0fc5be0abd4a407e200d844b404e33639a554e7bd0d448e7b9ae181be4789ac2
+    --hash=sha256:54d510bac3ee52247af28ed4bb18a1e799f040ac60fd2bf5ccd4c92f1fbe786f
 Pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
 PyYAML==6.0.3 \
-    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+    --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5
 regex==2026.9.29 \
-    --hash=sha256:39ab5894d971f9ac68baa6eca5c50387db579cfcacf36ae8df3feceb1815e6d0
+    --hash=sha256:2f7f7aa47b229f2b39a2ae2596d2ad5625d77b5eb9856fac2dab3eb506cdd0a0
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 requests-file==3.0.1 \
@@ -102,15 +103,15 @@ shellingham==1.5.4 \
 smart_open==8.0.2 \
     --hash=sha256:7ff6e4acf454269905db0c747f5d14fdba6056db572c0f8398043676dc91515c
 spacy==3.8.16 \
-    --hash=sha256:8d0f63c3124d0a34a37e9b519d004cee1269744be07f91f843902e6c9f3e557a
+    --hash=sha256:6c51eac85344784ca7b184f0c3f7da0fca47c354d63e05e733d90cae35a2ecc4
 spacy-legacy==3.0.12 \
     --hash=sha256:476e3bd0d05f8c339ed60f40986c07387c0a71479245d6d0f4298dbd52cda55f
 spacy-loggers==1.0.5 \
     --hash=sha256:196284c9c446cc0cdb944005384270d775fdeaf4f494d8e269466cfa497ef645
 srsly==2.5.4 \
-    --hash=sha256:bb463e076e5efe61784c439493dc012e27fd05b4ddcf78f3353345c5d7e462c3
+    --hash=sha256:5bd3bb57db07e59a6366ffcf1cfca75a82d058ed4e08021408f29a7d8a0aa781
 thinc==8.3.13 \
-    --hash=sha256:4b5ec9ff313819e7d8667794a3559463fa89ff45aaa73e3fd8d6273b1e0d7a7f
+    --hash=sha256:f4f26d1eec9b2a6a8f2e0298a5515d13eb06d70730d0d9e1040bb329e12bf3fb
 tldextract==5.4.0 \
     --hash=sha256:7f02aed30bd3b6ad5717192eb859a39b20aafc7caf3917d9cf6cb00a58efb34f
 tqdm==4.70.1 \
@@ -130,7 +131,7 @@ weasel==1.0.0 \
 Werkzeug==3.1.9 \
     --hash=sha256:6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab
 wrapt==2.5.0 \
-    --hash=sha256:0cabb9c17ab79b2549d1f23b36f436473ad9253ef53995a817feba26fae69d5b
+    --hash=sha256:b640460f0ffb346b192686bd6fac5589e35a6c6640501c59a9fb6e82b0dd6bd8
 # spaCy models: not on PyPI, GitHub release assets of explosion/spacy-models
 # (fr_core_news_md 3.8.0 is the only release for spaCy 3.8). pip downloads
 # them and rejects any other file; check_lock.py compares the SHA-256 recorded
