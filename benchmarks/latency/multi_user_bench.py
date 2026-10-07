@@ -48,10 +48,9 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 from run_latency_bench import UPLOAD_PACING_SECONDS, _detect, _stats, _text  # noqa: E402
 
-from obfusk8_client import BASE_URL, HTTP_OK, login  # noqa: E402
+from obfusk8_client import BASE_URL, HTTP_OK, login, read_accounts  # noqa: E402
 
 RESULTS = HERE.parent / "results"
-ACCOUNTS_FILE = Path(os.environ.get("BENCH_ACCOUNTS_FILE", "~/.obfusk8-test-accounts")).expanduser()
 ROUNDS = int(os.environ.get("BENCH_MULTI_ROUNDS", "2"))
 DOCUMENTS = int(os.environ.get("BENCH_MULTI_DOCUMENTS", "9"))
 JOB_TTL_SECONDS = int(os.environ.get("BENCH_JOB_TTL_SECONDS", "600"))
@@ -60,16 +59,6 @@ BURST = 20  # text-ratelimit burst (docker-compose.yml)
 ANALYZE = f"{BASE_URL}/api/v1/text/analyze"
 
 Sample = tuple[float, float, float, int, str]  # start, end, duration, status, origin of the status
-
-
-def accounts() -> list[tuple[str, str, str]]:
-    """(label, user, password) — the label only is ever reported."""
-    out = []
-    for index, line in enumerate(ACCOUNTS_FILE.read_text(encoding="utf-8").splitlines(), 1):
-        if line.strip():
-            user, password = (part.strip() for part in line.split(",", 1))
-            out.append((f"compte-{index}", user, password))
-    return out
 
 
 def _post(session: Any, text: str) -> tuple[int, str, float]:
@@ -212,7 +201,7 @@ def markdown(report: dict[str, Any]) -> str:
 
 
 if __name__ == "__main__":
-    accounts_ = accounts()
+    accounts_ = read_accounts()
     if len(accounts_) < 4:  # noqa: PLR2004 - three prompt users and one document user
         raise SystemExit("four test accounts are needed")
     sessions = [(label, login(user, password)) for label, user, password in accounts_[:4]]

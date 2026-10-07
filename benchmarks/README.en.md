@@ -50,7 +50,7 @@ On the stack's VM, with a **synthetic** test account (never in the repository):
 ```sh
 export BENCH_BASE_URL=https://obfusk8.lab.local BENCH_USER=<test account> BENCH_PASSWORD=<password>
 export BENCH_INSECURE_TLS=1        # lab self-signed certificate
-export BENCH_RESOLVE_LOOPBACK=1    # if *.lab.local is not in /etc/hosts
+export BENCH_RESOLVE_ADDRESS=192.168.1.35  # if *.lab.local is not in /etc/hosts: the stack's BIND_ADDRESS (D-047)
 sh benchmarks/collect_stack_info.sh > /tmp/stack.json
 export BENCH_STACK_INFO=/tmp/stack.json
 python3 benchmarks/secret_detection/run_secrets_bench.py

@@ -22,7 +22,7 @@ any failure. Finalizing writes one metadata line per case to audit.log.
 Needs PyMuPDF and Pillow: run it in a throwaway client container of the app
 image, for instance:
   docker run --rm --network host -e BENCH_USER -e BENCH_PASSWORD -e BENCH_INSECURE_TLS=1 \
-    -e BENCH_RESOLVE_LOOPBACK=1 -e E2E_PACE=13 -v "$PWD:/repo:ro" -w /repo \
+    -e BENCH_RESOLVE_ADDRESS=192.168.1.35 -e E2E_PACE=13 -v "$PWD:/repo:ro" -w /repo \
     --entrypoint python ghcr.io/epicfail20/obfusk8-app:main benchmarks/e2e/e2e_document_flow.py
 E2E_PACE (seconds before each upload/finalize) respects the existing upload
 rate limit (5/min, burst 10); E2E_THEMES selects the themes (",medical").

@@ -51,7 +51,7 @@ Sur la VM de la pile, avec un compte de test **synthétique** (jamais dans le d�
 ```sh
 export BENCH_BASE_URL=https://obfusk8.lab.local BENCH_USER=<compte de test> BENCH_PASSWORD=<mot de passe>
 export BENCH_INSECURE_TLS=1        # certificat auto-signé du lab
-export BENCH_RESOLVE_LOOPBACK=1    # si *.lab.local n'est pas dans /etc/hosts
+export BENCH_RESOLVE_ADDRESS=192.168.1.35  # si *.lab.local n'est pas dans /etc/hosts : la BIND_ADDRESS de la pile (D-047)
 sh benchmarks/collect_stack_info.sh > /tmp/stack.json
 export BENCH_STACK_INFO=/tmp/stack.json
 python3 benchmarks/secret_detection/run_secrets_bench.py

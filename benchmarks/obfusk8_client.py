@@ -21,8 +21,12 @@ Configuration (environment only — credentials never go in the repository):
   BENCH_USER          test account (synthetic, lab only)
   BENCH_PASSWORD
   BENCH_INSECURE_TLS  "1" for the lab's self-signed certificate
-  BENCH_RESOLVE_LOOPBACK  "1" to resolve *.lab.local to 127.0.0.1 when the
-                      lab names are not in /etc/hosts (VM-local runs)
+  BENCH_RESOLVE_ADDRESS   address to resolve *.lab.local to when the lab
+                      names are not in /etc/hosts (VM-local runs): the
+                      stack's BIND_ADDRESS, since it listens there only (D-047)
+  BENCH_RESOLVE_LOOPBACK  "1": same with 127.0.0.1 (BIND_ADDRESS=127.0.0.1)
+  BENCH_ACCOUNTS_FILE "user, password" per line, outside the repository
+                      (default ~/.obfusk8-test-accounts), for multi-user runs
 """
 
 import html
@@ -30,30 +34,56 @@ import os
 import re
 import socket
 import time
+from pathlib import Path
 from typing import Any
 
 import requests
 
 HTTP_OK = 200
+HTTP_ACCEPTED = 202
 HTTP_TOO_MANY_REQUESTS = 429
 
 BASE_URL = os.environ.get("BENCH_BASE_URL", "https://obfusk8.lab.local").rstrip("/")
 VERIFY_TLS = os.environ.get("BENCH_INSECURE_TLS") != "1"
 
-if os.environ.get("BENCH_RESOLVE_LOOPBACK") == "1":
+
+def lab_address() -> str | None:
+    """Address the *.lab.local names resolve to, or None (system resolver)."""
+    address = os.environ.get("BENCH_RESOLVE_ADDRESS", "").strip()
+    if address:
+        return address
+    return "127.0.0.1" if os.environ.get("BENCH_RESOLVE_LOOPBACK") == "1" else None
+
+
+_LAB_ADDRESS = lab_address()
+if _LAB_ADDRESS is not None:
     _real_getaddrinfo = socket.getaddrinfo
 
-    def _loopback_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
+    def _lab_getaddrinfo(host: Any, *args: Any, **kwargs: Any) -> Any:
         if isinstance(host, str) and host.endswith(".lab.local"):
-            host = "127.0.0.1"
+            host = _LAB_ADDRESS
         return _real_getaddrinfo(host, *args, **kwargs)
 
-    socket.getaddrinfo = _loopback_getaddrinfo
+    socket.getaddrinfo = _lab_getaddrinfo
 
 if not VERIFY_TLS:
     import urllib3
 
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+
+ACCOUNTS_FILE = Path(os.environ.get("BENCH_ACCOUNTS_FILE", "~/.obfusk8-test-accounts")).expanduser()
+
+
+def read_accounts() -> list[tuple[str, str, str]]:
+    """(label, user, password) of each test account. Only the label
+    (compte-N) is ever printed or written: never a name or a password."""
+    out = []
+    for index, line in enumerate(ACCOUNTS_FILE.read_text(encoding="utf-8").splitlines(), 1):
+        if line.strip():
+            user, password = (part.strip() for part in line.split(",", 1))
+            out.append((f"compte-{index}", user, password))
+    return out
 
 
 def login(user: str | None = None, password: str | None = None) -> requests.Session:
@@ -74,8 +104,17 @@ def login(user: str | None = None, password: str | None = None) -> requests.Sess
         },
         timeout=30,
     )
-    if not any(c.name.startswith("_oauth2_proxy") for c in session.cookies):
-        raise RuntimeError("login failed")
+    # EXT-52: a cookie name proved nothing (oauth2-proxy sets
+    # `_oauth2_proxy_csrf` before any authentication, and Keycloak answers a
+    # wrong password with its login form and a 200). Ask oauth2-proxy itself:
+    # /oauth2/auth answers 202 for an authenticated session only (401
+    # otherwise, observed on the stack on 2026-10-07).
+    check = session.get(f"{BASE_URL}/oauth2/auth", timeout=30, allow_redirects=False)
+    if check.status_code != HTTP_ACCEPTED:
+        raise RuntimeError(f"login failed: /oauth2/auth answered HTTP {check.status_code}")
+    # Like a browser on the application's pages: the document routes require
+    # this Origin (D-048 point 3). Set only now, never sent to Keycloak.
+    session.headers["Origin"] = BASE_URL
     return session
 
 

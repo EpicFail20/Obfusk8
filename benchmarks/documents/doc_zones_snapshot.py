@@ -43,7 +43,7 @@ and a truncated SHA-256 (the corpus contains synthetic secrets).
 Run it in a throwaway client container of the app image (PyMuPDF,
 python-docx and Pillow are there), as for e2e_document_flow.py:
   docker run --rm --network host -e BENCH_USER -e BENCH_PASSWORD -e BENCH_INSECURE_TLS=1 \\
-    -e BENCH_RESOLVE_LOOPBACK=1 -v "$PWD:/repo" -w /repo \\
+    -e BENCH_RESOLVE_ADDRESS=192.168.1.35 -v "$PWD:/repo" -w /repo \\
     --entrypoint python ghcr.io/epicfail20/obfusk8-app:main benchmarks/documents/doc_zones_snapshot.py
 Each upload is paced (DOC_PACE seconds, 13 by default) under the existing
 upload rate limit (5/min). Jobs are never finalized: nothing is written to
