@@ -374,6 +374,16 @@ services:
       - MAX_CSV_ROWS=${MAX_CSV_ROWS:-20000}
       - MAX_CSV_CELLS=${MAX_CSV_CELLS:-5000}
       - MAX_CSV_FIELD_CHARS=${MAX_CSV_FIELD_CHARS:-100000}
+      # --- Availability of the document flow (EXT-51, D-048) ---
+      # Per-user quota of documents pending review (429 + Retry-After); the
+      # global MAX_PENDING_JOBS cap stays. 0 disables it. Enabled by default:
+      # it fixes a denial of service by one authenticated user.
+      - MAX_PENDING_JOBS_PER_USER=${MAX_PENDING_JOBS_PER_USER:-3}
+      # Cancellation of one's own pending documents (POST /api/cancel/{job_id}).
+      - ENABLE_JOB_CANCEL=${ENABLE_JOB_CANCEL:-true}
+      # Origin required on /api/detect, /api/finalize and /api/cancel
+      # (https://APP_DOMAIN, D-048 point 3). Unset = every such request is refused.
+      - APP_DOMAIN=${APP_DOMAIN}
       # --- Text API for the browser extension (app/text_api.py) ---
       # Contract and justification of every default: docs/api-extension.en.md.
       # ENABLE_EXTENSION_API: false (default) = the /api/v1/ routes do not
@@ -464,11 +474,33 @@ services:
       - "traefik.http.routers.app-upload.tls=true"
       - "traefik.http.routers.app-upload.priority=100"
       - "traefik.http.routers.app.priority=1"
-      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-user-ratelimit,upload-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-upload.service=app"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.burst=10"
+      # EXT-51 / D-048: the limit above is keyed on the client IP, so it is
+      # shared by every user behind one NAT or proxy and does nothing per
+      # user. Same values keyed on the identity oauth2-proxy sets (after
+      # oidc-auth in the chain, so never the client's own value), on the
+      # model of text-ratelimit (docs/api-extension.md §7). Both are kept.
+      - "traefik.http.middlewares.upload-user-ratelimit.ratelimit.average=5"
+      - "traefik.http.middlewares.upload-user-ratelimit.ratelimit.period=1m"
+      - "traefik.http.middlewares.upload-user-ratelimit.ratelimit.burst=10"
+      - "traefik.http.middlewares.upload-user-ratelimit.ratelimit.sourcecriterion.requestheadername=X-Auth-Request-User"
+      # Dedicated router for /api/cancel/{job_id} (EXT-51): same two rate
+      # limits, a minimal body cap (bodiless route; same value as
+      # MAX_CANCEL_BODY_BYTES in main.py), and no oauth2-errors: the review
+      # page calls it with fetch() and must get the real 401/403 status, not
+      # a redirect to the sign-in page.
+      - "traefik.http.routers.app-cancel.rule=Host(`${APP_DOMAIN}`) && PathPrefix(`/api/cancel/`)"
+      - "traefik.http.routers.app-cancel.entrypoints=websecure"
+      - "traefik.http.routers.app-cancel.tls=true"
+      - "traefik.http.routers.app-cancel.priority=100"
+      - "traefik.http.routers.app-cancel.middlewares=oidc-auth,upload-ratelimit,upload-user-ratelimit,cancel-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-cancel.service=app"
+      - "traefik.http.middlewares.cancel-bodylimit.buffering.maxRequestBodyBytes=4096"
+      - "traefik.http.middlewares.cancel-bodylimit.buffering.memRequestBodyBytes=4096"
       # Request body size cap AT THE EDGE (defense in depth alongside
       # the same cap applied inside the application, see
       # MAX_REQUEST_BODY_BYTES in main.py): an oversized upload is
