@@ -51,6 +51,9 @@ cp env.fr.example .env
 
 # Les images construites depuis ce dépôt (app, analyseur) se construisent
 # localement ; les images tierces sont épinglées par condensat et tirées.
+# Leur image de base Python est définie à un seul endroit : x-python-base
+# dans docker-compose.build.yml (un « docker build » seul échoue sans
+# --build-arg PYTHON_BASE).
 docker compose -f docker-compose.yml -f docker-compose.build.yml build
 # Laboratoire : ajoutez --profile lab (Keycloak de laboratoire, mode développement,
 # jamais en production) ou mettez COMPOSE_PROFILES=lab dans .env.

@@ -18,7 +18,8 @@ répertoire de travail sur disque, **hors** du tmpfs `/tmp` (EXT-25) et hors du 
 | Versions de détection | `presidio/analyzer-build/versions.json` = `app/analyzer_versions.json` | Empreinte `detection_config` ; les deux copies restent identiques (`app/run-tests.sh` le vérifie) |
 | pip de construction | `app/requirements-build.txt`, `presidio/analyzer-build/requirements-build.txt` | Retiré des images après installation |
 | Outils de développement | `app/requirements-dev.in`, `app/requirements-dev.txt` | Jamais dans les images ; installés dans `~/.cache/obfusk8-devtools` ; `regex` suit la version de l'analyseur (D-017) |
-| Images de base | `FROM` de `app/Dockerfile` et `presidio/analyzer-build/Dockerfile` | Épinglées par condensat |
+| Image de base Python (les deux images) | `x-python-base` de `docker-compose.build.yml`, argument `PYTHON_BASE` des deux Dockerfiles | Épinglée par condensat, **un seul endroit** (D-052) ; §9 |
+| Serveur REST de Presidio | `presidio/analyzer-build/server/` (copie amont, licence MIT) | Recopié et comparé à chaque mise à jour de Presidio (§10) |
 | Images tierces | `docker-compose.yml` (et surcharges `docker-compose.rollback-*.yml`) | Épinglées par condensat |
 | Paquets Debian | `apt-get upgrade` à chaque construction | Suivent la reconstruction |
 | Actions GitHub | `.github/workflows/` | Épinglées par commit ; workflow désactivé (D-042) |
@@ -90,7 +91,7 @@ les deux sens (connexion des comptes de test, `Seccomp: 2` dans `/proc/1/status`
 # constraints.txt = les versions du verrou actuel, les paquets mis à jour à leur version cible
 grep -E '^[a-zA-Z]' app/requirements.lock | sed -E 's/ .*//' | grep -v '^uvicorn==' > "$SCRATCH/constraints.txt"
 echo 'uvicorn==<cible>' >> "$SCRATCH/constraints.txt"     # et le premier niveau dans app/requirements.txt
-docker run --rm --memory 1g -v "$PWD/app:/src:ro" -v "$SCRATCH:/out" python:3.12-slim@<condensat du FROM> sh -c '
+docker run --rm --memory 1g -v "$PWD/app:/src:ro" -v "$SCRATCH:/out" <valeur de x-python-base> sh -c '
   pip install -q --root-user-action=ignore --no-cache-dir --require-hashes --no-deps -r /src/requirements-build.txt &&
   pip install -q --root-user-action=ignore --no-cache-dir --dry-run --ignore-installed --only-binary=:all: \
       --report /out/report.json -r /src/requirements.txt -c /out/constraints.txt && chmod 644 /out/report.json'
@@ -99,8 +100,8 @@ python3 tools/dependencies/lock_from_report.py "$SCRATCH/report.json" > "$SCRATC
 git diff app/requirements.lock | grep '^[-+][a-zA-Z]'
 ```
 
-**Verrou de l'analyseur** : même principe dans l'image de base Presidio (`--entrypoint sh --user root`), avec `-r names.txt`
-(noms de toutes les entrées hors modèles) et `-c constraints.txt`. La résolution doit rendre **exactement** l'ensemble contraint (ni
+**Verrou de l'analyseur** : même principe dans la même image de base (`x-python-base`), avec `-v "$PWD/presidio/analyzer-build:/src:ro"`,
+`-r names.txt` (noms de toutes les entrées hors modèles, `presidio-analyzer` compris) et `-c constraints.txt`. La résolution doit rendre **exactement** l'ensemble contraint (ni
 paquet ajouté ni paquet retiré) ; les deux lignes des modèles spaCy se conservent à la main. Si spaCy, Presidio ou le modèle change :
 `versions.json` **et** `app/analyzer_versions.json`, puis reconstruire **aussi** `app` (empreinte `detection_config`).
 
@@ -153,7 +154,7 @@ Un compte par banc lancé en parallèle (limitation de débit par utilisateur, `
 
 **Réexamen systématique à chaque cycle** : FastAPI (D-043 point 1 : rester en 0.141.1 tant qu'aucun correctif de sécurité n'existe que
 dans 0.142+ et qu'OpenTelemetry est obligatoire ; le jour de la montée, télémétrie désactivée explicitement dans `FastAPI(...)` et test
-prouvant qu'aucune exportation n'a lieu) ; docker-socket-proxy (D-040 point 8) ; numpy et thinc plafonnés ; Python de l'analyseur (EXT-50).
+prouvant qu'aucune exportation n'a lieu) ; docker-socket-proxy (D-040 point 8) ; numpy et thinc plafonnés ; gunicorn plafonné par Presidio (`<26.0.0`, EXT-60) ; version de Python (§9).
 
 ## 7. Cadence (validée le 2026-10-06, D-044 point 2)
 
@@ -195,3 +196,55 @@ par l'administrateur dans *Insights → Dependency graph* après la fusion dans 
    lise ; changement de convention de fichiers à vérifier après fusion dans `main`, et sans effet sur les images.
 
 La pile reste sans accès à Internet : ces contrôles se lancent sur la VM, jamais depuis un conteneur de la pile.
+
+## 9. Changer de version de Python (phase « Python », D-052)
+
+La version de Python est **une décision humaine** (§6). Elle est définie à **un seul endroit** : l'ancre `x-python-base` de
+`docker-compose.build.yml` (image officielle `python:X.Y.Z-slim@sha256:…`), passée aux deux Dockerfiles par l'argument `PYTHON_BASE`, sans
+valeur par défaut (une construction sans lui échoue). Le workflow de publication lit la même ligne.
+
+1. **À la source** : dernière version stable sur python.org (pas de version candidate) ; condensat par
+   `docker buildx imagetools inspect python:X.Y.Z-slim` ; **roues binaires** `cpXY` Linux x86_64 publiées sur PyPI pour **toutes** les
+   entrées compilées des trois verrous (`app`, analyseur, développement), et `requires_python` compatible (Presidio, spaCy et la pile
+   thinc déclarent un plafond `<3.N`) ; notes « What's New » lues (suppressions, `asyncio`, `multiprocessing`, base Unicode).
+2. **Lots séparés**, dans cet ordre : `app`, puis l'analyseur ; chacun avec son retour arrière (§4).
+3. **Verrous** : les trois régénérés dans la nouvelle base, avec les **mêmes versions** en contraintes (§4) : seules les empreintes des
+   roues compilées doivent changer (contrôle : `git diff` limité aux lignes `--hash`). Outils de développement réinstallés dans
+   `~/.cache/obfusk8-devtools` (garder l'ancien répertoire pour le retour arrière) ; `target-version` de ruff et `python_version` de
+   mypy dans `app/pyproject.toml`.
+4. **`versions.json` et `app/analyzer_versions.json`** : champ `python` à la nouvelle version (l'empreinte `detection_config` change :
+   l'interpréteur peut changer la détection, base Unicode). La construction de l'analyseur et `app/tests/test_python_base.py` échouent
+   tant que l'ancre, l'interpréteur et ces fichiers ne concordent pas.
+5. **Seccomp** : trace complète sous `app-audit.json` (§4, appels système), journal du noyau filtré sur la période ; tout appel nouveau
+   identifié (adresse de l'instruction dans `/proc/<pid>/maps`, démarrages minimaux) avant décision. Passage à 3.14 : un `open` de
+   mimalloc, refusé sans effet (`seccomp/README.md`).
+6. **Bancs** avec le garde-fou (§5) à chaque lot, latence, `trivy`, `pip-audit`, reproductibilité de l'analyseur (deux constructions
+   sans cache, même ensemble de paquets).
+
+## 10. Mettre à jour Presidio, spaCy ou les modèles (analyseur construit sur notre base)
+
+Depuis la phase « Python », l'analyseur ne dépend plus de l'image publiée par le projet Presidio : la bibliothèque vient de sa roue PyPI
+(dans le verrou), le serveur REST de `presidio/analyzer-build/server/`, les modèles de leurs fichiers GitHub (dans le verrou, avec empreinte).
+
+**Presidio** (décision humaine si la détection change, §6) :
+
+1. Nouvelle version sur PyPI **et** étiquette GitHub correspondante ; `requires_dist` de la roue lus (plafonds de numpy, spaCy, gunicorn
+   de l'extra `server`…).
+2. **Fichiers du serveur** (condition de D-052 point 1) : recopier `app.py`, `logging.ini`, `entrypoint.sh` et `LICENSE` depuis
+   `presidio-analyzer/` de la nouvelle étiquette (`https://raw.githubusercontent.com/data-privacy-stack/presidio/<étiquette>/presidio-analyzer/<fichier>`),
+   **comparer** à la version précédente (`git diff presidio/analyzer-build/server/`), lire toute différence, mettre à jour le tableau
+   d'empreintes de `server/README.md`.
+3. **Fichiers corrigés** : le Dockerfile vérifie l'empreinte de l'original de `spacy_recognizer.py` et de `conf/default_recognizers.yaml`
+   avant de les remplacer ou de les corriger. Si la construction échoue sur ces contrôles, comparer l'original amont avec notre
+   correctif (`patches/spacy_recognizer.py`, `patch_recognizers.py`), reporter les changements amont dans le correctif, puis mettre à
+   jour les deux empreintes du Dockerfile.
+4. Verrou de l'analyseur (§4), `versions.json` et `app/analyzer_versions.json`, reconstruction des **deux** images, bancs avec garde-fou.
+
+**spaCy** : même chemin (verrou, `versions.json`) ; vérifier la compatibilité des modèles (`spacy>=X,<Y` dans leurs métadonnées).
+
+**Modèles spaCy** : publiés seulement comme fichiers des versions GitHub d'`explosion/spacy-models`, **sans condensat publié** (D-052
+point 8). Pour une nouvelle version : télécharger la roue dans `$SCRATCH`, vérifier sa taille contre l'API GitHub
+(`/repos/explosion/spacy-models/releases/tags/<modèle>-<version>`), calculer son SHA-256, l'écrire dans la ligne du verrou (`nom @ URL
+--hash=sha256:…`) ; `check_lock.py` compare ensuite l'empreinte enregistrée à l'installation. L'empreinte prouve « même fichier que celui
+vérifié ce jour-là », pas l'authenticité à l'origine : consigner la date et la source dans `docs/DEPENDENCIES.md`.
+

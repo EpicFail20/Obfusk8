@@ -186,3 +186,51 @@ premier niveau déjà aux dernières versions. `pip-audit -r app/requirements-de
 | traefik v3.7.13, oauth2-proxy v7.15.5, busybox 1.38.0 | 0 | 0 | Dernières versions, condensats inchangés |
 | keycloak 26.8.0 | 0 | 6 HIGH | Dernière version |
 | docker-socket-proxy v0.5.0 | **6** | 0 | Toujours sans version amont (D-040 point 8) |
+
+## Phase « Python » — analyseur sur notre base, Python 3.14 (2026-10-07)
+
+Décisions : D-052. Sources interrogées le 2026-10-07 : python.org (API des versions), Docker Hub (`docker buildx imagetools inspect`),
+API JSON de PyPI (versions, roues cp312/cp314 de chaque entrée des trois verrous, `requires_python`, licences), API OSV, versions GitHub
+de `data-privacy-stack/presidio` et `explosion/spacy-models`, « What's New in Python 3.14 » et code de CPython v3.14.8
+(`Objects/mimalloc/prim/unix/prim.c`). Scans des images finales : `pip-audit` 2.10.1 (OSV) sur les environnements installés,
+`trivy` 0.75.0 (HIGH, CRITICAL). **Aucune nouvelle dépendance** : toutes les versions de paquets sont inchangées sauf gunicorn ;
+seules les empreintes des roues compilées changent avec l'interpréteur.
+
+### Images de base (paramètre unique `x-python-base` de `docker-compose.build.yml`)
+
+| Image | Avant | Retenue | Dernière stable observée | Audit | Licence | Remarque |
+|---|---|---|---|---|---|---|
+| `python` (base de `app`) | 3.12-slim, 3.12.15, `ddb0207a…` | **3.14.8-slim**, `f85c5697…` | 3.14.8 (python.org, 2026-09-30) ; 3.15.0rc3 (préversion, exclue) | trivy : 0 corrigeable | PSF-2.0 | Lot 2 ; même Debian 13 ; `python:3.12-slim` reconstruite entre-temps (`05cda977…`), sans objet |
+| `python` (base de l'analyseur) | — (image Presidio, Python 3.12.13) | **3.14.8-slim**, `f85c5697…` | idem | trivy : 0 corrigeable | PSF-2.0 | Lot 1 en 3.12.15 (`ddb0207a…`), lot 3 en 3.14.8 ; ferme EXT-50 |
+| `ghcr.io/data-privacy-stack/presidio-analyzer` | 2.2.364, `ae8f6f11…` | **retirée** | 2.2.364 | — | MIT | Remplacée par la roue PyPI et les fichiers du serveur (`presidio/analyzer-build/server/`) |
+
+### Production — image de l'analyseur (`presidio/analyzer-build/requirements.lock`, 56 paquets et 2 modèles)
+
+| Paquet | Avant | Retenue | Dernière stable observée | Audit | Licence | Remarque |
+|---|---|---|---|---|---|---|
+| presidio-analyzer | 2.2.364 (code de l'image amont, non installé comme distribution) | **2.2.364**, roue `0a9eeb60…` | 2.2.364 (PyPI 2026-07-22, GitHub idem) | OSV : aucune | MIT | Lot 1 ; 179 fichiers identiques au code de l'image amont |
+| gunicorn | 26.2.0 | **25.3.0** | 26.2.0 ; dernière 25.x : 25.3.0 (2026-03-27) | OSV : aucune ; `pip-audit` : aucune | MIT | Lot 1 ; contrainte `<26.0.0` de `presidio-analyzer[server]` (EXT-60, D-052 point 3) |
+| 14 paquets compilés (blis, charset-normalizer, cymem, MarkupSafe, murmurhash, numpy, preshed, pydantic-core, PyYAML, regex, spacy, srsly, thinc, wrapt) | roues cp312 | **mêmes versions**, roues cp314 | inchangé | OSV : aucune | inchangées | Lot 3 |
+| en_core_web_lg, fr_core_news_md | 3.8.0 | 3.8.0, mêmes empreintes | seules versions pour spaCy 3.8 | non audités (hors PyPI) | MIT (`en_core_web_lg`), LGPL-LR (`fr_core_news_md`), d'après leur `meta.json` | Fichiers installés identiques octet par octet ; GitHub ne publie aucun condensat (D-052 point 8). Licences inchangées (LGPL-LR déjà consignée en phase 2 bis) |
+| curl (Debian) | présent (contrôle de santé amont) | **retiré** | — | trivy : 52 → 44 HIGH sans correctif | — | Contrôle de santé en Python (D-052 point 2) |
+
+`pip-audit --path /usr/local/lib/python3.14/site-packages` sur l'image finale : 58 distributions, *No known vulnerabilities found*.
+
+### Production — image `app` (`app/requirements.lock`, 32 paquets)
+
+Versions inchangées ; 8 roues compilées passent de cp312 à cp314 (charset-normalizer, httptools, lxml, pillow, pydantic-core, pyyaml,
+uvloop, websockets ; PyMuPDF et watchfiles sont en `abi3`). `pip-audit` sur l'image finale : aucune vulnérabilité. Appels système :
+aucun ajouté (`open` de mimalloc, refusé sans effet, `seccomp/README.md`).
+
+### Développement (jamais dans les images)
+
+`app/requirements-dev.txt` régénéré pour Python 3.14 (44 paquets, mêmes versions), installé dans `~/.cache/obfusk8-devtools`
+(l'ancien, pour 3.12 : `~/.cache/obfusk8-devtools.avant-py314`). `pip-audit --path` sur ce répertoire : 44 paquets, aucune vulnérabilité.
+`actionlint` 1.7.12 sur le workflow modifié : aucun constat.
+
+### Images (trivy 0.75.0, images finales)
+
+| Image | Corrigeables | Sans correctif | Taille | Remarque |
+|---|---|---|---|---|
+| app 0.2.0-dev (Python 3.14.8) | 0 | 76 HIGH, 1 CRITICAL | 544 Mo (541 avant) | Inchangé (paquets Debian, EXT-33) |
+| analyseur 0.2.0-dev (Python 3.14.8) | 0 | 44 HIGH | 1,63 Go (2,03 avant) | 52 avant (curl et ses bibliothèques retirés) |

@@ -18,7 +18,8 @@ on disk, **outside** the `/tmp` tmpfs (EXT-25) and outside the repository.
 | Detection versions | `presidio/analyzer-build/versions.json` = `app/analyzer_versions.json` | `detection_config` fingerprint; both copies stay identical (checked by `app/run-tests.sh`) |
 | Build-time pip | `app/requirements-build.txt`, `presidio/analyzer-build/requirements-build.txt` | Removed from the images after installation |
 | Development tools | `app/requirements-dev.in`, `app/requirements-dev.txt` | Never in the images; installed in `~/.cache/obfusk8-devtools`; `regex` follows the analyzer's version (D-017) |
-| Base images | `FROM` of `app/Dockerfile` and `presidio/analyzer-build/Dockerfile` | Pinned by digest |
+| Python base image (both images) | `x-python-base` of `docker-compose.build.yml`, `PYTHON_BASE` build argument of both Dockerfiles | Pinned by digest, **one place only** (D-052); §9 |
+| Presidio REST server | `presidio/analyzer-build/server/` (upstream copy, MIT license) | Copied again and compared on every Presidio update (§10) |
 | Third-party images | `docker-compose.yml` (and the `docker-compose.rollback-*.yml` overrides) | Pinned by digest |
 | Debian packages | `apt-get upgrade` on every build | Follow the rebuild |
 | GitHub Actions | `.github/workflows/` | Pinned by commit; workflow disabled (D-042) |
@@ -89,7 +90,7 @@ both ways (test account logins, `Seccomp: 2` in `/proc/1/status` of the `app` co
 # constraints.txt = the current lock's versions, the updated packages pinned to their target version
 grep -E '^[a-zA-Z]' app/requirements.lock | sed -E 's/ .*//' | grep -v '^uvicorn==' > "$SCRATCH/constraints.txt"
 echo 'uvicorn==<target>' >> "$SCRATCH/constraints.txt"     # and the top level in app/requirements.txt
-docker run --rm --memory 1g -v "$PWD/app:/src:ro" -v "$SCRATCH:/out" python:3.12-slim@<digest of the FROM line> sh -c '
+docker run --rm --memory 1g -v "$PWD/app:/src:ro" -v "$SCRATCH:/out" <value of x-python-base> sh -c '
   pip install -q --root-user-action=ignore --no-cache-dir --require-hashes --no-deps -r /src/requirements-build.txt &&
   pip install -q --root-user-action=ignore --no-cache-dir --dry-run --ignore-installed --only-binary=:all: \
       --report /out/report.json -r /src/requirements.txt -c /out/constraints.txt && chmod 644 /out/report.json'
@@ -98,8 +99,8 @@ python3 tools/dependencies/lock_from_report.py "$SCRATCH/report.json" > "$SCRATC
 git diff app/requirements.lock | grep '^[-+][a-zA-Z]'
 ```
 
-**Analyzer lock**: same principle inside the Presidio base image (`--entrypoint sh --user root`), with `-r names.txt` (names of every entry
-but the models) and `-c constraints.txt`. The resolution must return **exactly** the constrained set (no package added or dropped); the two
+**Analyzer lock**: same principle inside the same base image (`x-python-base`), with `-v "$PWD/presidio/analyzer-build:/src:ro"`,
+`-r names.txt` (names of every entry but the models, `presidio-analyzer` included) and `-c constraints.txt`. The resolution must return **exactly** the constrained set (no package added or dropped); the two
 spaCy model lines are kept by hand. If spaCy, Presidio or the model changes: `versions.json` **and** `app/analyzer_versions.json`, then
 rebuild `app` **as well** (`detection_config` fingerprint).
 
@@ -151,7 +152,7 @@ One account per benchmark run in parallel (per-user rate limit, `MAX_PENDING_JOB
 
 **Systematic review at every cycle**: FastAPI (D-043 point 1: stay on 0.141.1 as long as no security fix exists only in 0.142+ and
 OpenTelemetry is mandatory; on the day of the upgrade, telemetry explicitly disabled in `FastAPI(...)` and a test proving that nothing is
-exported); docker-socket-proxy (D-040 point 8); capped numpy and thinc; the analyzer's Python (EXT-50).
+exported); docker-socket-proxy (D-040 point 8); capped numpy and thinc; gunicorn capped by Presidio (`<26.0.0`, EXT-60); Python version (§9).
 
 ## 7. Cadence (approved on 2026-10-06, D-044 point 2)
 
@@ -192,3 +193,54 @@ administrator in *Insights → Dependency graph* after the merge into `main`.
    them; a file-naming convention change, to be checked after the merge into `main`, with no effect on the images.
 
 The stack stays without Internet access: these checks run on the VM, never from a container of the stack.
+
+## 9. Changing the Python version (Python phase, D-052)
+
+The Python version is **a human decision** (§6). It is defined in **one place only**: the `x-python-base` anchor of
+`docker-compose.build.yml` (official image `python:X.Y.Z-slim@sha256:…`), passed to both Dockerfiles as the `PYTHON_BASE` build argument,
+with no default (a build without it fails). The publishing workflow reads the same line.
+
+1. **At the source**: latest stable release on python.org (no release candidate); digest with
+   `docker buildx imagetools inspect python:X.Y.Z-slim`; `cpXY` Linux x86_64 **binary wheels** published on PyPI for **every** compiled
+   entry of the three locks (`app`, analyzer, development), and a compatible `requires_python` (Presidio, spaCy and the thinc stack declare
+   a `<3.N` cap); "What's New" notes read (removals, `asyncio`, `multiprocessing`, Unicode database).
+2. **Separate batches**, in this order: `app`, then the analyzer; each with its rollback (§4).
+3. **Locks**: all three regenerated in the new base, with the **same versions** as constraints (§4): only the hashes of the compiled
+   wheels may change (check: `git diff` limited to `--hash` lines). Development tools reinstalled in `~/.cache/obfusk8-devtools` (keep the
+   previous directory for rollback); ruff `target-version` and mypy `python_version` in `app/pyproject.toml`.
+4. **`versions.json` and `app/analyzer_versions.json`**: `python` field set to the new version (the `detection_config` fingerprint
+   changes: the interpreter can change detection, Unicode database). The analyzer build and `app/tests/test_python_base.py` fail as long
+   as the anchor, the interpreter and these files disagree.
+5. **Seccomp**: full trace under `app-audit.json` (§4, system calls), kernel log filtered on the period; any new call identified
+   (instruction address in `/proc/<pid>/maps`, minimal start-ups) before deciding. Move to 3.14: one `open` by mimalloc, refused with no
+   effect (`seccomp/README.md`).
+6. **Benchmarks** with the safeguard (§5) at each batch, latency, `trivy`, `pip-audit`, analyzer reproducibility (two builds without
+   cache, same package set).
+
+## 10. Updating Presidio, spaCy or the models (analyzer built on our own base)
+
+Since the Python phase, the analyzer no longer depends on the image published by the Presidio project: the library comes from its PyPI
+wheel (in the lock), the REST server from `presidio/analyzer-build/server/`, the models from their GitHub files (in the lock, hash-pinned).
+
+**Presidio** (human decision if detection changes, §6):
+
+1. New release on PyPI **and** matching GitHub tag; `requires_dist` of the wheel read (caps of numpy, spaCy, gunicorn of the `server`
+   extra…).
+2. **Server files** (condition of D-052 point 1): copy `app.py`, `logging.ini`, `entrypoint.sh` and `LICENSE` again from
+   `presidio-analyzer/` of the new tag (`https://raw.githubusercontent.com/data-privacy-stack/presidio/<tag>/presidio-analyzer/<file>`),
+   **compare** them with the previous version (`git diff presidio/analyzer-build/server/`), review every difference, update the hash table
+   of `server/README.md`.
+3. **Patched files**: the Dockerfile checks the hash of the original `spacy_recognizer.py` and `conf/default_recognizers.yaml` before
+   replacing or patching them. If the build fails on these checks, compare the upstream original with our patch
+   (`patches/spacy_recognizer.py`, `patch_recognizers.py`), carry the upstream changes into the patch, then update both hashes in the
+   Dockerfile.
+4. Analyzer lock (§4), `versions.json` and `app/analyzer_versions.json`, rebuild of **both** images, benchmarks with the safeguard.
+
+**spaCy**: same path (lock, `versions.json`); check model compatibility (`spacy>=X,<Y` in their metadata).
+
+**spaCy models**: published only as GitHub release files of `explosion/spacy-models`, **with no published digest** (D-052 point 8). For a
+new version: download the wheel into `$SCRATCH`, check its size against the GitHub API
+(`/repos/explosion/spacy-models/releases/tags/<model>-<version>`), compute its SHA-256, write it into the lock line (`name @ URL
+--hash=sha256:…`); `check_lock.py` then compares the hash recorded at install time. The hash proves "same file as the one checked that
+day", not authenticity at the origin: record the date and source in `docs/DEPENDENCIES.md`.
+

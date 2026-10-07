@@ -49,6 +49,9 @@ cp env.en.example .env
 
 # The images built from this repository (app, analyzer) are built locally;
 # third-party images are pinned by digest and pulled.
+# Their Python base image is defined in one place: x-python-base in
+# docker-compose.build.yml (a plain "docker build" fails without
+# --build-arg PYTHON_BASE).
 docker compose -f docker-compose.yml -f docker-compose.build.yml build
 # Lab: add --profile lab (lab Keycloak, development mode, never in
 # production) or set COMPOSE_PROFILES=lab in .env.

@@ -678,3 +678,22 @@ Inventaire présenté en session (étape A) : image Presidio publiée reproduite
    cache de construction (`docker builder prune`). Les images `avant-py314` de l'étape B sont conservées.
 8. **Modèles spaCy** : empreinte actuelle acceptée, avec contrôle octet par octet des modèles installés au lot 1. **Limite consignée** :
    GitHub ne publie aucun condensat pour ces fichiers ; l'empreinte garantit « même fichier qu'avant », pas l'authenticité à l'origine.
+
+## D-053 — Mise en œuvre de la phase « Python » — décisions de la session du 2026-10-07 (à valider par l'humain)
+
+1. **`open` (appel système 2) non ajouté au profil seccomp.** Python 3.14 l'appelle une fois par démarrage, par l'allocateur mimalloc
+   intégré à CPython (lecture de `/proc/sys/vm/overcommit_memory`, `syscall(SYS_open, …)`). Refusé (`ENOSYS`), mimalloc garde sa valeur
+   par défaut, identique à celle de l'hôte (`0`) ; l'interpréteur utilise `pymalloc` pour les objets Python (observé). Alternative
+   écartée : l'autoriser, ce qui élargirait la surface sans effet utile. Conséquence : à revoir si l'hôte passe en
+   `vm.overcommit_memory=2` ou si `PYTHONMALLOC=mimalloc` est adopté (`seccomp/README.md`).
+2. **`pip check` complété par `check_lock.py`** pour les extras : `pip check` ignore les dépendances des extras, il n'aurait donc pas
+   vérifié `gunicorn<26.0.0` (D-052 point 3 demandait un contrôle strict). La construction vérifie maintenant les exigences de
+   `presidio-analyzer[server]` (tests écrits avant). Alternative écartée : installer avec l'extra déclaré, sans effet avec `--no-deps`.
+3. **Version de Python déclarée dès le lot 1** (3.12.15, puis 3.14.8 au lot 3) : l'interpréteur changeait déjà (3.12.13 → 3.12.15),
+   l'empreinte `detection_config` le reflète à chaque étape.
+4. **Bancs de documents** : annulation de chaque document mesuré (EXT-61), condition pour mesurer sous le quota par utilisateur (D-048).
+   `collect_stack_info.sh` lit la version de Presidio dans la distribution installée.
+5. **Outils de développement** : réinstallés pour 3.14 dans le même répertoire (`~/.cache/obfusk8-devtools`) ; l'ancien est conservé
+   sous `~/.cache/obfusk8-devtools.avant-py314` (retour arrière : `OBFUSK8_DEVTOOLS=…`). `app/run-tests.sh` inchangé.
+6. **Workflow de publication** : la base Python est lue dans `docker-compose.build.yml` par une étape `sed` qui échoue si elle est vide,
+   puis passée en `build-args` (seules lignes ajoutées, D-052 point 5) ; `actionlint` 1.7.12 sans constat.
