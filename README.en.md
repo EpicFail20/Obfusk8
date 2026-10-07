@@ -92,18 +92,25 @@ The application never handles passwords itself: all authentication goes through 
 3. Create a confidential OIDC client, with this redirect URI:
    `https://<your-domain>/oauth2/callback`
 4. Add a *Group Membership* mapper → `groups` claim if you want to restrict access by group.
-5. Retrieve the generated *client secret*, put it in `.env` (`OAUTH2_PROXY_CLIENT_SECRET`).
+5. Retrieve the generated *client secret* and put it in the Docker secret `secrets/oauth2_client_secret.txt`, **never** in `.env` (an
+   `OAUTH2_PROXY_CLIENT_SECRET` variable in `.env` would take precedence over the Docker secret); see `deployment-lab.md`, step 5.7.
 
 ### Switching to an enterprise provider (Entra ID, Okta...)
 
-Only the OIDC-related `.env` variables change — no other file or line of code needs to be touched:
+No line of code needs to change. The client ID goes in `.env`, the client secret in the Docker secret, **never** in `.env`:
 
 ```
+# .env
 OAUTH2_PROXY_CLIENT_ID=<your-provider-client-id>
-OAUTH2_PROXY_CLIENT_SECRET=<your-provider-client-secret>
 ```
 
-and in `oauth2-proxy/oauth2-proxy.cfg`, the issuer URL (`oidc_issuer_url`) pointed to your tenant. Example for Entra ID:
+```bash
+printf '%s' '<your-provider-client-secret>' > ./secrets/oauth2_client_secret.txt
+```
+
+and in `oauth2-proxy/oauth2-proxy.cfg`, the provider (`provider`), the issuer URL (`oidc_issuer_url`) pointed to your tenant and the
+allowed group (`allowed_groups`). Starting without the `lab` profile and outbound access limited to the provider: see `deployment-lab.md`,
+"Real deployment". Example for Entra ID:
 `https://login.microsoftonline.com/<tenant-id>/v2.0`
 
 ## Customization

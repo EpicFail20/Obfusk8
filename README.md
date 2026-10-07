@@ -94,18 +94,26 @@ L'application ne gère jamais elle-même les mots de passe : toute l'authentific
 3. Créez un client OIDC confidentiel, avec comme redirect URI :
    `https://<votre-domaine>/oauth2/callback`
 4. Ajoutez un mapper *Group Membership* → claim `groups` si vous souhaitez restreindre l'accès par groupe.
-5. Récupérez le *client secret* généré, placez-le dans `.env` (`OAUTH2_PROXY_CLIENT_SECRET`).
+5. Récupérez le *client secret* généré et placez-le dans le secret Docker `secrets/oauth2_client_secret.txt`, **jamais** dans `.env`
+   (une variable `OAUTH2_PROXY_CLIENT_SECRET` dans `.env` prendrait le pas sur le secret Docker) ; voir `deploiement-lab.md`, étape 5.7.
 
 ### Basculer vers un fournisseur d'entreprise (Entra ID, Okta...)
 
-Seules les variables `.env` liées à l'OIDC changent — aucun autre fichier ni aucune ligne de code à modifier :
+Aucune ligne de code à modifier. L'identifiant du client va dans `.env`, le secret du client dans le secret Docker, **jamais** dans
+`.env` :
 
 ```
+# .env
 OAUTH2_PROXY_CLIENT_ID=<client-id-de-votre-fournisseur>
-OAUTH2_PROXY_CLIENT_SECRET=<client-secret-de-votre-fournisseur>
 ```
 
-et dans `oauth2-proxy/oauth2-proxy.cfg`, l'URL d'émetteur (`oidc_issuer_url`) pointée vers votre tenant. Exemple pour Entra ID :
+```bash
+printf '%s' '<client-secret-de-votre-fournisseur>' > ./secrets/oauth2_client_secret.txt
+```
+
+et dans `oauth2-proxy/oauth2-proxy.cfg`, le fournisseur (`provider`), l'URL d'émetteur (`oidc_issuer_url`) pointée vers votre tenant et le
+groupe autorisé (`allowed_groups`). Démarrage sans le profil `lab` et accès sortant limité au fournisseur : voir `deploiement-lab.md`,
+« Déploiement réel ». Exemple pour Entra ID :
 `https://login.microsoftonline.com/<tenant-id>/v2.0`
 
 ## Personnalisation
