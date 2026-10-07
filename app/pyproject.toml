@@ -7,7 +7,7 @@
 # reformatted (CLAUDE.md §4: a global reformat would bury the real changes).
 
 [tool.ruff]
-target-version = "py312"
+target-version = "py314"
 line-length = 120
 
 [tool.ruff.lint]
@@ -29,7 +29,7 @@ known-first-party = ["main", "metrics", "supervision", "antivirus", "branding", 
 "**/e2e/*" = ["PLR2004", "RUF001"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 strict = true
 # main.py (existing, untyped) is imported by the tests only; modules from
 # phase 1 on are checked strictly.

@@ -1,0 +1,16 @@
+csv/aucun        reference=123 current=123 lost=0 extended=0 added=0
+csv/compta       reference=123 current=123 lost=0 extended=0 added=0
+csv/it           reference=123 current=123 lost=0 extended=0 added=0
+csv/medical      reference=122 current=122 lost=0 extended=0 added=0
+docx/aucun       reference=123 current=123 lost=0 extended=0 added=0
+docx/compta      reference=123 current=123 lost=0 extended=0 added=0
+docx/it          reference=123 current=123 lost=0 extended=0 added=0
+docx/medical     reference=122 current=122 lost=0 extended=0 added=0
+image/aucun      reference=85 current=85 lost=0 extended=0 added=0
+image/compta     reference=85 current=85 lost=0 extended=0 added=0
+image/it         reference=85 current=85 lost=0 extended=0 added=0
+image/medical    reference=85 current=85 lost=0 extended=0 added=0
+pdf/aucun        reference=132 current=132 lost=0 extended=0 added=0
+pdf/compta       reference=132 current=132 lost=0 extended=0 added=0
+pdf/it           reference=132 current=132 lost=0 extended=0 added=0
+pdf/medical      reference=132 current=132 lost=0 extended=0 added=0

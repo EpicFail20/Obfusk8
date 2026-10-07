@@ -1,10 +1,12 @@
-# Pinned by digest (EXT-01): python:3.12-slim = Python 3.12.15 on Debian 13
-# (trixie), latest 3.12 release (python.org, 2026-09-30). Digest of the tag
-# rebuilt upstream since phase 2 bis (same as 3.12.15-slim), checked on Docker
-# Hub on 2026-10-06 (phase 2 ter). 3.12 kept rather than 3.14 (D-040, D-043):
-# same series as the presidio-analyzer image, no seccomp revalidation of a new
-# interpreter.
-FROM python:3.12-slim@sha256:ddb0207ae1f0356c2b724d740769b0c5f5f51cc54a0525178f721825f78fe74c
+# Pinned by digest (EXT-01): python:3.14.8-slim = Python 3.14.8 on Debian 13
+# (trixie), latest stable Python (python.org, 2026-09-30; 3.15 is a release
+# candidate and excluded by Presidio and the spaCy stack, <3.15), checked on
+# Docker Hub on 2026-10-07. Python phase (D-043 point 5, D-052): app and the
+# analyzer on the same Python, the latest one every dependency supports
+# (cp314 wheels published for all compiled packages); this supersedes the
+# choice of 3.12 in D-040 point 2. The seccomp profile was revalidated on
+# this interpreter (seccomp/README.md).
+FROM python:3.14.8-slim@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2
 
 WORKDIR /app
 

@@ -136,6 +136,24 @@ La production fonctionne **uniquement** parce qu'uvicorn choisit uvloop quand il
 - une mise à jour d'uvicorn, d'uvloop ou d'anyio impose de rejouer la suite et les tests de bout en bout sous `app-enforce.json` ; en cas
   d'échec, suivre la méthode ci-dessus (`app-audit.json`, `dmesg | grep 'audit: type=1326'`) plutôt que d'ajouter `epoll_wait` à l'aveugle.
 
+### Passage à Python 3.14 (phase « Python », 2026-10-07, D-052) : aucun appel système ajouté
+
+Méthode ci-dessus rejouée sur l'image `app` en Python 3.14.8 : `app` sous `app-audit.json` (surcharge Compose hors dépôt,
+`security_opt: !override`), scénarios `e2e_text_api.py` (29/29), `e2e_document_flow.py` (PDF, DOCX, CSV, image, avec et sans thème,
+finalisation et téléchargement), `e2e_availability.py quota` (quota, annulation, refus d'origine), puis redémarrage propre
+(« Application shutdown complete » puis « startup complete »). Journal du noyau (`dmesg -T | grep 'audit: type=1326'`), filtré sur
+la session :
+
+| Syscall | Origine | Décision |
+|---|---|---|
+| `io_uring_setup` (425), `io_uring_enter` (426) | uvloop/libuv, comme en 3.12 | Non ajoutés (repli sur epoll, déjà connu) |
+| `openat2` (437) | `runc:[2:INIT]`, comme en 3.12 | Non ajouté (repli sur `openat`, déjà connu) |
+| **`open` (2)**, **nouveau**, une fois par démarrage de l'interpréteur | Allocateur **mimalloc** intégré à CPython depuis 3.13 : `unix_detect_overcommit()` lit `/proc/sys/vm/overcommit_memory` par `syscall(SYS_open, …)` (`Objects/mimalloc/prim/unix/prim.c`, étiquette v3.14.8). Identifié par l'adresse de l'instruction (fonction `syscall` de la libc, `/proc/<pid>/maps`) et par des démarrages minimaux sous `app-audit.json` : `python -c pass` en 3.14 → 1 `open` ; avec `PYTHONMALLOC=malloc` → 0 ; en 3.12 → 0 | **Non ajouté.** Refusé (`ENOSYS`), mimalloc garde sa valeur par défaut (« overcommit » vrai), identique à ce que donne la valeur du noyau de l'hôte (`0`, surcommission heuristique). L'autre `open` direct de ce fichier (`/dev/urandom`) n'est qu'un repli si `getrandom` manque, or `getrandom` est autorisé |
+
+Confirmé en blocage réel (`app-enforce.json`) : suite complète (`app/run-tests.sh`, 559 tests), puis toute la pile de bout en bout et les
+bancs. Si l'hôte passe un jour en `vm.overcommit_memory=2`, mimalloc ne le saura pas ; l'interpréteur utilise par défaut l'allocateur
+`pymalloc`, pas mimalloc, pour les objets Python (observé : `PYTHONMALLOCSTATS=1` affiche les statistiques de pymalloc) : conséquence attendue nulle, à revoir seulement si `PYTHONMALLOC=mimalloc` était adopté.
+
 ## Historique : prêt pour un passage en blocage réel, à activer manuellement
 
 **Aucun syscall légitime manquant n'a été détecté.** Sur la base de ce qui

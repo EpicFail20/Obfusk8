@@ -1,6 +1,8 @@
 # Hash-locked production dependencies of the app image (EXT-01, phase 2 bis).
-# Regenerated on 2026-10-06 (phase 2 ter, docs/maintenance-dependances.md)
-# from requirements.txt (top-level pins) with:
+# Regenerated on 2026-10-07 for Python 3.14.8 (Python phase, D-052; same
+# versions as on 2026-10-06, only the compiled wheels changed: charset-
+# normalizer, httptools, lxml, pillow, pydantic-core, pyyaml, uvloop,
+# websockets) from requirements.txt (top-level pins) with:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \
 #       -r requirements.txt -c constraints.txt
 # inside the image base (FROM line of the Dockerfile), with pip from
@@ -8,6 +10,8 @@
 # the packages being updated (pinned to their target version), so that an
 # update only moves what it is meant to move; then one line per entry of the
 # report's "install" list: name==version and the SHA-256 of the chosen wheel.
+# The compiled wheels are specific to the Python minor version of the base:
+# changing Python means regenerating this file (docs/maintenance-dependances.md).
 # Deliberate gaps to the latest release: docs/DECISIONS.md (D-043: fastapi).
 # Installed by the Dockerfile with:
 #   pip install --require-hashes --no-deps -r requirements.lock
@@ -20,7 +24,7 @@ anyio==4.15.1 \
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
 charset-normalizer==3.5.2 \
-    --hash=sha256:3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649
+    --hash=sha256:34276fd796040bf0993ab33a369aa572e6979c7aab225a88893667ad8eac8f7a
 click==8.5.0 \
     --hash=sha256:255bc9599cf7748b4b1a446ccc735421bd08a2ae529a8b88597d3de5664ee360
 fastapi==0.141.1 \
@@ -28,21 +32,21 @@ fastapi==0.141.1 \
 h11==0.16.0 \
     --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
 httptools==0.8.0 \
-    --hash=sha256:b15fc622b0f869d19207c4089a501d9bcc63ca5e071ffdd2f03f922df882dcb2
+    --hash=sha256:c4a9f1707e4823d54dfec6c33fa3697d302aed536ed352a7ebb5a061ddb869d0
 idna==3.20 \
     --hash=sha256:ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c
 lxml==6.1.3 \
-    --hash=sha256:909f4e927bb051f7740d6367285fc60cdcfdaf0258c2dba4ff5ba7eadadc250c
+    --hash=sha256:a7eb78ba28b187e1e9203a55c60fcf70df2d22cb205fe6d51b9383d6097419f0
 packaging==26.3 \
     --hash=sha256:d7193f7c8e4e93f444fde0262bf90af30e16fa0ad0ad44cb553c87339b23cd1c
 pillow==12.3.0 \
-    --hash=sha256:78cb2c6865a35ab8ff8b75fd122f6033b92a62c82801110e48ddd6c936a45d91
+    --hash=sha256:251bf95b67017e27b13d82f5b326234ca62d70f9cf4c2b9032de2358a3b12c7b
 prometheus_client==0.26.0 \
     --hash=sha256:fa93d06737aa02bacd05794768508bb97d2fbee28cb3bca04eaae92f0ca953d6
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73
 pydantic_core==2.46.5 \
-    --hash=sha256:0fc5be0abd4a407e200d844b404e33639a554e7bd0d448e7b9ae181be4789ac2
+    --hash=sha256:54d510bac3ee52247af28ed4bb18a1e799f040ac60fd2bf5ccd4c92f1fbe786f
 pymupdf==1.28.2 \
     --hash=sha256:397d6715c1f0df7548a92d0afd8ce370fc48fa47aeefac16be2bc04a16a8227f
 pytesseract==0.3.13 \
@@ -56,7 +60,7 @@ python-icap==0.2.0 \
 python-multipart==0.0.32 \
     --hash=sha256:ff6d3f776f16878c894e52e107296ffc890e913c611b1a4ec6c44e2821fe2e23
 PyYAML==6.0.3 \
-    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+    --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 starlette==1.7.0 \
@@ -70,8 +74,8 @@ urllib3==2.8.0 \
 uvicorn==0.54.0 \
     --hash=sha256:505bdb0f318731d45f1f712071fc781a8981f6847a31c902c9f5e652d4f67faf
 uvloop==0.23.0 \
-    --hash=sha256:090865d8ce7a03986755a3ce711b7dd0d4b44eb14ab74368b717f3fad1180208
+    --hash=sha256:31e0cf90bc8fd88784f6802cdba968a51fb1aec1cc3feec74d862b2d371d1330
 watchfiles==1.3.0 \
     --hash=sha256:b5768b49e426fd5b550b012c866db347cdf15c398ef98dc557b6e6b72fa74cd1
 websockets==17.2 \
-    --hash=sha256:6627b913b8586b1c06db9516b31dd0dfbc621de3bb9312616d92a7e44f268a5b
+    --hash=sha256:42cbca10f82a8b2fb1536e8a0830ca6ceeb6bb3d8d64b766e0795369135654a8

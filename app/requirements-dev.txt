@@ -1,9 +1,10 @@
-# Hash-locked development tools for Python 3.12 (same as the app image).
+# Hash-locked development tools for Python 3.14 (same as the app image).
 # Generated on 2026-10-02 from requirements-dev.in, regenerated on 2026-10-06
 # (phase 2 ter: constraints = the previous versions, updated packages pinned
-# to their target, see docs/maintenance-dependances.md) with:
+# to their target, see docs/maintenance-dependances.md) and on 2026-10-07 for
+# Python 3.14.8 (Python phase, D-052: same versions, compiled wheels changed) with:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json -r requirements-dev.in
-# inside the app image (python:3.12-slim base), then one line per resolved
+# inside the app image base (python:3.14.8-slim), then one line per resolved
 # wheel with its sha256. Install ONLY in an isolated environment:
 #   pip install --require-hashes --no-deps -r requirements-dev.txt
 # NEVER in the production image (CLAUDE.md §4).
@@ -13,14 +14,14 @@ bandit==1.9.4 \
     --hash=sha256:f89ffa663767f5a0585ea075f01020207e966a9c0f2b9ef56a57c7963a3f6f8e
 boolean.py==5.0 \
     --hash=sha256:ef28a70bd43115208441b53a045d1549e2f0ec6e3d08a9d142cbc41c1938e8d9
-cachecontrol==0.14.4 \
+CacheControl==0.14.4 \
     --hash=sha256:b7ac014ff72ee199b5f8af1de29d60239954f223e948196fa3d84adaffc71d2b
 certifi==2026.7.22 \
     --hash=sha256:62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775
 charset-normalizer==3.5.2 \
-    --hash=sha256:3d31298449090ab8d47b7b1b2a555ff73cac7ed438a08b7ac160980c7ebed649
+    --hash=sha256:34276fd796040bf0993ab33a369aa572e6979c7aab225a88893667ad8eac8f7a
 coverage==7.16.2 \
-    --hash=sha256:5375ebd99038021b35e99dc88255022912c06565d316212f4a576e4b08d30f5d
+    --hash=sha256:35f37886699cb9abd29958247d718628d5bc6f39e623dff66a09e546c42a7e03
 cyclonedx-python-lib==11.12.0 \
     --hash=sha256:0e807521a921a5c3cb8ce1153f8a61d29eedfe76a46aac2796b7c6b573391a54
 defusedxml==0.7.1 \
@@ -32,7 +33,7 @@ idna==3.20 \
 iniconfig==2.3.0 \
     --hash=sha256:f631c04d2c48c52b84d0d0549c99ff3859c98df65b3101406327ecc7d53fbf12
 librt==0.16.0 \
-    --hash=sha256:36e53948e99bbe3ffea257124cfcae1cfb01831555c9a9c903c9f9a72db7fd07
+    --hash=sha256:ca8052401c55d7511dda6760719fda7618067e83535d7d0010096d216c34b667
 license-expression==30.4.4 \
     --hash=sha256:421788fdcadb41f049d2dc934ce666626265aeccefddd25e162a26f23bcbf8a4
 markdown-it-py==4.2.0 \
@@ -40,9 +41,9 @@ markdown-it-py==4.2.0 \
 mdurl==0.1.2 \
     --hash=sha256:84008a41e51615a49fc9966191ff91509e3c40b939176e643fd50a5c2196b8f8
 msgpack==1.2.3 \
-    --hash=sha256:ede33b2892ceb976283e009ad12fa1834cfdf1f9c43ee9c97849fc588d00a618
+    --hash=sha256:d8ef3a66e4b52d2d7fdd90df2984670124b2ff7546d76bb25dcf68ef47f7df58
 mypy==2.4.0 \
-    --hash=sha256:29eb0b9427a6b11b992e452f6cceb8af724f4dceb47e779d0b35e405e996ea5e
+    --hash=sha256:20e9a5cd875837520c43db98dea0b6d0c2197833d95c30127d8f570fb9b1f00b
 mypy_extensions==1.1.0 \
     --hash=sha256:1be4cccdb0f2482337c4743e60421de3a356cd97508abadd57d47403e94f5505
 packageurl-python==0.17.6 \
@@ -65,7 +66,7 @@ pluggy==1.6.0 \
     --hash=sha256:e920276dd6813095e9377c0bc5566d94c932c33b27a3e3945d8389c374dd4746
 py-serializable==2.1.0 \
     --hash=sha256:b56d5d686b5a03ba4f4db5e769dc32336e142fc3bd4d68a8c25579ebb0a67304
-pygments==2.21.0 \
+Pygments==2.21.0 \
     --hash=sha256:2363c69b61c4a97c838da3b130dcd6468f4848992b21a82f2a63ec34377137d9
 pyparsing==3.3.3 \
     --hash=sha256:ece8c00a69cf01b45d0b1dedabb469c90d8caf996d4fda40f147627a122849a4
@@ -73,10 +74,10 @@ pytest==9.1.1 \
     --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c
 pytest-cov==7.1.0 \
     --hash=sha256:a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678
-pyyaml==6.0.3 \
-    --hash=sha256:ba1cc08a7ccde2d2ec775841541641e4548226580ab850948cbfda66a1befcdc
+PyYAML==6.0.3 \
+    --hash=sha256:c458b6d084f9b935061bc36216e8a69a7e293a2f1e68bf956dcd9e6cbcd143f5
 regex==2026.9.29 \
-    --hash=sha256:39ab5894d971f9ac68baa6eca5c50387db579cfcacf36ae8df3feceb1815e6d0
+    --hash=sha256:2f7f7aa47b229f2b39a2ae2596d2ad5625d77b5eb9856fac2dab3eb506cdd0a0
 requests==2.34.2 \
     --hash=sha256:2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0
 rich==15.0.0 \
@@ -88,7 +89,7 @@ sortedcontainers==2.4.0 \
 stevedore==5.9.1 \
     --hash=sha256:5c8ff3a9f336cc1a06ac0f597bc79d11a2f950bfd32e290ca56b5a301fafafbf
 tomli==2.4.1 \
-    --hash=sha256:136443dbd7e1dee43c68ac2694fde36b2849865fa258d39bf822c10e8068eac5
+    --hash=sha256:01f520d4f53ef97964a240a035ec2a869fe1a37dde002b57ebc4417a27ccd853
 tomli_w==1.2.0 \
     --hash=sha256:188306098d013b691fcadc011abd66727d3c414c571bb01b1a174ba8c983cf90
 typing_extensions==4.16.0 \
