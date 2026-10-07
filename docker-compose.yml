@@ -469,12 +469,23 @@ services:
       - app-internal
       - backend
     labels:
+      # Sign-in redirect of the document routes: same as oauth2-errors, but
+      # for 401 (no session) ONLY. oauth2-errors (401-403) also rewrote the
+      # application's own 403 (EXT-47, request from another origin, D-048)
+      # into oauth2-proxy's sign-in page, whose Set-Cookie clears the
+      # session: any other site could sign the user out (observed on
+      # 2026-10-07, benchmarks/e2e/e2e_availability.py). A 403 from
+      # oauth2-proxy (account outside allowed_groups) is shown as is.
+      - "traefik.http.middlewares.doc-auth-errors.errors.status=401"
+      - "traefik.http.middlewares.doc-auth-errors.errors.service=auth@docker"
+      - "traefik.http.middlewares.doc-auth-errors.errors.query=/oauth2/sign_in?rd={url}"
+      - "traefik.http.middlewares.doc-auth-errors.errors.statusRewrites.401=302"
       - "traefik.http.routers.app-upload.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api/detect`) || PathPrefix(`/api/finalize`))"
       - "traefik.http.routers.app-upload.entrypoints=websecure"
       - "traefik.http.routers.app-upload.tls=true"
       - "traefik.http.routers.app-upload.priority=100"
       - "traefik.http.routers.app.priority=1"
-      - "traefik.http.routers.app-upload.middlewares=oauth2-errors,oidc-auth,upload-ratelimit,upload-user-ratelimit,upload-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-upload.middlewares=doc-auth-errors,oidc-auth,upload-ratelimit,upload-user-ratelimit,upload-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-upload.service=app"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
@@ -522,7 +533,7 @@ services:
       - "traefik.http.routers.app-preview.entrypoints=websecure"
       - "traefik.http.routers.app-preview.tls=true"
       - "traefik.http.routers.app-preview.priority=100"
-      - "traefik.http.routers.app-preview.middlewares=oauth2-errors,oidc-auth,preview-ratelimit,gateway-secret@file"
+      - "traefik.http.routers.app-preview.middlewares=doc-auth-errors,oidc-auth,preview-ratelimit,gateway-secret@file"
       - "traefik.http.routers.app-preview.service=app"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
