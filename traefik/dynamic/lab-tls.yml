@@ -1,0 +1,16 @@
+# LAB ONLY (D-054 point 2): server certificate signed by the lab CA
+# (traefik/generate-lab-cert.sh), served instead of Traefik's default
+# certificate, which is regenerated at every start and names no service.
+# Without the files (script not run), Traefik logs an error and keeps
+# serving its default certificate. Pilot/production: replace with the
+# establishment's certificate (same keys, other files).
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /etc/traefik/certs/lab-server.pem
+        keyFile: /etc/traefik/certs/lab-server.key
+  options:
+    default:
+      minVersion: VersionTLS12
+      sniStrict: false
