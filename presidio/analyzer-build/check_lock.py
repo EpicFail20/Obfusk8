@@ -20,13 +20,20 @@ recorded at install time (direct_url.json) must be the declared one.
 Run after pip itself is uninstalled. Exits non-zero, failing the build, on
 any difference.
 
-Usage: python3 check_lock.py requirements.lock
+Each further argument "name[extra,...]" also checks the requirements that the
+installed distribution declares for those extras (EXT-60, D-052 point 3):
+`pip check` ignores the requirements of extras, which let gunicorn 26.2.0 in
+although presidio-analyzer[server] declares gunicorn<26.0.0.
+
+Usage: python3 check_lock.py requirements.lock [name[extra,...] ...]
 """
 
 import importlib.metadata
 import json
 import re
 import sys
+
+from packaging.requirements import Requirement
 
 _PINNED = re.compile(r"^([A-Za-z0-9_.-]+)==([^\s\\]+)")
 _DIRECT = re.compile(r"^([A-Za-z0-9_.-]+) @ (\S+)-([^-]+)-py3-none-any\.whl")
@@ -65,7 +72,24 @@ def _installed_sha256(name: str) -> str | None:
     return hashes.get("sha256")
 
 
-def main(lock_path: str) -> int:
+def _extra_errors(spec: str, installed: dict[str, str]) -> list[str]:
+    """Requirements of the distribution `spec` names, for its extras, that the
+    installed versions do not satisfy (markers evaluated for each extra)."""
+    wanted = Requirement(spec)
+    errors: list[str] = []
+    for raw in importlib.metadata.requires(wanted.name) or []:
+        req = Requirement(raw)
+        if req.marker is not None and not any(req.marker.evaluate({"extra": e}) for e in wanted.extras or {""}):
+            continue
+        version = installed.get(_canonical(req.name))
+        if version is None:
+            errors.append(f"requirement: {spec} requires {req.name}{req.specifier}, not installed")
+        elif not req.specifier.contains(version, prereleases=True):
+            errors.append(f"requirement: {spec} requires {req.name}{req.specifier}, installed {version}")
+    return errors
+
+
+def main(lock_path: str, extras: tuple[str, ...] = ()) -> int:
     with open(lock_path, encoding="utf-8") as lock:
         versions, direct = _declared(lock.read())
     installed = {_canonical(d.metadata["Name"]): d.version for d in importlib.metadata.distributions()}
@@ -81,6 +105,8 @@ def main(lock_path: str) -> int:
         for n, digest in sorted(direct.items())
         if n in installed and _installed_sha256(n) != digest
     ]
+    for spec in extras:
+        errors += _extra_errors(spec, installed)
     for error in errors:
         print(f"check_lock: {error}", file=sys.stderr)
     if not errors:
@@ -89,4 +115,4 @@ def main(lock_path: str) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1]))
+    sys.exit(main(sys.argv[1], tuple(sys.argv[2:])))

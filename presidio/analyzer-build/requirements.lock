@@ -1,24 +1,24 @@
 # Full hash-locked Python environment of the analyzer image (D-043 point 3,
-# phase 2 ter). Every distribution of the final image is declared here (the
-# build fails otherwise, check_lock.py), installed over the digest-pinned
-# Presidio base with:
+# phase 2 ter; rebuilt on our own Python base in the Python phase, D-052).
+# Every distribution of the image is declared here (the build fails
+# otherwise, check_lock.py) and installed, every entry hash-checked, on the
+# digest-pinned Python base of the Dockerfile with:
 #   pip install --require-hashes --no-deps -r requirements.lock
-# Limit until the next phase (D-043 point 5): pip only downloads, and so only
-# hash-checks, the entries whose version differs from the base; entries at
-# the base's version are the files of the digest-pinned base image (upstream
-# uv.lock). The next phase rebuilds the analyzer on a pinned Python base from
-# this lock, every entry then being hash-checked.
+# The compiled wheels are specific to the Python minor version of that base:
+# changing Python means regenerating this file (docs/maintenance-dependances.md).
 #
-# Generated on 2026-10-06 (docs/maintenance-dependances.md) inside the base
-# image (FROM line of the Dockerfile), with pip from requirements-build.txt:
+# Generated on 2026-10-07 inside the Dockerfile's base image, with pip from
+# requirements-build.txt:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \
 #       -r names.txt -c constraints.txt
-# names.txt = every distribution of the previous image except the two models;
-# constraints.txt = their versions, the packages being updated pinned to their
-# target version. The resolution must return exactly the constrained set.
-# Capped by their dependents: numpy (presidio-analyzer: <2.5.0) and thinc
-# (spacy 3.8: <8.4.0). gunicorn: 26.2.0 is the latest release on PyPI
-# (26.2.1 and 26.2.2 are GitHub releases only on 2026-10-06).
+# names.txt = every entry of this file except the two models; constraints.txt =
+# their versions. The resolution must return exactly the constrained set.
+# presidio-analyzer: the library itself, from its PyPI wheel (same 179 files as
+# the code of the upstream image 2.2.364, D-052 point 1); its REST server files
+# are in server/. Capped by their dependents: numpy (presidio-analyzer:
+# <2.5.0), thinc (spacy 3.8: <8.4.0), gunicorn (presidio-analyzer[server]:
+# <26.0.0, EXT-60, D-052 point 3: 25.3.0, latest 25.x, no OSV advisory on
+# 2026-10-07).
 annotated-doc==0.0.5 \
     --hash=sha256:117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101
 annotated-types==0.8.0 \
@@ -47,8 +47,8 @@ filelock==4.0.12 \
     --hash=sha256:5f17ee83ecee8a6f3e389c75822fb70a1c2f0506b99438a6dffa1d56793588c8
 Flask==3.1.3 \
     --hash=sha256:f4bcbefc124291925f1a26446da31a5178f9483862233b23c0c96a20701f670c
-gunicorn==26.2.0 \
-    --hash=sha256:bd249d0b3f7972f7432f0a6b6ff3b3ee2d129f70cd1ff6c09a9dd9e29a2b88e3
+gunicorn==25.3.0 \
+    --hash=sha256:cacea387dab08cd6776501621c295a904fe8e3b7aae9a1a3cbb26f4e7ed54660
 h11==0.16.0 \
     --hash=sha256:63cf8bbe7522de3bf65932fda1d9c2772064ffb3dae62d55932da54b31cb6c86
 httpcore==1.0.9 \
@@ -77,6 +77,8 @@ phonenumbers==9.0.40 \
     --hash=sha256:189c028c4acd41ee80782e50f74a91260bd76d9115c83be94302509e1cdb5e84
 preshed==3.0.13 \
     --hash=sha256:8b8de3f58043070a354477995acdd98626ce43e4193c708ebd0f694e467f5155
+presidio_analyzer==2.2.364 \
+    --hash=sha256:0a9eeb60ccc416c505367b4989d056becb84ef082703ee3361c046fb75941739
 pydantic==2.13.5 \
     --hash=sha256:346a034f080da3755d8e9cb5e00e8b07de1d39e4f6e2c87d8ab7cafa0b269a73
 pydantic_core==2.46.5 \
@@ -129,10 +131,14 @@ Werkzeug==3.1.9 \
     --hash=sha256:6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab
 wrapt==2.5.0 \
     --hash=sha256:0cabb9c17ab79b2549d1f23b36f436473ad9253ef53995a817feba26fae69d5b
-# spaCy models: not on PyPI, GitHub release assets of explosion/spacy-models.
-# fr_core_news_md 3.8.0 is the only release for spaCy 3.8; en_core_web_lg
-# comes with the base image (same artifact: its direct_url.json records this
-# SHA-256). check_lock.py compares the recorded SHA-256 of both models.
+# spaCy models: not on PyPI, GitHub release assets of explosion/spacy-models
+# (fr_core_news_md 3.8.0 is the only release for spaCy 3.8). pip downloads
+# them and rejects any other file; check_lock.py compares the SHA-256 recorded
+# at install time. Limit (D-052 point 8): GitHub publishes no digest for these
+# assets, so the hashes only prove "same files as before": en_core_web_lg's is
+# the one recorded by the upstream Presidio image (direct_url.json),
+# fr_core_news_md's the one of our phase 2 bis install; the installed model
+# files were checked byte for byte against the previous image (Python phase).
 en_core_web_lg @ https://github.com/explosion/spacy-models/releases/download/en_core_web_lg-3.8.0/en_core_web_lg-3.8.0-py3-none-any.whl \
     --hash=sha256:293e9547a655b25499198ab15a525b05b9407a75f10255e405e8c3854329ab63
 fr_core_news_md @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl \

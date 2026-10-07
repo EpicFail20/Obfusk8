@@ -18,7 +18,10 @@ rather than by raw text insertion (sed) which proved fragile with the
 """
 import yaml
 
-PATH = "/app/presidio_analyzer/conf/default_recognizers.yaml"
+# Copy of the package's default_recognizers.yaml, made by the Dockerfile
+# (Python phase, D-052 point 1: Presidio is an installed distribution, our
+# effective configuration lives in /app/conf).
+PATH = "/app/conf/default_recognizers.yaml"
 
 with open(PATH, encoding="utf-8") as f:
     data = yaml.safe_load(f)

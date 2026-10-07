@@ -1,5 +1,6 @@
 {
   "presidio_analyzer": "2.2.364",
   "spacy": "3.8.16",
-  "fr_core_news_md": "3.8.0"
+  "fr_core_news_md": "3.8.0",
+  "python": "3.12.15"
 }

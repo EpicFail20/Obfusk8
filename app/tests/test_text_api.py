@@ -300,13 +300,14 @@ def test_empreinte_de_configuration_stable_et_sensible(audit_dir, extension_dir)
         {"normalization": 2, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.0"}},
         {"normalization": 1, "pipeline": 2, "analyzer": {"presidio_analyzer": "0.0.0"}},
         {"normalization": 1, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.1"}},
+        {"normalization": 1, "pipeline": 1, "analyzer": {"presidio_analyzer": "0.0.0", "python": "3.14.8"}},
     ],
-    ids=["normalisation", "chaine", "analyseur"],
+    ids=["normalisation", "chaine", "analyseur", "interpreteur"],
 )
 def test_empreinte_sensible_aux_versions_de_detection(audit_dir, extension_dir, versions):
     """D-030 and phase 2 bis step G: a change of the normalization, of another
-    detection step of the code, or of the analyzer (Presidio, spaCy, model)
-    changes detection_config even when no theme or recognizer changed."""
+    detection step of the code, or of the analyzer (Presidio, spaCy, model,
+    Python interpreter, D-052 point 4) changes detection_config even when no theme or recognizer changed."""
     base = _deps(audit_dir, extension_dir, _regex_detector({}))
     changed = _deps(audit_dir, extension_dir, _regex_detector({}), detection_versions=versions)
     assert text_api.detection_config_fingerprint(base, []) != text_api.detection_config_fingerprint(changed, [])
@@ -319,7 +320,9 @@ def test_versions_de_detection_de_l_application():
     assert versions["normalization"] == text_normalization.NORMALIZATION_VERSION
     assert versions["pipeline"] == main.DETECTION_PIPELINE_VERSION
     analyzer = versions["analyzer"]
-    assert set(analyzer) == {"presidio_analyzer", "spacy", "fr_core_news_md"}
+    # The interpreter of the analyzer enters the fingerprint (D-052 point 4):
+    # it can change detection (Unicode database 15.0 in Python 3.12, 16.0 in 3.14).
+    assert set(analyzer) == {"presidio_analyzer", "spacy", "fr_core_news_md", "python"}
     assert all(re.fullmatch(r"\d+\.\d+\.\d+", v) for v in analyzer.values())
 
 

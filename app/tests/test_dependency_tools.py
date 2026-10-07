@@ -251,3 +251,62 @@ def test_modele_sans_direct_url(
     code, output = _run(monkeypatch, tmp_path, capsys, dists)
     assert code == 1
     assert "sha256: fr-core-news-md" in output
+
+
+# --- check_lock.py: requirements of an installed extra (EXT-60, D-052 point 3) --
+# `pip check` ignores the requirements of extras: presidio-analyzer[server]
+# declares gunicorn<26.0.0, and gunicorn 26.2.0 was installed in phase 2 ter
+# without any check failing. check_lock.py checks the extras it is given.
+
+_PRESIDIO_REQUIRES = [
+    "numpy (>=1.19.0,<2.5.0)",
+    'gunicorn (>=20.0.0,<26.0.0) ; (platform_system != "Windows") and (extra == "server")',
+    'flask (>=1.1,<4.0.0) ; extra == "server"',
+    'stanza (>=1.11.1,<2.0.0) ; extra == "stanza"',
+]
+
+
+def _run_extra(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str], installed: dict[str, str]
+) -> tuple[list[str], str]:
+    monkeypatch.setattr(check_lock.importlib.metadata, "requires", lambda name: _PRESIDIO_REQUIRES)
+    errors = check_lock._extra_errors("presidio-analyzer[server]", installed)
+    return errors, capsys.readouterr().out
+
+
+def test_extra_conforme(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    errors, _ = _run_extra(monkeypatch, capsys, {"numpy": "2.4.6", "gunicorn": "25.3.0", "flask": "3.1.3"})
+    assert errors == []
+
+
+def test_extra_version_hors_contrainte(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    errors, _ = _run_extra(monkeypatch, capsys, {"numpy": "2.4.6", "gunicorn": "26.2.0", "flask": "3.1.3"})
+    assert errors == ["requirement: presidio-analyzer[server] requires gunicorn<26.0.0,>=20.0.0, installed 26.2.0"]
+
+
+def test_extra_dependance_absente(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    errors, _ = _run_extra(monkeypatch, capsys, {"numpy": "2.4.6", "gunicorn": "25.3.0"})
+    assert errors == ["requirement: presidio-analyzer[server] requires flask<4.0.0,>=1.1, not installed"]
+
+
+def test_extra_d_un_autre_extra_ignore(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]) -> None:
+    # stanza belongs to the "stanza" extra, not installed: never required.
+    errors, _ = _run_extra(monkeypatch, capsys, {"numpy": "2.5.0", "gunicorn": "25.3.0", "flask": "3.1.3"})
+    assert errors == ["requirement: presidio-analyzer[server] requires numpy<2.5.0,>=1.19.0, installed 2.5.0"]
+
+
+def test_point_d_entree_avec_extra(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    dists = [_Dist("alpha", "1.0"), _Dist("beta-pkg", "2.0"), _model("b" * 64)]
+    monkeypatch.setattr(check_lock.importlib.metadata, "requires", lambda name: ['alpha (<1.0) ; extra == "server"'])
+    lock = tmp_path / "requirements.lock"
+    lock.write_text(_LOCK, encoding="utf-8")
+    monkeypatch.setattr(check_lock.importlib.metadata, "distributions", lambda: dists)
+    by_name = {check_lock._canonical(d.metadata["Name"]): d for d in dists}
+    monkeypatch.setattr(check_lock.importlib.metadata, "distribution", lambda n: by_name[check_lock._canonical(n)])
+    monkeypatch.setattr(sys, "argv", ["check_lock.py", str(lock), "beta-pkg[server]"])
+    with pytest.raises(SystemExit) as exit_info:
+        runpy.run_path(str(check_lock.__file__), run_name="__main__")
+    assert exit_info.value.code == 1
+    assert "requirement: beta-pkg[server] requires alpha<1.0, installed 1.0" in capsys.readouterr().err
