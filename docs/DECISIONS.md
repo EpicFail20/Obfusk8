@@ -522,8 +522,8 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
    poussée et nouveau test manuel (D-044 point 6 ; la pile actuelle est en 2 bis, voir A).
 2. **EXT-51** : phase dédiée (D-044 point 3, proposition du compte rendu 2 ter §12), avec **EXT-47** (403 pour une tâche sans identité).
 3. **Exposition de Keycloak** : EXT-54 et EXT-55, choix B2 ou B4 ci-dessus.
-4. **Fournisseur d'identité du pilote** : Keycloak en mode production (TLS, base persistante autre que H2 de développement, administrateur
-   permanent à la place du compte d'amorçage) ou Entra ID ; PKCE S256 conservé (EXT-49).
+4. **Fournisseur d'identité du pilote** (décision humaine du 2026-10-07, D-046) : brancher oauth2-proxy sur le fournisseur d'identité de
+   l'établissement, avec un accès sortant dédié et limité à ce fournisseur ; PKCE S256 conservé (EXT-49).
 5. **Comptes** : comptes de test supprimés de Keycloak (D-044 point 4, EXT-53) ; comptes pilotes nominatifs avec adresse de courriel
    vérifiée (EXT-43 : sans courriel, oauth2-proxy répond 500).
 6. **Données** : pentest externe avant toute donnée réelle (D-021, `CLAUDE.md` §8.3). Sans pentest, pilote sur données synthétiques
@@ -543,3 +543,18 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 13. **API texte** : reste désactivée (`ENABLE_EXTENSION_API=false`, D-041 point 1) sauf si le pilote inclut l'extension (phase 3).
 14. **Licence** (EXT-05) : à régler avant toute distribution.
 15. **GitHub Actions** : environnement `publication` créé avec ses protections avant toute réactivation (D-042).
+
+## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
+
+- **Contexte** : D-045 §B et §C point 4 laissaient ouvert le fournisseur d'identité du pilote (Keycloak en mode production ou Entra ID).
+  Keycloak est aujourd'hui exposé sur toutes les interfaces en mode développement (EXT-54) et dispose d'un accès sortant (EXT-55).
+- **Décision** : Keycloak est un composant de **laboratoire uniquement**. Le pilote et toute production utiliseront le **fournisseur
+  d'identité de l'établissement**, branché sur oauth2-proxy.
+- **Alternatives écartées** : Keycloak en mode production comme fournisseur du pilote (D-045 §B2 et §C point 4).
+- **Conséquences, à traiter dans la prochaine phase** (rien n'est commencé) :
+  1. Keycloak passe dans un profil Docker Compose `lab`, non démarré par défaut ;
+  2. Keycloak ne dispose plus d'aucun accès sortant vers Internet ;
+  3. la documentation FR/EN distingue clairement le déploiement de laboratoire (avec Keycloak) du déploiement réel (fournisseur d'identité
+     externe), et avertit que le Keycloak de laboratoire tourne en mode développement et ne doit jamais servir en production.
+- **D-045 §C point 4** remplacé en conséquence : « brancher oauth2-proxy sur le fournisseur d'identité de l'établissement, avec un accès
+  sortant dédié et limité à ce fournisseur ».
