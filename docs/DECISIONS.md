@@ -535,6 +535,8 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 6. **Données** : pentest externe avant toute donnée réelle (D-021, `CLAUDE.md` §8.3). Sans pentest, pilote sur données synthétiques
    seulement.
 7. **Certificats TLS de Traefik** : nature (auto-signé ou non), noms couverts et échéance **non vérifiés** dans cette session.
+   *Mise à jour du 2026-10-07 (phase 3, EXT-62) : vérifié ; Traefik servait son certificat par défaut, régénéré à chaque démarrage.
+   Laboratoire : autorité restreinte à `.lab.local` (D-054 point 2). Pilote : certificat de l'établissement, à fournir.*
 
 **À traiter avant le pilote, non bloquants pour un pilote restreint sur données synthétiques**
 
@@ -741,3 +743,28 @@ sur les POST, absent sur les GET ; observé dans Chromium de Playwright 1.63.0) 
 
 **Non tranché par la décision** (recommandation de l'étape A appliquée, à confirmer au compte rendu) : durée de vie maximale de la
 correspondance 60 min par défaut (égale à `cookie_expire`), copie du texte restauré autorisée avec avertissement ; TypeScript 7.0.2.
+
+## D-055 — Mise en œuvre de la phase 3 côté serveur — décisions de la session du 2026-10-07 (à valider par l'humain)
+
+1. **Règle d'origine** (D-054 point 6) : comparaison exacte de la valeur d'`Origin` (Chrome envoie des minuscules, sans barre finale) ;
+   plusieurs en-têtes `Origin` : refus ; contrôle **après** l'identité (D-035), pour que la ligne d'audit porte l'utilisateur, et
+   **avant** toute lecture du corps ; format de la liste vérifié au démarrage (`chrome-extension://[a-p]{32}`), entrée invalide =
+   échec du démarrage (`TextApiConfigError`), liste vide avec l'API activée = avertissement au démarrage. Écarté : refuser aussi le
+   `GET /version` sans origine (Chrome n'en envoie pas, observé : l'extension ne pourrait plus vérifier la version).
+2. **Banc de tests modifié** : `_call`/`_app` (`test_text_api.py`) envoient et autorisent l'origine d'une extension fictive ; deux tests
+   qui construisaient leurs propres paramètres (`test_chemin_reel_de_detection_de_main`, `test_normalization_integration.py`) reçoivent
+   la même origine. Ces tests n'étaient pas faux : ils décrivent une requête légitime, qui porte désormais une origine (même démarche
+   que `tests/doc_headers.py` pour D-048).
+3. **Bancs** : origine envoyée par requête (`TEXT_API_HEADERS`), la session gardant l'origine de l'application pour les routes de
+   documents ; défaut = extension du laboratoire (identifiant stable), réglable par `BENCH_EXTENSION_ORIGIN`.
+4. **Certificat du laboratoire** (D-054 point 2) : autorité EC P-256, `pathLen:0`, 730 jours, `nameConstraints` critique
+   (`.lab.local` et `lab.local`) ; certificat serveur EC P-256, 397 jours (sous la limite de 398 jours des navigateurs), seul nom
+   `APP_DOMAIN` ; servi comme certificat par défaut de Traefik (`traefik/dynamic/lab-tls.yml`, rechargé sans redémarrage). Clé du
+   serveur en 644 dans `traefik/certs/` (parent `traefik/` en 700), même convention que `gateway-secret.yml` : Traefik tourne sans
+   `CAP_DAC_OVERRIDE`. `traefik/certs/` (créé par Docker, propriété de root) passé à l'utilisateur `debian` (`sudo chown`, une fois).
+   Écarté : clé `root:root` en 600 (exigerait `sudo` à chaque renouvellement).
+5. **Collecteur de conformité** : un fil par compte de test qui se connecte (le compte n° 4 échoue, EXT-63) ; sortie refusée dans le
+   dépôt (elle reprend les textes du corpus) ; tous les thèmes ; jeu indépendant (D-038) inclus s'il est présent (absent de la VM).
+6. **Retour arrière** : images d'avant la phase étiquetées `obfusk8-local:avant-phase3-app` et `-presidio-analyzer` (l'analyseur n'est
+   pas reconstruit). `.env` du laboratoire : `ENABLE_EXTENSION_API=true`, `EXTENSION_ALLOWED_ORIGINS=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa`.
+

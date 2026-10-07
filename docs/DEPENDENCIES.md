@@ -234,3 +234,19 @@ aucun ajouté (`open` de mimalloc, refusé sans effet, `seccomp/README.md`).
 |---|---|---|---|---|
 | app 0.2.0-dev (Python 3.14.8) | 0 | 76 HIGH, 1 CRITICAL | 544 Mo (541 avant) | Inchangé (paquets Debian, EXT-33) |
 | analyseur 0.2.0-dev (Python 3.14.8) | 0 | 44 HIGH | 1,63 Go (2,03 avant) | 52 avant (curl retiré, base Python différente ; écart non ventilé) |
+
+## Phase 3 — prototype de l'extension (2026-10-07)
+
+**Aucune dépendance de production ajoutée ni modifiée** (`app/requirements.lock`, `presidio/analyzer-build/requirements.lock`
+inchangés). L'image `app` est reconstruite pour le seul code (`text_api.py`, i18n) : trivy 0.75.0 identique à l'image d'avant
+(76 HIGH, 1 CRITICAL, **0 corrigeable**, paquets Debian, EXT-33).
+
+Outils utilisés hors des images, en conteneurs jetables (jamais dans le dépôt serveur) :
+
+| Outil | Version | Épinglage | Rôle |
+|---|---|---|---|
+| `mcr.microsoft.com/playwright:v1.63.0-noble` | 1.63.0 (dernière, registre de Microsoft, 2026-10-07) | `sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27` | Prototype jetable de l'option 3, contrainte de noms de l'autorité du laboratoire, tests de l'extension |
+| `libnss3-tools` (Ubuntu noble, `apt` dans le conteneur jetable) | version du dépôt Ubuntu au moment du test | non épinglé (outil de test éphémère) | `certutil` : autorité du laboratoire dans le magasin NSS de Chromium |
+| OpenSSL de l'hôte | 3.5.7 | Debian | `traefik/generate-lab-cert.sh` |
+
+Les dépendances de l'extension (TypeScript, Biome, Playwright…) sont tracées dans son dépôt (`obfusk8-extension/docs/DEPENDENCIES.md`).
