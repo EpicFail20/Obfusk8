@@ -47,7 +47,7 @@ from obfusk8_client import HTTP_OK, TextApi, login, read_accounts  # noqa: E402
 
 # Edge cases of the local port of D-004 (positions, numbering, merge).
 CRAFTED = [
-    "😀 Camille Martin 👩‍💻 appelle Camille Martin au 06 12 34 56 78.",
+    "😀 Camille Martin 👩\u200d💻 appelle Camille Martin au 06 12 34 56 78.",
     "Voir ⟦PERSON_1⟧ et ⟦PERSON_2⟧ : Camille Martin rencontre Jean Dupont.",
     "token=ghp_" + "A" * 36 + " pour camille.martin@exemple.invalid",
     "Patient Élodie Lefèvre, NIR 1 84 12 75 123 456 78, IBAN FR76 3000 6000 0112 3456 7890 189.",
