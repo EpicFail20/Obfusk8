@@ -551,6 +551,8 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 15. **GitHub Actions** : environnement `publication` créé avec ses protections avant toute réactivation (D-042).
 16. **Secrets neufs** (D-049) : le pilote est une nouvelle installation avec des secrets générés pour lui ; aucun secret du
     laboratoire (passerelle, comptes de test, Keycloak, oauth2-proxy) n'est réutilisé.
+17. **Dimensionner `MAX_PENDING_JOBS`** (D-051, EXT-59) selon le nombre d'utilisateurs du pilote, après mesure de la mémoire de `app` :
+    les documents en attente de révision sont gardés en mémoire (original complet par document), limite du conteneur 1 Go.
 
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
@@ -637,3 +639,16 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
    manuel). Plafond de corps 10 Mio (import partiel de royaume, supposé suffisant).
 6. **Client des bancs** : `BENCH_RESOLVE_ADDRESS` (la pile n'écoute plus sur 127.0.0.1 depuis D-047) ; la session porte l'`Origin` de
    l'application une fois connectée, jamais envoyée à Keycloak.
+
+## D-051 — Décisions sur le compte rendu de la phase « disponibilité » — décision humaine du 2026-10-07
+
+1. **D-050 validée**, y compris le correctif d'EXT-57 (`doc-auth-errors`).
+2. **EXT-59 : risque accepté (🟡) pour le pilote** : comptes authentifiés et tracés. Ajouté à D-045 §C (point 17) : dimensionner
+   `MAX_PENDING_JOBS` selon le nombre d'utilisateurs du pilote, après mesure de la mémoire de `app` (documents en attente en mémoire,
+   limite 1 Go).
+3. **EXT-54 : risque accepté (🟡)**, Keycloak étant réservé au laboratoire (D-046).
+4. **EXT-58 corrigé** : README FR/EN cohérent avec le guide de déploiement (aucun secret dans `.env`), commit dédié (`f64adb9`).
+5. **`CLAUDE.md`** : diff relu par l'humain avant application, avec une règle ajoutée : un nouveau module Python est autorisé, avec une
+   ligne `COPY` explicite dans `app/Dockerfile`, sans demander d'accord ; plus de nouveau code dans `main.py` quand il forme un ensemble
+   cohérent (lève la contrainte de D-050 point 1 pour les phases suivantes).
+6. **Suite** : l'humain suit la procédure de test manuel (`docs/phase-disponibilite-report.md` §9), puis fait la fusion et le push.
