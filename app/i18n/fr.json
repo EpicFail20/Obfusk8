@@ -136,5 +136,6 @@
   "text_api_timeout": "L'analyse a dépassé le délai maximal autorisé ({max_seconds} s). Réessayez dans un instant.",
   "text_api_analyzer_unavailable": "Moteur d'analyse indisponible. Réessayez plus tard.",
   "text_api_internal_error": "Erreur interne inattendue. Communiquez l'identifiant de requête à l'administrateur.",
-  "text_api_identity_missing": "Identité de l'utilisateur absente : accès refusé. Reconnectez-vous ; si le problème persiste, communiquez l'identifiant de requête à l'administrateur."
+  "text_api_identity_missing": "Identité de l'utilisateur absente : accès refusé. Reconnectez-vous ; si le problème persiste, communiquez l'identifiant de requête à l'administrateur.",
+  "text_api_origin_refused": "Requête refusée : cette extension n'est pas autorisée sur ce serveur. Communiquez l'identifiant de requête à l'administrateur."
 }

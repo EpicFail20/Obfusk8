@@ -117,6 +117,12 @@ _PRIORITY_TYPE = "SECRET"
 # a shared or empty identity.
 _IDENTITY_HEADERS = ("x-auth-request-user", "x-auth-request-email")
 
+# Phase 3 (D-054 point 6): Origin of an allowed browser extension. Chrome's
+# extension ids are 32 letters a-p (base-16 digits of a SHA-256, shifted to
+# letters). Firefox's moz-extension:// origin is per installation and cannot
+# be listed: it comes with option 2 of D-010 (tokens), not here.
+_EXTENSION_ORIGIN = re.compile(r"chrome-extension://[a-p]{32}")
+
 
 class TextApiConfigError(RuntimeError):
     """Invalid configuration — raised at startup, never per request."""
@@ -145,6 +151,19 @@ def _env_positive(env: Mapping[str, str], name: str, default: int) -> int:
     return value
 
 
+def _env_origins(env: Mapping[str, str], name: str) -> frozenset[str]:
+    """Comma-separated chrome-extension://<id> origins; empty or unset: none.
+    Any malformed entry fails startup rather than being skipped: a typo must
+    not silently lock the extension out, nor widen anything."""
+    raw = env.get(name, "")
+    if raw.strip() == "":
+        return frozenset()
+    origins = [part.strip() for part in raw.split(",")]
+    if not all(_EXTENSION_ORIGIN.fullmatch(origin) for origin in origins):
+        raise TextApiConfigError(f"{name} must list chrome-extension://<32 letters a-p> origins, comma-separated")
+    return frozenset(origins)
+
+
 @dataclass(frozen=True)
 class TextApiSettings:
     """Environment configuration. Defaults and their measurements:
@@ -155,6 +174,11 @@ class TextApiSettings:
     max_analysis_seconds: int = 10
     max_concurrency: int = 1
     max_queue: int = 8
+    # Origins (chrome-extension://<id>) allowed on /api/v1/ — none by
+    # default. The session cookie (option 3 of D-010) rides along with any
+    # request of any extension that holds a host permission on the server:
+    # this list keeps the API to the obfusk8 extension (D-054 point 6).
+    allowed_origins: frozenset[str] = frozenset()
 
     @property
     def max_body_bytes(self) -> int:
@@ -171,6 +195,7 @@ class TextApiSettings:
             max_analysis_seconds=_env_positive(source, "MAX_TEXT_ANALYSIS_SECONDS", cls.max_analysis_seconds),
             max_concurrency=_env_positive(source, "MAX_TEXT_CONCURRENCY", cls.max_concurrency),
             max_queue=_env_positive(source, "MAX_TEXT_QUEUE", cls.max_queue),
+            allowed_origins=_env_origins(source, "EXTENSION_ALLOWED_ORIGINS"),
         )
 
 
@@ -373,6 +398,17 @@ def has_identity(request: Request) -> bool:
     return True
 
 
+def origin_allowed(request: Request, allowed: frozenset[str], *, required: bool) -> bool:
+    """D-054 point 6. Chrome sends `Origin: chrome-extension://<id>` on a POST
+    from an extension page and none on a GET (observed on 2026-10-07). An
+    origin, when present, must be in the list (exact match); `required`
+    (POST) refuses an absent one. Several Origin headers: refused."""
+    values = request.headers.getlist("origin")
+    if not values:
+        return not required
+    return len(values) == 1 and values[0] in allowed
+
+
 class ApiError(Exception):
     """A client-facing error: closed `outcome` category, i18n key."""
 
@@ -460,7 +496,8 @@ class _TextApi:
         self.recognizers_fingerprint: str | None = None
         log.info(
             "API texte activée : MAX_TEXT_CHARS=%d, plafond de corps=%d octets, délai=%ds, "
-            "concurrence=%d, file=%d, %d reconnaisseur(s) propre(s), configuration=%s",
+            "concurrence=%d, file=%d, %d reconnaisseur(s) propre(s), configuration=%s, "
+            "%d origine(s) d'extension autorisée(s)",
             settings.max_text_chars,
             settings.max_body_bytes,
             settings.max_analysis_seconds,
@@ -468,7 +505,10 @@ class _TextApi:
             settings.max_queue,
             len(self.extension_recognizers),
             self.fingerprint,
+            len(settings.allowed_origins),
         )
+        if not settings.allowed_origins:
+            log.warning("EXTENSION_ALLOWED_ORIGINS vide : toute analyse ou pseudonymisation sera refusée (403, D-054)")
 
     # --- helpers -----------------------------------------------------------
 
@@ -650,6 +690,8 @@ class _TextApi:
         try:
             if not has_identity(request):
                 raise ApiError(403, "forbidden", "text_api_identity_missing")
+            if not origin_allowed(request, self.settings.allowed_origins, required=True):
+                raise ApiError(403, "origin_refused", "text_api_origin_refused")
             payload, theme = await self._parse(request, outcome)
             spans = await self._detect(payload.text, theme)
             outcome.entities = Counter(span.entity_type for span in spans)
@@ -724,6 +766,8 @@ class _TextApi:
         request_id = uuid.uuid4().hex
         if not has_identity(request):
             return self._error_response(ApiError(403, "forbidden", "text_api_identity_missing"), request_id)
+        if not origin_allowed(request, self.settings.allowed_origins, required=False):
+            return self._error_response(ApiError(403, "origin_refused", "text_api_origin_refused"), request_id)
         if self.recognizers_fingerprint is None:
             self.recognizers_fingerprint = await anyio.to_thread.run_sync(self._fetch_recognizers_fingerprint)
         body = VersionResponse(

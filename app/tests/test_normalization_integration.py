@@ -38,7 +38,7 @@ import main
 import text_api
 from tests.doc_headers import doc_headers
 from tests.test_main_units import _drive, _FakeRequest, _SyncUpload
-from tests.test_text_api import _post
+from tests.test_text_api import EXT_ORIGIN, _post
 
 NAME = "Camille Martin"
 VARIANTS = {
@@ -228,7 +228,9 @@ def test_api_texte_positions_et_utf16_sur_le_texte_recu(audit_dir, monkeypatch, 
     monkeypatch.setattr(main, "_analyze_text", _fake_analyzer())
     monkeypatch.setattr(main, "AUDIT_DIR", audit_dir)
     app = FastAPI()
-    app.include_router(main._build_text_api_router(text_api.TextApiSettings(enabled=True)))
+    app.include_router(
+        main._build_text_api_router(text_api.TextApiSettings(enabled=True, allowed_origins=frozenset({EXT_ORIGIN})))
+    )
     text = f"{prefix}Bonjour Camille\u200b Martin \U0001f600 et Cam\u00adille Martin."
     status, _, body, _ = _post(app, "/api/v1/text/analyze", {"text": text})
     assert status == 200, body

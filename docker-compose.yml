@@ -428,6 +428,12 @@ services:
       # ENABLE_EXTENSION_API: false (default) = the /api/v1/ routes do not
       # exist (404), the document flow is strictly unchanged.
       - ENABLE_EXTENSION_API=${ENABLE_EXTENSION_API:-false}
+      # EXTENSION_ALLOWED_ORIGINS (phase 3, D-054): comma-separated
+      # chrome-extension://<id> origins allowed on /api/v1/. Empty (default)
+      # = every analysis/pseudonymization refused (403). With the session
+      # cookie, any other extension holding a host permission on the server
+      # could otherwise call the API as the user. Malformed entry = startup fails.
+      - EXTENSION_ALLOWED_ORIGINS=${EXTENSION_ALLOWED_ORIGINS:-}
       # MAX_TEXT_CHARS: measured on this VM (analyzer alone): 0.71 s at
       # 20000 characters, 2.7 s at 50000 — the analyzer has ONE worker shared
       # with the document flow. If changed, recompute the text-bodylimit

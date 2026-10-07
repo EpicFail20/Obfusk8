@@ -64,11 +64,16 @@ def _run(coro):
 # without them, so the harness sends them by default; identity=False sends a
 # request without any, explicit headers override them.
 IDENTITY = {"x-auth-request-user": "id-fictif-0001", "x-auth-request-email": USER}
+# Phase 3 (server D-054 point 6): a POST to /api/v1/ must carry the Origin of
+# an allowed extension, as Chrome sends it from the side panel (observed on
+# 2026-10-07). The harness allows this fictitious extension in _app() and
+# sends its Origin by default; origin=False sends a request without any.
+EXT_ORIGIN = "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
 
 
-async def _call(app, method, path, body=b"", headers=None, chunks=None, identity=True):
+async def _call(app, method, path, body=b"", headers=None, chunks=None, identity=True, origin=True):
     """One request through the ASGI app. Returns (status, headers, json|bytes, chunks consumed)."""
-    all_headers = {**(IDENTITY if identity else {}), **(headers or {})}
+    all_headers = {**(IDENTITY if identity else {}), **({"origin": EXT_ORIGIN} if origin else {}), **(headers or {})}
     # latin-1, as HTTP header values reach Starlette (ASCII values: unchanged).
     raw_headers = [(k.lower().encode(), v.encode("latin-1")) for k, v in all_headers.items()]
     parts = chunks if chunks is not None else [body]
@@ -181,6 +186,7 @@ def _deps(audit_dir, extension_dir, detect, alerts=None, **overrides):
 
 def _app(deps, **settings):
     app = FastAPI()
+    settings.setdefault("allowed_origins", frozenset({EXT_ORIGIN}))
     app.include_router(text_api.create_router(text_api.TextApiSettings(enabled=True, **settings), deps))
     return app
 
@@ -717,7 +723,8 @@ def test_chemin_reel_de_detection_de_main(audit_dir, monkeypatch):
     monkeypatch.setattr(main, "_analyze_text", fake_analyze)
     monkeypatch.setattr(main, "AUDIT_DIR", audit_dir)
     app = FastAPI()
-    app.include_router(main._build_text_api_router(text_api.TextApiSettings(enabled=True, max_analysis_seconds=7)))
+    settings = text_api.TextApiSettings(enabled=True, max_analysis_seconds=7, allowed_origins=frozenset({EXT_ORIGIN}))
+    app.include_router(main._build_text_api_router(settings))
     text = "CAMILLE MARTIN – né le 01–02–1990 ; Camille Martin rappelle."
     status, _, body, _ = _post(app, PSEUDO, {"text": text, "theme": "medical"})
     assert status == 200, body
