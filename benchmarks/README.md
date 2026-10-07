@@ -50,13 +50,18 @@ Sur la VM de la pile, avec un compte de test **synthétique** (jamais dans le d�
 
 ```sh
 export BENCH_BASE_URL=https://obfusk8.lab.local BENCH_USER=<compte de test> BENCH_PASSWORD=<mot de passe>
-export BENCH_INSECURE_TLS=1        # certificat auto-signé du lab
+export BENCH_INSECURE_TLS=1        # certificat auto-signé du lab ; avec l'autorité du lab (deploiement-lab.md §6 bis),
+                                   # préférer REQUESTS_CA_BUNDLE=~/.obfusk8-lab-ca/ca.crt (vérification réelle)
+export BENCH_EXTENSION_ORIGIN=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa  # défaut : extension du lab, à autoriser
+                                   # dans EXTENSION_ALLOWED_ORIGINS (phase 3, D-054)
 export BENCH_RESOLVE_ADDRESS=192.168.1.35  # si *.lab.local n'est pas dans /etc/hosts : la BIND_ADDRESS de la pile (D-047)
 sh benchmarks/collect_stack_info.sh > /tmp/stack.json
 export BENCH_STACK_INFO=/tmp/stack.json
 python3 benchmarks/secret_detection/run_secrets_bench.py
 python3 benchmarks/quality/run_quality_bench.py      # environ 1 000 requêtes, un peu moins d'une par seconde
 python3 benchmarks/latency/run_latency_bench.py
+python3 benchmarks/conformity/collect_pseudonymize_pairs.py /chemin/hors/depot/paires.jsonl   # phase 3 : entrée du test
+                                   # de conformité de l'extension (tools/run.sh conformity), un fil par compte de test
 ```
 
 Prérequis : `ENABLE_EXTENSION_API=true`, Python 3 avec `requests`. Les mesures écrivent dans le journal d'audit de l'extension

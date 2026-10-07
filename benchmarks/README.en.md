@@ -49,13 +49,18 @@ On the stack's VM, with a **synthetic** test account (never in the repository):
 
 ```sh
 export BENCH_BASE_URL=https://obfusk8.lab.local BENCH_USER=<test account> BENCH_PASSWORD=<password>
-export BENCH_INSECURE_TLS=1        # lab self-signed certificate
+export BENCH_INSECURE_TLS=1        # lab self-signed certificate; with the lab CA (deployment-lab.md §6 bis),
+                                   # prefer REQUESTS_CA_BUNDLE=~/.obfusk8-lab-ca/ca.crt (real verification)
+export BENCH_EXTENSION_ORIGIN=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa  # default: the lab extension, to allow
+                                   # in EXTENSION_ALLOWED_ORIGINS (phase 3, D-054)
 export BENCH_RESOLVE_ADDRESS=192.168.1.35  # if *.lab.local is not in /etc/hosts: the stack's BIND_ADDRESS (D-047)
 sh benchmarks/collect_stack_info.sh > /tmp/stack.json
 export BENCH_STACK_INFO=/tmp/stack.json
 python3 benchmarks/secret_detection/run_secrets_bench.py
 python3 benchmarks/quality/run_quality_bench.py      # about 1,000 requests, a little under one per second
 python3 benchmarks/latency/run_latency_bench.py
+python3 benchmarks/conformity/collect_pseudonymize_pairs.py /path/outside/the/repo/pairs.jsonl   # phase 3: input of the
+                                   # extension's conformity test (tools/run.sh conformity), one thread per test account
 ```
 
 Requirements: `ENABLE_EXTENSION_API=true`, Python 3 with `requests`. The runs write to the extension audit log (`audit-extension.log`,
