@@ -24,7 +24,7 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phase « disponibilité »). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phases « disponibilité » et « Python »). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
 (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
@@ -60,6 +60,8 @@ Tous les tests de bout en bout se font **sous ce profil**. En cas de besoin, sui
 **Dépendance implicite à uvloop** (EXT-11) : le profil autorise `epoll_pwait` mais ni `epoll_wait`, ni `select`, ni `shutdown`. La boucle asyncio
 standard est donc inutilisable sous ce profil ; la production fonctionne parce qu'uvicorn choisit uvloop (`uvicorn[standard]`). Tout code ou test
 qui crée sa propre boucle ou son propre sélecteur doit être exécuté sous le profil.
+Python 3.14 appelle `open` (n° 2) une fois par démarrage (mimalloc, `/proc/sys/vm/overcommit_memory`) : refusé volontairement, sans
+effet (D-053, `seccomp/README.md`). Un changement de version de Python impose la trace complète sous `app-audit.json`.
 
 **Ressources contraintes** : `app` dispose d'un CPU, 1 Go de RAM, 256 processus et d'un worker unique. Un traitement bloquant ou coûteux pénalise
 **tous** les utilisateurs, y compris le flux documents. `presidio-analyzer` : 1,5 CPU, 2 Go.
@@ -90,9 +92,16 @@ tous publiés par Traefik sur la seule adresse `BIND_ADDRESS` de `.env` (D-047),
 **Images et versions** (phase 2 bis, D-040) : toutes les images tierces sont épinglées par condensat dans `docker-compose.yml` ; les images
 construites (`app`, analyseur) portent une version (`0.2.0-dev`, **locale**, jamais publiée) et se construisent par
 `docker compose -f docker-compose.yml -f docker-compose.build.yml build` (Compose refuse une étiquette de construction avec condensat).
-Paquets Python de `app` : `app/requirements.lock` (empreintes) ; `pip` est retiré des images. Versions de l'analyseur déclarées dans
+**Python 3.14.8 dans les deux images, défini à un seul endroit** : `x-python-base` de `docker-compose.build.yml`, argument
+`PYTHON_BASE` des deux Dockerfiles, sans valeur par défaut (`docker build` seul échoue) ; le workflow lit la même ligne. Changer de
+Python : `docs/maintenance-dependances.md` §9 (trois verrous, `versions.json`, seccomp, bancs).
+**L'analyseur est construit sur notre base** (D-052) : Presidio par sa roue PyPI dans `presidio/analyzer-build/requirements.lock`,
+serveur REST copié dans `presidio/analyzer-build/server/` (recopié et comparé à chaque mise à jour de Presidio, §10), configuration dans
+`/app/conf`, correctifs appliqués après vérification de l'empreinte du fichier amont ; gunicorn plafonné par Presidio (`<26.0.0`,
+EXT-60, vérifié par `check_lock.py`, que `pip check` ne couvre pas pour les extras).
+Paquets Python de `app` : `app/requirements.lock` (empreintes) ; `pip` est retiré des images. Versions de l'analyseur (Python compris) déclarées dans
 `presidio/analyzer-build/versions.json` (vérifiées à sa construction) et copiées dans `app/analyzer_versions.json` (empreinte `detection_config`) :
-les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-2bis.yml`.
+les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-py314.yml` (et `-2ter`, `-2bis`).
 
 **Adresse fixe de Traefik** : `10.89.18.10` sur `app-internal` (`10.89.18.0/24`, hors des pools par défaut de Docker), seule source de confiance
 d'oauth2-proxy (`trusted_proxy_ips`) et de Keycloak (`KC_PROXY_TRUSTED_ADDRESSES`) pour les en-têtes de transfert. À changer aux quatre endroits ensemble. PKCE S256 exigé entre
@@ -116,6 +125,9 @@ outils de `app/requirements-dev.txt` installés hors de l'image et montés en le
 Aucun caractère Unicode de format écrit tel quel dans un fichier (séquences d'échappement, test `test_repo_hygiene.py`, EXT-39) ; jetons de test
 au format réel via `app/tests/fake_secrets.py`. La couverture se mesure hors seccomp (base SQLite de `coverage`
 bloquée), la suite fonctionnelle sous seccomp.
+Outils de développement pour Python 3.14 dans `~/.cache/obfusk8-devtools`, et outils d'analyse (mypy, ruff) lancés dans un conteneur de
+l'image `app` (l'hôte n'a pas la même version de Python). Bancs de documents : un document en attente à la fois (`cancel_job`, EXT-61) ;
+ne jamais lancer `e2e_text_api.py` pendant un autre banc de l'API texte (il sature volontairement la file globale).
 
 **Mémoire de l'hôte** (EXT-25) : `/tmp` est un tmpfs qui consomme la RAM de la VM, sans swap. Aucun fichier volumineux dedans (archive d'image,
 cache d'outil) ; vérifie `free -m` avant un outil lourd ; conteneurs d'outils avec limite mémoire et cache sur disque. Un OOM global tue en priorité
