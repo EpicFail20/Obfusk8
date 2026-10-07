@@ -38,6 +38,7 @@ import pymupdf as fitz
 import pytest
 
 import main
+from tests.doc_headers import doc_headers
 from tests.test_main_units import _drive, _FakeRequest, _SyncUpload
 
 MONO = "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf"
@@ -215,7 +216,7 @@ def test_localisation_incomplete_comptee(monkeypatch):
 
 def _detect_page(monkeypatch: pytest.MonkeyPatch, text: str) -> tuple[str, str]:
     _person_entity(monkeypatch)
-    response = _drive(main.detect_document(_FakeRequest(), file=_SyncUpload("t.pdf", _pdf(text)), theme=""))
+    response = _drive(main.detect_document(_FakeRequest(doc_headers()), file=_SyncUpload("t.pdf", _pdf(text)), theme=""))
     assert response.status_code == 200
     with main._PENDING_JOBS_LOCK:
         job_id = next(iter(main.PENDING_JOBS))
@@ -258,7 +259,7 @@ def test_audit_et_journal_comptes_sans_contenu(monkeypatch, tmp_path, caplog):
             job_id, _ = _detect_page(monkeypatch, TEXT_WITH_UNMAPPED_GLYPH)
         response = _drive(
             main.finalize_document(
-                _FakeRequest(),
+                _FakeRequest(doc_headers()),
                 job_id=job_id,
                 excluded_ids="",
                 manual_zones="[]",
@@ -294,7 +295,7 @@ def test_audit_inchange_sans_perte(monkeypatch, tmp_path):
         job_id, _ = _detect_page(monkeypatch, PLAIN_TEXT)
         _drive(
             main.finalize_document(
-                _FakeRequest(),
+                _FakeRequest(doc_headers()),
                 job_id=job_id,
                 excluded_ids="",
                 manual_zones="[]",

@@ -2,6 +2,7 @@
   "api_title": "Obfusk8 - Document Anonymizer - PDF/DOCX/CSV",
 
   "error_400_title": "Invalid request",
+  "error_403_title": "Access denied",
   "error_404_title": "Not found",
   "error_413_title": "File too large",
   "error_422_title": "Incomplete form",
@@ -59,6 +60,13 @@
 
   "upload_too_large": "File too large ({size_mb} MB, max {max_mb} MB)",
   "too_many_pending_jobs": "Too many documents currently pending review, please try again in a few minutes",
+  "too_many_pending_jobs_user": "You already have {count} documents pending review: finish or cancel them, or wait for them to expire",
+  "error_429_title": "Too many pending documents",
+  "identity_missing": "Identity missing: please sign in again",
+  "cross_origin_refused": "Request refused: it does not come from the application",
+  "cancel_job_button": "Cancel this document",
+  "cancel_job_confirm": "Cancel this document? It will be deleted without being anonymized.",
+  "cancel_job_failed": "Cancellation failed: the document may already have expired.",
   "pdf_unreadable": "Unreadable or corrupted PDF",
   "pdf_password_protected": "This PDF is password-protected. Please remove the protection (or provide an unprotected version) before analyzing it.",
   "pdf_too_many_pages": "This PDF has too many pages ({page_count}, max {max_pages}) — a small file size does not guarantee a reasonable page count.",

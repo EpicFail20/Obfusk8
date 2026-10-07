@@ -938,6 +938,7 @@ import time as _time  # noqa: E402
 import unicodedata  # noqa: E402
 
 import uvloop  # noqa: E402
+from tests.doc_headers import doc_headers  # noqa: E402
 
 
 def _drive(coro):
@@ -977,7 +978,7 @@ def _seed_csv_job(job_id: str, theme: str = "") -> None:
             "clusters": {},
             "theme": theme,
             "filename_hash": "deadbeef",
-            "user_email": "inconnu",
+            "user_email": "alice@exemple.invalid",
             "size_mb": 0.01,
             "created_at": _time.time(),
         }
@@ -998,7 +999,7 @@ def test_finalize_manual_zones_json_profondement_imbrique_ne_fait_pas_planter():
     try:
         resp = _drive(
             main.finalize_document(
-                _FakeRequest(), job_id=job_id, excluded_ids="",
+                _FakeRequest(doc_headers()), job_id=job_id, excluded_ids="",
                 manual_zones=deep, redacted_image_ids="", response_format="json",
             )
         )
@@ -1016,7 +1017,7 @@ def test_finalize_manual_zones_json_invalide_ordinaire_reste_tolere():
     try:
         resp = _drive(
             main.finalize_document(
-                _FakeRequest(), job_id=job_id, excluded_ids="",
+                _FakeRequest(doc_headers()), job_id=job_id, excluded_ids="",
                 manual_zones="{pas du json", redacted_image_ids="", response_format="json",
             )
         )
@@ -1040,7 +1041,7 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
     hostile_theme = "medical\u202e" + ("a" * 500)
     upload = _SyncUpload("t.csv", b"nom,ville\nJean Dupont,Paris\n")
 
-    detect_resp = _drive(main.detect_document(_FakeRequest(), file=upload, theme=hostile_theme))
+    detect_resp = _drive(main.detect_document(_FakeRequest(doc_headers()), file=upload, theme=hostile_theme))
     assert detect_resp.status_code == 200
 
     with main._PENDING_JOBS_LOCK:
@@ -1054,7 +1055,7 @@ def test_detect_theme_non_fiable_est_assaini_et_borne(monkeypatch):
 
         final_resp = _drive(
             main.finalize_document(
-                _FakeRequest(), job_id=job_id, excluded_ids="",
+                _FakeRequest(doc_headers()), job_id=job_id, excluded_ids="",
                 manual_zones="[]", redacted_image_ids="", response_format="json",
             )
         )
@@ -1210,7 +1211,7 @@ def test_upload_sous_le_plafond_passe_normalement(monkeypatch):
     body = _multipart_file_body(b"nom,ville\nJean Dupont,Paris\n")
     status, headers, resp_body, consumed = _asgi_request(
         "POST", "/api/detect",
-        headers={"content-type": "multipart/form-data; boundary=XBOUNDARYX", "accept": "text/html"},
+        headers={"content-type": "multipart/form-data; boundary=XBOUNDARYX", "accept": "text/html", **doc_headers()},
         body_chunks=[body], content_length=len(body),
     )
     try:
@@ -1234,7 +1235,7 @@ def test_reponse_erreur_de_l_application_porte_les_entetes_de_securite(monkeypat
     form = b"job_id=00000000000000000000000000000000"
     status, headers, _, _ = _asgi_request(
         "POST", "/api/finalize",
-        headers={"content-type": "application/x-www-form-urlencoded", "accept": "application/json"},
+        headers={"content-type": "application/x-www-form-urlencoded", "accept": "application/json", **doc_headers()},
         body_chunks=[form], content_length=len(form),
     )
     assert status == 404
@@ -1372,14 +1373,14 @@ def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
     try:
         with pytest.raises(HTTPException) as exc:
             _drive(main.finalize_document(
-                _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"}), job_id=job_id,
+                _FakeRequest(doc_headers("mallory@hopital.fr")), job_id=job_id,
                 excluded_ids="", manual_zones="[]", redacted_image_ids="", response_format="json",
             ))
         assert exc.value.status_code == 404
         assert job_id in main.PENDING_JOBS, "the job was destroyed by a third party's attempt"
 
         resp = _drive(main.finalize_document(
-            _FakeRequest({"x-auth-request-email": "alice@hopital.fr"}), job_id=job_id,
+            _FakeRequest(doc_headers("alice@hopital.fr")), job_id=job_id,
             excluded_ids="", manual_zones="[]", redacted_image_ids="", response_format="json",
         ))
         assert resp.status_code == 200

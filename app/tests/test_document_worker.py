@@ -36,8 +36,9 @@ from fastapi import HTTPException
 
 import main
 from tests.test_main_units import _FakeRequest, _SyncUpload
+from tests.doc_headers import doc_headers
 
-ALICE = {"x-auth-request-email": "alice@exemple.invalid"}
+ALICE = doc_headers("alice@exemple.invalid")
 
 
 def _run(coro):

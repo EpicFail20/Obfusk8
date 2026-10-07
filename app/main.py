@@ -60,6 +60,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import time
 import unicodedata
+import urllib.parse
 import uuid
 import warnings
 import zipfile
@@ -81,6 +82,7 @@ from lxml import etree
 from PIL import Image, ImageDraw, ImageOps, ImageStat, UnidentifiedImageError as PILUnidentifiedImageError
 from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from branding import install_branding
 from supervision import Alert, AlertSeverity, get_alert_sink
 from text_normalization import NORMALIZATION_VERSION, normalize_for_analysis
@@ -93,6 +95,38 @@ MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "25"))
 FILE_TTL_SECONDS = int(os.environ.get("FILE_TTL_SECONDS", "600"))
 JOB_REVIEW_TTL_SECONDS = int(os.environ.get("JOB_REVIEW_TTL_SECONDS", "900"))
 MAX_PENDING_JOBS = int(os.environ.get("MAX_PENDING_JOBS", "20"))
+# EXT-51 / D-048: MAX_PENDING_JOBS alone is a GLOBAL cap, so one user who
+# uploads without finalizing (observed: 19 jobs from two benchmark scripts in
+# under three minutes) made every other user's upload fail with 503 for
+# JOB_REVIEW_TTL_SECONDS. Each user now has their own quota (429), the global
+# cap stays as the last resort against several accounts. 3 = decided value
+# (D-048): one document under review plus two queued; 0 disables the quota.
+# Enabled by default: it fixes an availability defect, it is not a feature.
+MAX_PENDING_JOBS_PER_USER = int(os.environ.get("MAX_PENDING_JOBS_PER_USER", "3"))
+if MAX_PENDING_JOBS_PER_USER < 0:
+    raise ValueError("MAX_PENDING_JOBS_PER_USER must be 0 (disabled) or a positive integer")
+# EXT-51 / D-048: a user can cancel their own pending documents
+# (POST /api/cancel/{job_id}) to free their quota at once. Enabled by default,
+# same reason; when false the route answers exactly like a missing route.
+ENABLE_JOB_CANCEL = text_api._env_bool(os.environ, "ENABLE_JOB_CANCEL", True)
+# Cancellation carries no body; same cap as the edge (cancel-bodylimit in
+# docker-compose.yml): anything larger is not a request from the review page.
+MAX_CANCEL_BODY_BYTES = 4096
+
+
+def _application_origin(app_domain: str) -> str | None:
+    """Origin of the application's own pages: Traefik serves it only over
+    HTTPS on APP_DOMAIN. None (no origin can match) when APP_DOMAIN is unset."""
+    domain = app_domain.strip()
+    return f"https://{domain}" if domain else None
+
+
+# D-048 point 3: the document routes rely on the oauth2-proxy session cookie,
+# which the browser attaches to any request towards the application. Its
+# SameSite=Lax attribute stops a cross-SITE form post, but not one from
+# another host of the same site (any *.lab.local page). Every state-changing
+# document request must therefore come from the application's own origin.
+APP_ORIGIN = _application_origin(os.environ.get("APP_DOMAIN", ""))
 MAX_PDF_PAGES = int(os.environ.get("MAX_PDF_PAGES", "200"))
 MAX_MANUAL_ZONES = int(os.environ.get("MAX_MANUAL_ZONES", "500"))
 # Maximum length allowed for the `theme` form field (see
@@ -259,6 +293,15 @@ WORKDIR.mkdir(parents=True, exist_ok=True)
 # time of a redeployment must be restarted by the user.
 PENDING_JOBS: dict[str, dict] = {}
 _PENDING_JOBS_LOCK = threading.Lock()
+# Places taken by detections still running, per user (EXT-51). The quota
+# check happens before processing and the job is stored only at the end:
+# today the single document thread (D-019) makes the two steps atomic, but
+# the reservation keeps the quota exact if detections ever run in parallel.
+# Guarded by _PENDING_JOBS_LOCK.
+_PENDING_RESERVATIONS: dict[str, int] = {}
+# Period of the expired-job sweep (_cleanup_sweep_loop). An expired job stays
+# in PENDING_JOBS until the next pass, so a user waits up to this long more.
+SWEEP_INTERVAL_SECONDS = 60
 
 # Audit log: location separate from temp files, NOT subject to
 # the FILE_TTL_SECONDS purge. Never contains the real file name or
@@ -859,7 +902,7 @@ def _check_presidio_health(service: str, base_url: str) -> None:
     )
 
 
-def _cleanup_sweep_loop(interval_seconds: int = 60):
+def _cleanup_sweep_loop(interval_seconds: int = SWEEP_INTERVAL_SECONDS):
     while True:
         time.sleep(interval_seconds)
         # This thread is the only thing that purges orphaned files and
@@ -903,7 +946,11 @@ async def lifespan(app: FastAPI):
     # (crash, redeployment) even before the first periodic loop pass.
     _sweep_orphaned_files()
     threading.Thread(target=_cleanup_sweep_loop, daemon=True).start()
-    log.info("Balayage des fichiers orphelins démarré (contrôle toutes les 60s)")
+    log.info("Balayage des fichiers orphelins démarré (contrôle toutes les %ds)", SWEEP_INTERVAL_SECONDS)
+    if APP_ORIGIN is None:
+        log.warning(
+            "APP_DOMAIN absent : toute requête d'envoi, de finalisation ou d'annulation sera refusée (403, D-048)"
+        )
 
     yield  # the application runs here
 
@@ -916,9 +963,11 @@ install_branding(app)
 
 ERROR_TITLES = {
     400: STRINGS["error_400_title"],
+    403: STRINGS["error_403_title"],
     404: STRINGS["error_404_title"],
     413: STRINGS["error_413_title"],
     422: STRINGS["error_422_title"],
+    429: STRINGS["error_429_title"],
     502: STRINGS["error_502_title"],
 }
 
@@ -931,12 +980,15 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     scripted/API call (curl, tooling) that doesn't explicitly ask for HTML.
     """
     wants_html = "text/html" in request.headers.get("accept", "")
+    # The exception's headers (Retry-After of the per-user quota, EXT-51)
+    # were dropped here, on both kinds of page.
     if not wants_html:
-        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=exc.headers)
 
     title = ERROR_TITLES.get(exc.status_code, STRINGS["error_generic_title"])
     return HTMLResponse(
         status_code=exc.status_code,
+        headers=exc.headers,
         content=f"""
         <!doctype html>
         <html lang="{UI_LANG}">
@@ -1126,6 +1178,8 @@ class _RequestBodyLimitMiddleware:
             return
 
         limit = MAX_REQUEST_BODY_BYTES  # read on every request (overridable in tests)
+        if ENABLE_JOB_CANCEL and scope.get("path", "").startswith("/api/cancel/"):
+            limit = MAX_CANCEL_BODY_BYTES  # bodiless route (EXT-51), same cap as cancel-bodylimit
 
         declared = None
         for name, value in scope.get("headers", []):
@@ -3079,6 +3133,38 @@ def _render_highlighted_text(text: str, block_clusters: list[dict]) -> str:
     return "".join(pieces)
 
 
+def _js_string(value: str) -> str:
+    """JavaScript string literal safe inside an inline <script>."""
+    return json.dumps(value).replace("</", "<\\/")
+
+
+def _cancel_job_controls(job_id: str) -> str:
+    """"Cancel this document" button of the review pages (EXT-51, D-048),
+    empty when cancellation is disabled. The fetch carries the
+    X-Obfusk8-Action header and the browser adds the page's Origin, which
+    /api/cancel both require; credentials are the same-origin session cookie."""
+    if not ENABLE_JOB_CANCEL:
+        return ""
+    return f"""
+        <button type="button" id="cancel-job" onclick="cancelJob()" style="
+            padding:10px 20px; margin-top:8px; background:white; color:#842029;
+            border:1px solid #842029; border-radius:4px; cursor:pointer; font-size:1em;">
+          {html.escape(STRINGS["cancel_job_button"])}
+        </button>
+        <script>
+          function cancelJob() {{
+            if (!confirm({_js_string(STRINGS["cancel_job_confirm"])})) return;
+            fetch('/api/cancel/{job_id}', {{
+              method: 'POST', credentials: 'same-origin',
+              headers: {{'X-Obfusk8-Action': 'cancel', 'Accept': 'application/json'}}
+            }}).then(response => {{
+              if (response.ok) {{ window.location.href = '/'; }}
+              else {{ alert({_js_string(STRINGS["cancel_job_failed"])}); }}
+            }}).catch(() => alert({_js_string(STRINGS["cancel_job_failed"])}));
+          }}
+        </script>"""
+
+
 def _build_text_review_page(
     job_id: str, total_detections: int, blocks_html: str, extra_note: str = "", images_html: str = ""
 ) -> HTMLResponse:
@@ -3132,6 +3218,7 @@ def _build_text_review_page(
             {STRINGS["confirm_and_redact_button"]}
           </button>
         </form>
+        {_cancel_job_controls(job_id)}
       </div>
 
       {images_html}
@@ -3257,12 +3344,15 @@ async def detect_document(
     The processing itself runs on the document thread (EXT-07, D-019, see
     _run_document_work); only reading the upload stays on the event loop.
     """
+    # Refused before the upload is even read (D-048 point 3, EXT-47).
+    _require_same_origin(request)
+    _document_user(request)
     raw = await file.read()
     return await _run_document_work(_detect_document_sync, request, raw, file.filename, theme)
 
 
 def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | None, theme: str):
-    """Body of detect_document, on the document thread (unchanged)."""
+    """Body of detect_document, on the document thread."""
 
     size_mb = len(raw) / (1024 * 1024)
     if size_mb > MAX_UPLOAD_MB:
@@ -3277,16 +3367,25 @@ def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | N
 
     kind = _detect_file_kind(raw)
 
-    # Global quota of jobs pending review (independent of the rate
-    # limited by Traefik): prevents raw documents from accumulating in
-    # memory beyond a safe threshold, even while staying under the
-    # per-IP rate limit.
+    # Sanitized once, at the source: the same value is the job's owner, the
+    # quota key and the audit identity (EXT-47: never a shared fallback).
+    user_email = _document_user(request)
+
+    # Quotas of jobs pending review (independent of the Traefik rate
+    # limits): per user first (EXT-51), then global — raw documents never
+    # accumulate in memory beyond a safe threshold. The place is reserved
+    # until the job is stored or the detection fails.
     with _PENDING_JOBS_LOCK:
-        if len(PENDING_JOBS) >= MAX_PENDING_JOBS:
-            raise HTTPException(
-                status_code=503,
-                detail=STRINGS["too_many_pending_jobs"],
-            )
+        _reserve_pending_place(user_email)
+    try:
+        return _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb)
+    finally:
+        with _PENDING_JOBS_LOCK:
+            _release_pending_place(user_email)
+
+
+def _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb):
+    """Rest of _detect_document_sync, once a pending place is reserved."""
 
     # The `theme` field is a form field freely controlled by the
     # client (forgeable, unbounded, not constrained to a known theme). It
@@ -3298,7 +3397,7 @@ def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | N
     #  - a very long value produces a `theme_slug` exceeding the
     #    system's filename length limit (Errno 36), causing
     #    finalization to fail with a misleading message ("corrupted file").
-    # Sanitized once, at the source, exactly like `user_email` below,
+    # Sanitized once, at the source, exactly like `user_email` above,
     # then length-bounded (a real theme is short: medical/it/accounting).
     theme = _strip_unicode_control_and_format_chars(theme)[:MAX_THEME_CHARS]
 
@@ -3306,9 +3405,6 @@ def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | N
     if theme and selected_theme is None:
         log.warning("Thème inconnu demandé (%r), poursuite sans thème", theme)
 
-    user_email = _strip_unicode_control_and_format_chars(
-        request.headers.get("x-auth-request-email", "inconnu")
-    )
     job_id = uuid.uuid4().hex
 
     if kind == "docx":
@@ -3510,6 +3606,7 @@ def _build_pixel_review_page(
             {STRINGS["confirm_and_redact_button"]}
           </button>
         </form>
+        {_cancel_job_controls(job_id)}
       </div>
 
       {pages_html}
@@ -3838,13 +3935,93 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
 
 
 def _request_user(request: Request) -> str:
-    """Caller identity as guaranteed by oauth2-proxy via Traefik
-    (`X-Auth-Request-Email`, replaced — never passed through as-is — by the
-    forwardAuth). Same sanitization as at job creation, so that the
-    comparison is exact."""
+    """Caller e-mail for the text API's audit (`/api/v1/`, which refuses a
+    request without identity beforehand, D-035). The document flow uses
+    _document_user, which has no fallback (EXT-47)."""
     return _strip_unicode_control_and_format_chars(
         request.headers.get("x-auth-request-email", "inconnu")
     )
+
+
+def _document_user(request: Request) -> str:
+    """Caller identity of the document flow as guaranteed by oauth2-proxy via
+    Traefik (`X-Auth-Request-Email`, replaced — never passed through as-is —
+    by the forwardAuth), sanitized like every logged value so that ownership
+    comparisons are exact.
+
+    EXT-47: a missing or empty identity used to fall back to "inconnu",
+    shared by every such request (ownership of their jobs, one common quota).
+    Unreachable through Traefik (a session without e-mail stops at
+    oauth2-proxy, EXT-43), refused anyway: 403, like /api/v1/ (D-035)."""
+    user = _strip_unicode_control_and_format_chars(request.headers.get("x-auth-request-email", ""))
+    if not user.strip():
+        raise HTTPException(status_code=403, detail=STRINGS["identity_missing"])
+    return user
+
+
+def _request_origin(request: Request) -> str | None:
+    """Origin the browser declares for the request: the Origin header, else
+    the scheme and host of the Referer (Referrer-Policy: same-origin keeps it
+    on the application's own requests). None when neither is usable."""
+    origin = request.headers.get("origin")
+    if origin is not None:
+        return origin
+    referer = request.headers.get("referer", "")
+    try:
+        parts = urllib.parse.urlsplit(referer)
+    except ValueError:
+        return None
+    if not parts.scheme or not parts.netloc:
+        return None
+    return f"{parts.scheme}://{parts.netloc}"
+
+
+def _require_same_origin(request: Request) -> None:
+    """D-048 point 3: a state-changing document request must come from the
+    application's own pages. Exact comparison with APP_ORIGIN; a missing
+    origin, "null" (sandboxed or privacy-stripped), another scheme, host or
+    port are all refused. Fails closed when APP_DOMAIN is unset."""
+    if APP_ORIGIN is None or _request_origin(request) != APP_ORIGIN:
+        raise HTTPException(status_code=403, detail=STRINGS["cross_origin_refused"])
+
+
+def _retry_after_seconds(created_ats: list[float], now: float) -> int:
+    """Seconds until the user's oldest pending job leaves the queue: its
+    remaining review time plus one sweep period (it is purged by the next
+    pass, not at expiry). Without a stored job (only a detection still
+    running), one detection deadline."""
+    if not created_ats:
+        return MAX_DETECTION_SECONDS
+    remaining = JOB_REVIEW_TTL_SECONDS - (now - min(created_ats)) + SWEEP_INTERVAL_SECONDS
+    return max(1, math.ceil(remaining))
+
+
+def _reserve_pending_place(user: str) -> None:
+    """Takes one pending place for `user` or refuses the upload: 429 with
+    Retry-After when their own quota is full (EXT-51), 503 when the global
+    cap is. Caller holds _PENDING_JOBS_LOCK."""
+    if MAX_PENDING_JOBS_PER_USER:
+        created_ats = [job["created_at"] for job in PENDING_JOBS.values() if job.get("user_email") == user]
+        if len(created_ats) + _PENDING_RESERVATIONS.get(user, 0) >= MAX_PENDING_JOBS_PER_USER:
+            log.warning("Quota par utilisateur atteint (%d document(s) en attente)", MAX_PENDING_JOBS_PER_USER)
+            raise HTTPException(
+                status_code=429,
+                detail=STRINGS["too_many_pending_jobs_user"].format(count=MAX_PENDING_JOBS_PER_USER),
+                headers={"Retry-After": str(_retry_after_seconds(created_ats, time.time()))},
+            )
+    if len(PENDING_JOBS) + sum(_PENDING_RESERVATIONS.values()) >= MAX_PENDING_JOBS:
+        raise HTTPException(status_code=503, detail=STRINGS["too_many_pending_jobs"])
+    _PENDING_RESERVATIONS[user] = _PENDING_RESERVATIONS.get(user, 0) + 1
+
+
+def _release_pending_place(user: str) -> None:
+    """Gives back the place taken by _reserve_pending_place. Caller holds
+    _PENDING_JOBS_LOCK."""
+    left = _PENDING_RESERVATIONS.get(user, 0) - 1
+    if left > 0:
+        _PENDING_RESERVATIONS[user] = left
+    else:
+        _PENDING_RESERVATIONS.pop(user, None)
 
 
 def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> dict:
@@ -3860,7 +4037,7 @@ def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> di
     revealing its existence, and above all without removing it from the queue (`pop`
     only once ownership is confirmed) — otherwise a third party could
     destroy another user's job under review just by attempting this."""
-    user = _request_user(request)
+    user = _document_user(request)
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
         if job is None or job.get("user_email") != user:
@@ -4267,6 +4444,7 @@ async def finalize_document(
 
     Runs on the document thread (EXT-07, D-019, see _run_document_work).
     """
+    _require_same_origin(request)
     return await _run_document_work(
         _finalize_document_sync, request, job_id, excluded_ids, manual_zones, redacted_image_ids, response_format
     )
@@ -4473,6 +4651,46 @@ _DOWNLOAD_MEDIA_TYPES = {
 }
 
 _INLINE_EXTENSIONS = {".pdf", ".png", ".jpg"}
+
+
+_JOB_ID_PATTERN = re.compile(r"[0-9a-f]{32}")  # uuid4().hex, see detect and download
+CANCEL_ACTION_HEADER = "x-obfusk8-action"
+
+
+@app.post("/api/cancel/{job_id}")
+async def cancel_document(job_id: str, request: Request) -> JSONResponse:
+    """Cancels one of the caller's own documents pending review and frees
+    their quota place at once (EXT-51, D-048).
+
+    Only the review page can trigger it: same-origin request (D-048 point 3)
+    carrying the X-Obfusk8-Action header, which a cross-site form cannot set.
+    A malformed, unknown, expired or someone else's job_id gets the same
+    generic 404 — nothing tells whether a job exists. A pending job has no
+    file on disk (raw document in memory only, see PENDING_JOBS): dropping
+    it from the queue is the purge. Not run on the document thread: nothing
+    here touches PyMuPDF, and a cancellation must not wait behind a long
+    detection."""
+    if not ENABLE_JOB_CANCEL:
+        # Exactly what Starlette answers for a route that does not exist.
+        raise StarletteHTTPException(status_code=404)
+    _require_same_origin(request)
+    if request.headers.get(CANCEL_ACTION_HEADER) != "cancel":
+        raise HTTPException(status_code=403, detail=STRINGS["cross_origin_refused"])
+    _document_user(request)
+    if not _JOB_ID_PATTERN.fullmatch(job_id):
+        raise HTTPException(status_code=404, detail=STRINGS["job_not_found_expired"])
+    job = _get_pending_job_for(job_id, request, pop=True)
+    _record_audit_event(
+        event="cancellation",
+        job_id=job_id,
+        format=job["kind"],
+        user=job["user_email"],
+        theme=job["theme"] or "aucun",
+        file_size_mb=round(job["size_mb"], 2),
+        filename_hash=job["filename_hash"],
+    )
+    log.info("Job %s annulé par son propriétaire", job_id)
+    return JSONResponse({"status": "cancelled"})
 
 
 @app.get("/api/download/{job_id}")

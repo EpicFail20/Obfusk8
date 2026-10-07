@@ -50,3 +50,9 @@ data_file = "/tmp/.coverage"
 module = ["e2e_document_flow", "doc_zones_snapshot", "pdf_localization_bench", "doc_quality_bench", "e2e_pdf_localization"]
 disallow_untyped_calls = false
 warn_return_any = false
+
+[[tool.mypy.overrides]]
+# Reuses the untyped ASGI and upload helpers of test_main_units.py (existing,
+# untyped) and builds a synthetic PDF with PyMuPDF (untyped).
+module = ["tests.test_document_availability"]
+disallow_untyped_calls = false

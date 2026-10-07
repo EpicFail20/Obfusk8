@@ -2,6 +2,7 @@
   "api_title": "Obfusk8 - Anonymiseur de documents - PDF/DOCX/CSV",
 
   "error_400_title": "Requête invalide",
+  "error_403_title": "Accès refusé",
   "error_404_title": "Introuvable",
   "error_413_title": "Fichier trop volumineux",
   "error_422_title": "Formulaire incomplet",
@@ -59,6 +60,13 @@
 
   "upload_too_large": "Fichier trop volumineux ({size_mb} Mo, max {max_mb} Mo)",
   "too_many_pending_jobs": "Trop de documents en attente de révision actuellement, réessaie dans quelques minutes",
+  "too_many_pending_jobs_user": "Tu as déjà {count} documents en attente de révision : termine-les ou annule-les, ou attends qu'ils expirent",
+  "error_429_title": "Trop de documents en attente",
+  "identity_missing": "Identité absente : reconnecte-toi",
+  "cross_origin_refused": "Requête refusée : elle ne provient pas de l'application",
+  "cancel_job_button": "Annuler ce document",
+  "cancel_job_confirm": "Annuler ce document ? Il sera supprimé sans être anonymisé.",
+  "cancel_job_failed": "L'annulation a échoué : le document a peut-être déjà expiré.",
   "pdf_unreadable": "PDF illisible ou corrompu",
   "pdf_password_protected": "Ce PDF est protégé par un mot de passe. Veuillez retirer la protection (ou fournir une version non protégée) avant de l'analyser.",
   "pdf_too_many_pages": "Ce PDF contient trop de pages ({page_count}, max {max_pages}) — une taille de fichier faible ne garantit pas un nombre de pages raisonnable.",

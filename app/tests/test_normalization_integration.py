@@ -36,6 +36,7 @@ from fastapi import FastAPI
 
 import main
 import text_api
+from tests.doc_headers import doc_headers
 from tests.test_main_units import _drive, _FakeRequest, _SyncUpload
 from tests.test_text_api import _post
 
@@ -108,7 +109,7 @@ def _docx(paragraphs: list[str]) -> bytes:
 def _finalize(job_id: str) -> dict:
     response = _drive(
         main.finalize_document(
-            _FakeRequest(),
+            _FakeRequest(doc_headers()),
             job_id=job_id,
             excluded_ids="",
             manual_zones="[]",
@@ -121,7 +122,7 @@ def _finalize(job_id: str) -> dict:
 
 
 def _detect(filename: str, data: bytes) -> str:
-    response = _drive(main.detect_document(_FakeRequest(), file=_SyncUpload(filename, data), theme=""))
+    response = _drive(main.detect_document(_FakeRequest(doc_headers()), file=_SyncUpload(filename, data), theme=""))
     assert response.status_code == 200
     match = re.search(r'name="job_id" value="([0-9a-f]{32})"', bytes(response.body).decode("utf-8"))
     assert match
