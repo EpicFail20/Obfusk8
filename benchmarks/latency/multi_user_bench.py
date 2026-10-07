@@ -48,7 +48,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 from run_latency_bench import UPLOAD_PACING_SECONDS, _detect, _release, _stats, _text  # noqa: E402
 
-from obfusk8_client import BASE_URL, HTTP_OK, login, read_accounts  # noqa: E402
+from obfusk8_client import BASE_URL, HTTP_OK, TEXT_API_HEADERS, login, read_accounts  # noqa: E402
 
 RESULTS = HERE.parent / "results"
 ROUNDS = int(os.environ.get("BENCH_MULTI_ROUNDS", "2"))
@@ -66,7 +66,7 @@ def _post(session: Any, text: str) -> tuple[int, str, float]:
     body carries the application's request_id, "edge" otherwise, as for
     Traefik's 429), duration."""
     started = time.monotonic()
-    response = session.post(ANALYZE, json={"text": text}, timeout=60)
+    response = session.post(ANALYZE, json={"text": text}, headers=TEXT_API_HEADERS, timeout=60)
     elapsed = time.monotonic() - started
     origin = "app" if "request_id" in response.text else "edge"
     return response.status_code, origin, elapsed

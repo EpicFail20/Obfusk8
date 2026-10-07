@@ -27,6 +27,8 @@ Configuration (environment only — credentials never go in the repository):
   BENCH_RESOLVE_LOOPBACK  "1": same with 127.0.0.1 (BIND_ADDRESS=127.0.0.1)
   BENCH_ACCOUNTS_FILE "user, password" per line, outside the repository
                       (default ~/.obfusk8-test-accounts), for multi-user runs
+  BENCH_EXTENSION_ORIGIN  Origin sent to /api/v1/ (default: the lab extension);
+                      must be in the server's EXTENSION_ALLOWED_ORIGINS
 """
 
 import html
@@ -45,6 +47,13 @@ HTTP_TOO_MANY_REQUESTS = 429
 
 BASE_URL = os.environ.get("BENCH_BASE_URL", "https://obfusk8.lab.local").rstrip("/")
 VERIFY_TLS = os.environ.get("BENCH_INSECURE_TLS") != "1"
+# Phase 3 (D-054 point 6): /api/v1/ serves only the Origin of an allowed
+# browser extension, as Chrome sends it from the side panel. Default: the lab
+# extension, whose identifier is stable (public key in config/lab.json of the
+# obfusk8-extension repository). Sent per request: the session itself carries
+# the application's Origin for the document routes (see login()).
+EXTENSION_ORIGIN = os.environ.get("BENCH_EXTENSION_ORIGIN", "chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa")
+TEXT_API_HEADERS = {"Origin": EXTENSION_ORIGIN}
 
 
 def lab_address() -> str | None:
@@ -155,7 +164,9 @@ class TextApi:
             if wait > 0:
                 time.sleep(wait)
             started = time.monotonic()
-            response = self.session.post(f"{BASE_URL}/api/v1/text/{route}", json=payload, timeout=60)
+            response = self.session.post(
+                f"{BASE_URL}/api/v1/text/{route}", json=payload, headers=TEXT_API_HEADERS, timeout=60
+            )
             elapsed = time.monotonic() - started
             self._last = time.monotonic()
             if response.status_code == HTTP_TOO_MANY_REQUESTS and "request_id" not in response.text:
@@ -169,7 +180,7 @@ class TextApi:
         answers 404/502 until it has registered the new container."""
         deadline = time.monotonic() + wait_seconds
         while True:
-            response = self.session.get(f"{BASE_URL}/api/v1/version", timeout=30)
+            response = self.session.get(f"{BASE_URL}/api/v1/version", headers=TEXT_API_HEADERS, timeout=30)
             if response.status_code == HTTP_OK:
                 body: dict[str, Any] = response.json()
                 return body

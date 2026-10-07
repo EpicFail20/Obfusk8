@@ -186,3 +186,48 @@ def test_annulation_sans_identifiant_de_tache(monkeypatch: pytest.MonkeyPatch) -
     with pytest.raises(RuntimeError, match="no job_id"):
         client.cancel_job(session, "<html>login</html>")
     assert session.posts == []
+
+
+class _TextApiSession:
+    """Records the headers of each text API request (session and per-request merged, as requests does)."""
+
+    def __init__(self) -> None:
+        self.headers: dict[str, str] = {"Origin": BASE}  # set by login() for the document routes
+        self.sent: list[tuple[str, str, dict[str, str]]] = []
+
+    def _answer(self, method: str, url: str, headers: dict[str, str] | None) -> Any:
+        self.sent.append((method, url, {**self.headers, **(headers or {})}))
+        response = _Response(200, '{"request_id": "x"}')
+        response.json = lambda: {"api_version": "1.0"}  # type: ignore[attr-defined]
+        return response
+
+    def get(self, url: str, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        return self._answer("GET", url, headers)
+
+    def post(self, url: str, headers: dict[str, str] | None = None, **kwargs: Any) -> Any:
+        return self._answer("POST", url, headers)
+
+
+@pytest.mark.parametrize(
+    ("env", "expected"),
+    [
+        ({}, "chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa"),
+        ({"BENCH_EXTENSION_ORIGIN": "chrome-extension://abcdefghijklmnopabcdefghijklmnop"},
+         "chrome-extension://abcdefghijklmnopabcdefghijklmnop"),
+    ],
+)  # fmt: skip
+def test_api_texte_porte_l_origine_de_l_extension(
+    monkeypatch: pytest.MonkeyPatch, env: dict[str, str], expected: str
+) -> None:
+    """Phase 3 (D-054 point 6): /api/v1/ serves only the Origin of an allowed
+    extension; the session's application Origin (document routes) would be
+    refused. Default: the lab extension (stable identifier)."""
+    client = _client(monkeypatch, **env)
+    session = _TextApiSession()
+    api = client.TextApi(session, min_interval=0)
+    api.version()
+    api.call("analyze", "texte fictif")
+    assert [(method, headers["Origin"]) for method, _, headers in session.sent] == [
+        ("GET", expected),
+        ("POST", expected),
+    ]

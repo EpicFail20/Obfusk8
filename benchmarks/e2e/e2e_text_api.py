@@ -35,7 +35,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from obfusk8_client import BASE_URL as BASE
-from obfusk8_client import login
+from obfusk8_client import EXTENSION_ORIGIN, login
 
 CANARY = "Zébulon Canarihaut"
 results: list[bool] = []
@@ -47,6 +47,10 @@ def check(name: str, cond: object, detail: str = "") -> None:
 
 
 s = login()
+# Phase 3 (D-054 point 6): this session plays the extension, whose Origin
+# must be in the server's EXTENSION_ALLOWED_ORIGINS (login() set the
+# application's Origin, meant for the document routes).
+s.headers["Origin"] = EXTENSION_ORIGIN
 J = {"Accept": "application/json"}
 
 # --- version ---------------------------------------------------------------
@@ -137,6 +141,31 @@ for label, t in [
     r = s.post(f"{BASE}/api/v1/text/analyze", json={"text": t}, timeout=30)
     ok = r.status_code == 200 and all(0 <= e["start"] < e["end"] <= len(t) for e in r.json()["entities"])
     check(f"Unicode piégeux accepté ({label})", ok, str(sorted(e["entity_type"] for e in r.json()["entities"])))
+
+# --- extension origin (phase 3, D-054 point 6) ---------------------------------
+for label, origin in [
+    ("absente", None),
+    ("interface web", BASE),
+    ("autre extension", "chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba"),
+]:
+    headers = {**J, "Origin": origin} if origin else J
+    session_headers = dict(s.headers)
+    s.headers.pop("Origin", None)
+    try:
+        r = s.post(f"{BASE}/api/v1/text/analyze", json={"text": CANARY}, headers=headers, timeout=30)
+    finally:
+        s.headers.update(session_headers)
+    check(
+        f"origine {label} -> 403 (POST)",
+        r.status_code == 403 and "request_id" in r.json() and CANARY not in r.text,
+        f"{r.status_code} {r.text[:100]}",
+    )
+s.headers.pop("Origin")
+r = s.get(f"{BASE}/api/v1/version", headers=J, timeout=30)
+s.headers["Origin"] = EXTENSION_ORIGIN
+check("version sans origine -> 200 (Chrome n'en envoie pas sur un GET)", r.status_code == 200, str(r.status_code))
+r = s.get(f"{BASE}/api/v1/version", headers={**J, "Origin": BASE}, timeout=30)
+check("version, origine non autorisée -> 403", r.status_code == 403, str(r.status_code))
 
 # --- unauthenticated ---------------------------------------------------------
 anon = requests.Session()
