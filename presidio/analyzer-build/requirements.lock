@@ -2,12 +2,13 @@
 # phase 2 ter; rebuilt on our own Python base in the Python phase, D-052).
 # Every distribution of the image is declared here (the build fails
 # otherwise, check_lock.py) and installed, every entry hash-checked, on the
-# digest-pinned Python base of the Dockerfile with:
+# digest-pinned Python base (PYTHON_BASE, docker-compose.build.yml) with:
 #   pip install --require-hashes --no-deps -r requirements.lock
 # The compiled wheels are specific to the Python minor version of that base:
 # changing Python means regenerating this file (docs/maintenance-dependances.md).
 #
-# Generated on 2026-10-07 inside the Dockerfile's base image (Python 3.14.8;
+# Generated on 2026-10-07 inside the image base (PYTHON_BASE of
+# docker-compose.build.yml, Python 3.14.8;
 # same versions as for 3.12.15, only the compiled wheels changed), with pip
 # from requirements-build.txt:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \

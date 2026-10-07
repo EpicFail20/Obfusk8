@@ -5,7 +5,7 @@
 # websockets) from requirements.txt (top-level pins) with:
 #   pip install --dry-run --ignore-installed --only-binary=:all: --report report.json \
 #       -r requirements.txt -c constraints.txt
-# inside the image base (FROM line of the Dockerfile), with pip from
+# inside the image base (PYTHON_BASE, docker-compose.build.yml), with pip from
 # requirements-build.txt. constraints.txt = the previous lock's versions, minus
 # the packages being updated (pinned to their target version), so that an
 # update only moves what it is meant to move; then one line per entry of the

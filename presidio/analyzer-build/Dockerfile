@@ -5,9 +5,12 @@
 # 2.2.364), its REST server files from server/ (unmodified upstream copies),
 # French support and our configuration from conf/ and patches/.
 
-# Same digest-pinned base as app/Dockerfile: python:3.14.8-slim = Python
-# 3.14.8 on Debian 13 (trixie), checked on Docker Hub on 2026-10-07 (D-052).
-FROM python:3.14.8-slim@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2
+# Same digest-pinned Python base as app/Dockerfile, defined in ONE place: the
+# x-python-base anchor of docker-compose.build.yml (D-052 point 5). No
+# default: building without --build-arg PYTHON_BASE fails. The interpreter
+# must be the "python" version of versions.json (checked below).
+ARG PYTHON_BASE
+FROM ${PYTHON_BASE}
 
 # Debian security updates available at build time (EXT-33). No curl: the
 # health check below uses Python (D-052 point 2), one package less to patch.

@@ -10,10 +10,29 @@
 # `pull_policy: build`: never pull these tags from a registry, always build
 # them from the Dockerfiles of this checkout.
 # ---------------------------------------------------------------------------
+
+# Python of BOTH built images, defined here only (Python phase, D-043 point 5,
+# D-052 point 5): the PYTHON_BASE build argument of app/Dockerfile and
+# presidio/analyzer-build/Dockerfile, which have no default (a build without
+# it fails). python:3.14.8-slim = Python 3.14.8 on Debian 13 (trixie), latest
+# stable Python every dependency supports (python.org, 2026-09-30), digest
+# checked on Docker Hub on 2026-10-07. Changing it means regenerating both
+# hash locks and updating the "python" version of versions.json and
+# app/analyzer_versions.json (docs/maintenance-dependances.md); the analyzer
+# build and app/tests/test_python_base.py fail otherwise. The publishing
+# workflow (.github/workflows/docker-publish.yml) reads this line.
+x-python-base: &python-base "python:3.14.8-slim@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2"
+
 services:
   app:
-    build: ./app
+    build:
+      context: ./app
+      args:
+        PYTHON_BASE: *python-base
     pull_policy: build
   presidio-analyzer:
-    build: ./presidio/analyzer-build
+    build:
+      context: ./presidio/analyzer-build
+      args:
+        PYTHON_BASE: *python-base
     pull_policy: build

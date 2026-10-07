@@ -1,12 +1,12 @@
-# Pinned by digest (EXT-01): python:3.14.8-slim = Python 3.14.8 on Debian 13
-# (trixie), latest stable Python (python.org, 2026-09-30; 3.15 is a release
-# candidate and excluded by Presidio and the spaCy stack, <3.15), checked on
-# Docker Hub on 2026-10-07. Python phase (D-043 point 5, D-052): app and the
-# analyzer on the same Python, the latest one every dependency supports
-# (cp314 wheels published for all compiled packages); this supersedes the
-# choice of 3.12 in D-040 point 2. The seccomp profile was revalidated on
-# this interpreter (seccomp/README.md).
-FROM python:3.14.8-slim@sha256:f85c5697265c178cc6887276c55fe16cf3d14ca35c3df6a5eab3b360534a55d2
+# Python base, digest-pinned (EXT-01), defined in ONE place for app and the
+# analyzer: the x-python-base anchor of docker-compose.build.yml (Python
+# phase, D-043 point 5, D-052), python:3.14.8-slim since 2026-10-07 (3.15 is a
+# release candidate and excluded by Presidio and the spaCy stack, <3.15). This
+# supersedes the choice of 3.12 in D-040 point 2; the seccomp profile was
+# revalidated on 3.14 (seccomp/README.md). No default: building without
+# --build-arg PYTHON_BASE fails rather than picking an unpinned image.
+ARG PYTHON_BASE
+FROM ${PYTHON_BASE}
 
 WORKDIR /app
 
