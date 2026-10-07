@@ -32,6 +32,9 @@ Une fois le document analysé, les informations personnelles détectées automat
 
 ![result](Screens/result.png)
 
+Vous ne voulez finalement pas anonymiser ce document ? Cliquez sur « Annuler ce document » : il est supprimé sans être anonymisé et
+vous pouvez aussitôt en envoyer un autre. Un document ni validé ni annulé est supprimé automatiquement au bout de quelques minutes.
+
 ## 4. Ajouter une zone manuellement (PDF et images uniquement)
 
 Pour les documents PDF et image, si une information sensible n'a pas été détectée automatiquement, activez le mode « ajout manuel » dans la barre d'outils, puis dessinez un rectangle directement sur le document à l'endroit à masquer. Cliquez sur une zone ajoutée pour la supprimer. Cette fonctionnalité n'est **pas disponible** pour les fichiers Word (.docx) et CSV, qui reposent uniquement sur la détection automatique et son exclusion manuelle. 
@@ -49,3 +52,8 @@ Une fois la révision terminée, cliquez sur « Valider » pour confirmer explic
 - Fichier refusé : seuls les formats PDF, DOCX, CSV, PNG et JPEG sont acceptés.
 - Trop de tentatives : un délai s'applique si plusieurs documents sont envoyés très rapidement.
 - Fichier expiré : si le téléchargement n'a pas été fait à temps, il faut relancer le traitement depuis le début.
+- Trop de documents en attente : chaque utilisateur peut avoir au plus 3 documents en attente de révision (valeur par défaut). Validez ou
+  annulez ceux que vous avez ouverts, ou attendez qu'ils expirent ; le message indique le délai. Un document dont vous avez fermé la page
+  ne peut plus être annulé : il expire seul.
+- Requête refusée (« elle ne provient pas de l'application ») : l'envoi doit se faire depuis les pages de l'application elle-même ;
+  rechargez la page d'accueil et recommencez.

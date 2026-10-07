@@ -60,11 +60,14 @@ Chaque document uploadé passe par plusieurs couches de validation indépendante
 - Vérification de propriétaire sur les points d'accès sensibles (aperçu et finalisation d'un document), pour qu'un identifiant de tâche connu ou deviné ne suffise pas à accéder au document d'un autre utilisateur.
 - Protection contre le contournement du reverse proxy par un composant interne compromis, via un secret partagé vérifié à chaque requête.
 - Protection CSRF sur les cookies de session (attribut `SameSite`), vérifiée sur les navigateurs qui n'appliquent pas de politique stricte par défaut.
+- Contrôle d'origine sur toutes les requêtes qui modifient un état (envoi, finalisation, annulation d'un document) : l'en-tête `Origin`
+  (à défaut `Referer`) doit être exactement celui de l'application, ce que `SameSite` ne garantit pas pour un autre site du même domaine ;
+  l'annulation exige en plus un en-tête propre à l'interface. Une requête sans identité est refusée.
 
 ## Réseau et exposition
 
 - Séparation des réseaux internes : les services qui n'ont pas besoin d'accès sortant vers Internet en sont techniquement privés, même en cas de compromission applicative.
-- Seul le reverse proxy est exposé publiquement ; tous les autres services communiquent exclusivement sur des réseaux internes non routables depuis l'extérieur.
+- Seul le reverse proxy est exposé, et uniquement sur l'adresse `BIND_ADDRESS` (jamais sur toutes les interfaces) ; tous les autres services communiquent exclusivement sur des réseaux internes non routables depuis l'extérieur.
 
 ## Gestion des dépendances
 
@@ -100,7 +103,9 @@ Ce projet documente honnêtement ce qui reste ouvert plutôt que de le passer so
 - **Certificat TLS** : le déploiement de référence est fourni avec un certificat auto-signé, adapté uniquement à un usage de test. Un certificat de confiance est indispensable avant toute mise en production.
 - **Dimensionnement en charge réelle** : le dimensionnement des ressources (calcul, réplicas) n'a pas été validé par un test de charge complet dans toutes les configurations possibles.
 - **Contrôle d'accès fin sur le journal d'audit** : tout utilisateur authentifié peut actuellement consulter les métadonnées d'audit (jamais le contenu des documents), sans distinction de rôle. Amélioration prévue, non bloquante pour un usage en confiance restreinte.
-- **Rate limiting applicatif** : le rate limiting est actuellement assuré au niveau du reverse proxy plutôt que dans l'application elle-même — suffisant en pratique, mais moins granulaire qu'un contrôle applicatif dédié.
+- **Limitation par utilisateur** : chaque utilisateur a un quota de documents en attente de révision (3 par défaut) dans l'application, et
+  une limitation de débit par utilisateur s'ajoute à celle par adresse IP au niveau du reverse proxy. Plusieurs comptes coordonnés restent
+  bornés par le plafond commun de documents en attente, qu'ils peuvent encore saturer.
 - **Sauvegarde et haute disponibilité** : le déploiement de référence ne couvre pas la sauvegarde automatisée ni la tolérance de panne — à mettre en place selon vos propres exigences de continuité.
 - **Veille de vulnérabilités continue** : un outillage existe mais n'est pas encore un processus entièrement automatisé et validé en conditions réelles — une vigilance manuelle périodique reste recommandée en complément.
 - **Qualité de détection** : comme tout système basé sur des modèles de reconnaissance d'entités, la détection n'est pas garantie exhaustive à 100 %, en particulier sur des mises en page ou des formulations inhabituelles. C'est pourquoi l'étape de révision humaine avant validation finale est obligatoire, pas optionnelle.

@@ -60,11 +60,14 @@ Every uploaded document goes through several independent validation layers befor
 - Ownership verification on sensitive endpoints (previewing and finalizing a document), so that a known or guessed task identifier is not enough to access another user's document.
 - Protection against bypassing the reverse proxy via a compromised internal component, through a shared secret verified on every request.
 - CSRF protection on session cookies (`SameSite` attribute), verified on browsers that do not apply a strict policy by default.
+- Origin check on every state-changing request (uploading, finalizing, cancelling a document): the `Origin` header (else `Referer`) must
+  be exactly the application's, which `SameSite` does not guarantee for another site of the same domain; cancelling also requires a header
+  specific to the interface. A request without identity is refused.
 
 ## Network and exposure
 
 - Internal network segmentation: services that do not need outbound Internet access are technically isolated from it, even in the event of an application-level compromise.
-- Only the reverse proxy is publicly exposed; all other services communicate exclusively over internal networks that are not routable from the outside.
+- Only the reverse proxy is exposed, and only on the `BIND_ADDRESS` address (never on every interface); all other services communicate exclusively over internal networks that are not routable from the outside.
 
 ## Dependency management
 
@@ -100,7 +103,9 @@ This project honestly documents what remains open rather than staying silent abo
 - **TLS certificate**: the reference deployment ships with a self-signed certificate, suitable for test use only. A trusted certificate is required before any production use.
 - **Sizing under real load**: resource sizing (compute, replicas) has not been validated by a complete load test across every possible configuration.
 - **Fine-grained access control on the audit log**: any authenticated user can currently view audit metadata (never document content), with no role distinction. An improvement is planned, though not blocking for use in a restricted-trust setting.
-- **Application-level rate limiting**: rate limiting is currently enforced at the reverse proxy level rather than within the application itself — sufficient in practice, but less granular than a dedicated application-level control.
+- **Per-user limits**: each user has a quota of documents pending review (3 by default) in the application, and a per-user rate limit
+  adds to the per-IP one at the reverse proxy. Several coordinated accounts remain bounded by the shared cap of pending documents, which
+  they can still exhaust.
 - **Backup and high availability**: the reference deployment does not cover automated backups or fault tolerance — to be set up according to your own continuity requirements.
 - **Continuous vulnerability monitoring**: tooling exists but is not yet a fully automated process validated under real conditions — periodic manual vigilance remains recommended in addition.
 - **Detection quality**: like any system based on entity recognition models, detection is not guaranteed to be 100% exhaustive, particularly on unusual layouts or phrasing. This is why the human review step before final validation is mandatory, not optional.

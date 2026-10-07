@@ -34,6 +34,9 @@ Once the document has been analyzed, the personal information detected automatic
 
 ![result](Screens/result.png)
 
+You do not want to anonymize this document after all? Click "Cancel this document": it is deleted without being anonymized and you can
+upload another one right away. A document neither validated nor cancelled is deleted automatically after a few minutes.
+
 ## 4. Add a zone manually (PDF and images only)
 
 For PDF and image documents, if a piece of sensitive information was not detected automatically, turn on "manual add" mode in the toolbar, then draw a rectangle directly on the document over the area to hide. Click an added zone to remove it. This feature is **not available** for Word (.docx) and CSV files, which rely solely on automatic detection and manual exclusion. 
@@ -51,3 +54,8 @@ Once the review is complete, click "Validate" to explicitly confirm the content 
 - File rejected: only PDF, DOCX, CSV, PNG, and JPEG formats are accepted.
 - Too many attempts: a short delay applies if several documents are sent in quick succession.
 - File expired: if the download wasn't done in time, the process needs to be restarted from the beginning.
+- Too many pending documents: each user can have at most 3 documents pending review (default value). Validate or cancel the ones you
+  opened, or wait for them to expire; the message gives the delay. A document whose page you closed can no longer be cancelled: it
+  expires on its own.
+- Request refused ("it does not come from the application"): uploads must be made from the application's own pages; reload the home page
+  and try again.

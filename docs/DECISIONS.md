@@ -519,13 +519,19 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 **Bloquants avant tout utilisateur pilote**
 
 1. **Phase 2 ter validée** : `git merge --ff-only feat/dependances` vers `feat/text-api`, push, reconstruction des images depuis la branche
-   poussée et nouveau test manuel (D-044 point 6 ; la pile actuelle est en 2 bis, voir A).
+   poussée et nouveau test manuel (D-044 point 6 ; la pile actuelle est en 2 bis, voir A). *Mise à jour du 2026-10-07 : fait (2 ter
+   fusionnée et poussée, `5873e0e`).*
 2. **EXT-51** : phase dédiée (D-044 point 3, proposition du compte rendu 2 ter §12), avec **EXT-47** (403 pour une tâche sans identité).
-3. **Exposition de Keycloak** : EXT-54 et EXT-55, choix B2 ou B4 ci-dessus.
+   *Mise à jour du 2026-10-07 : traités dans la phase « disponibilité » (D-048, D-050, `docs/phase-disponibilite-report.md`), en attente du
+   test manuel et de la fusion par l'humain ; risque résiduel EXT-59 (plusieurs comptes).*
+3. **Exposition de Keycloak** : EXT-54 et EXT-55, choix B2 ou B4 ci-dessus. *Mise à jour du 2026-10-07 : sans objet pour le pilote
+   (Keycloak réservé au laboratoire, D-046) ; en laboratoire, IPv6 fermée (D-047), plus d'accès sortant (EXT-55 résolu), console encore
+   joignable en HTTP depuis le réseau local (EXT-54).*
 4. **Fournisseur d'identité du pilote** (décision humaine du 2026-10-07, D-046) : brancher oauth2-proxy sur le fournisseur d'identité de
    l'établissement, avec un accès sortant dédié et limité à ce fournisseur ; PKCE S256 conservé (EXT-49).
 5. **Comptes** : comptes de test supprimés de Keycloak (D-044 point 4, EXT-53) ; comptes pilotes nominatifs avec adresse de courriel
-   vérifiée (EXT-43 : sans courriel, oauth2-proxy répond 500).
+   vérifiée (EXT-43 : sans courriel, oauth2-proxy répond 500). *Mise à jour du 2026-10-07 : le pilote n'utilise pas Keycloak (D-046) ni
+   aucun secret du laboratoire (point 16) ; les comptes pilotes sont ceux du fournisseur de l'établissement, avec courriel vérifié.*
 6. **Données** : pentest externe avant toute donnée réelle (D-021, `CLAUDE.md` §8.3). Sans pentest, pilote sur données synthétiques
    seulement.
 7. **Certificats TLS de Traefik** : nature (auto-signé ou non), noms couverts et échéance **non vérifiés** dans cette session.
@@ -608,3 +614,26 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 - **Conséquences** : pas de régénération du secret de passerelle exposé le 2026-10-07 ; pas de `.claude/settings.json` ; dossier de leurres
   `leurre-claude/` supprimé (absent de tout commit : `git log --all -- leurre-claude` vide) ; D-045 §C point 16 : le pilote utilise des secrets
   neufs, jamais ceux du laboratoire.
+
+## D-050 — Mise en œuvre de la phase « disponibilité » — décisions de la session du 2026-10-07 (à valider par l'humain)
+
+1. **Code nouveau dans `main.py`**, pas dans un module séparé : un module de plus exigerait une ligne `COPY` dans `app/Dockerfile`,
+   soumise à accord (`CLAUDE.md` §9) et non autorisée par le prompt de phase. Les fonctions nouvelles sont annotées ; les tests nouveaux
+   passent `mypy --strict`. Proposition : `app/document_guard.py` si l'humain autorise la modification du Dockerfile.
+2. **Ordre des contrôles** : `/api/detect` et `/api/finalize` vérifient l'origine puis l'identité **avant** tout traitement (FastAPI a
+   déjà reçu le corps, borné par `MAX_REQUEST_BODY_BYTES`) ; `/api/cancel` : drapeau, origine, en-tête `X-Obfusk8-Action`, identité,
+   format, propriété. Annulation désactivée : `StarletteHTTPException(404)`, réponse identique à une route absente (test). L'annulation ne
+   passe pas par le fil documents (pas de PyMuPDF, ne doit pas attendre une longue détection).
+3. **Quota** : place réservée sous `_PENDING_JOBS_LOCK` avant la détection et rendue en `finally` ; `Retry-After` = temps restant du plus
+   ancien document de l'utilisateur + une période de balayage (60 s), au moins 1 s.
+4. **`doc-auth-errors`** (EXT-57) : sur les routeurs de documents, la redirection vers la connexion ne porte plus que sur le 401 ;
+   `oauth2-errors` (401-403) reste inchangé sur le routeur par défaut. Écarté : changer `oauth2-errors` lui-même (définition partagée, hors
+   des labels de documents autorisés) ; retirer toute redirection des routes de documents (session expirée pendant une révision = page
+   401 brute). Le routeur `app-cancel` n'a aucune redirection : l'interface l'appelle par `fetch`.
+5. **Keycloak derrière Traefik** : `KC_PROXY_TRUSTED_ADDRESSES=10.89.18.10` en plus de `KC_PROXY_HEADERS=xforwarded` (sans elle, Keycloak
+   fait confiance à ces en-têtes depuis toute adresse, documentation de Keycloak). Quatrième endroit où figure l'adresse fixe de Traefik
+   (avec `ipam`, `ipv4_address` et `trusted_proxy_ips`). Limite de débit du routeur `keycloak` (300/min, rafale 300, par adresse) : une
+   connexion scriptée coûte 2 requêtes (mesuré) ; le chargement de la console d'administration n'est **pas mesuré** (à vérifier au test
+   manuel). Plafond de corps 10 Mio (import partiel de royaume, supposé suffisant).
+6. **Client des bancs** : `BENCH_RESOLVE_ADDRESS` (la pile n'écoute plus sur 127.0.0.1 depuis D-047) ; la session porte l'`Origin` de
+   l'application une fois connectée, jamais envoyée à Keycloak.
