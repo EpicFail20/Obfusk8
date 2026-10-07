@@ -24,7 +24,7 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1) et le 5 octobre 2026 (phases 2 et 2 bis). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phase « disponibilité »). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
 (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
@@ -35,10 +35,20 @@ qu'un document à la fois, sur un fil dédié (D-019) ; repli de localisation PD
 **Secret de passerelle** (audit 3.7) : `_GatewaySecretMiddleware` vérifie un secret injecté par Traefik (`gateway-secret@file`).
 Toute route de l'application doit rester derrière ce mécanisme et derrière `oidc-auth`. Ne crée jamais de contournement.
 
-**Routage Traefik par labels** : des routeurs dédiés existent pour `/api/detect` et `/api/finalize` (limitation de débit + plafond de corps),
+**Routage Traefik par labels** : des routeurs dédiés existent pour `/api/detect` et `/api/finalize` (limitation de débit par adresse IP **et**
+par utilisateur + plafond de corps), `/api/cancel/` (routeur `app-cancel` : mêmes limites, plafond de corps de 4 096 octets, sans redirection),
 `/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, **désactivée jusqu'à la phase 3**, `ENABLE_EXTENSION_API=false` dans `.env`, D-041 ; limitation de débit **par utilisateur**
 sur `X-Auth-Request-User`, plafond de corps dérivé de `MAX_TEXT_CHARS`, voir `docs/api-extension.md` §7) et `/metrics` (liste d'IP autorisées). **Toute autre route tombe dans le routeur `app` par défaut :
 authentifiée, mais sans limitation de débit ni plafond de corps en bordure.** Toute nouvelle route exposée exige donc son propre routeur.
+Les routes de documents utilisent `doc-auth-errors` (redirection vers la connexion sur 401 seulement) : `oauth2-errors` (401-403) transformait
+un 403 de l'application en déconnexion de l'utilisateur (EXT-57). Ne mets jamais `oauth2-errors` sur une route qui peut répondre 403.
+
+**Flux documents** (phase « disponibilité », D-048) : quota par utilisateur de documents en attente (`MAX_PENDING_JOBS_PER_USER`, 429 +
+`Retry-After`, plafond commun `MAX_PENDING_JOBS` en 503), annulation (`ENABLE_JOB_CANCEL`), identité obligatoire (`_document_user`, 403,
+EXT-47) et `Origin` (à défaut `Referer`) égal à `https://${APP_DOMAIN}` sur toute requête qui modifie un état (`APP_DOMAIN` transmis à `app` ;
+absent = tout refusé). Toute nouvelle route qui modifie un état applique le même contrôle d'origine. Tests : `tests/doc_headers.py` (en-têtes
+d'une requête légitime) et `tests/conftest.py` (origine de test). Bancs : `BENCH_RESOLVE_ADDRESS=<BIND_ADDRESS>`, session vérifiée par
+`/oauth2/auth` (EXT-52).
 
 **Plafonds en double** : la taille des requêtes est bornée en bordure (Traefik) **et** dans l'application (`MAX_REQUEST_BODY_BYTES` dans `main.py`).
 Les deux valeurs doivent rester cohérentes et leur lien doit être commenté.
@@ -73,7 +83,8 @@ référence d'audit). Garde ce style : une valeur ou un choix non évident est j
 
 **Volumes sur chemins absolus de l'hôte** : `/var/lib/anonymiseur/workdir` (fichiers de travail) et `/var/log/anonymiseur-audit` (journaux d'audit :
 `audit.log` pour les documents, `audit-extension.log` pour l'API texte, rotation indépendante, D-007).
-Le nom du projet Compose est supposé être `obfusk8` (label `traefik.docker.network=obfusk8_app-internal`) et les ports 80, 443 et 8080 sont fixes.
+Le nom du projet Compose est supposé être `obfusk8` (label `traefik.docker.network=obfusk8_app-internal`) et les ports 80, 443 et 8080 sont fixes,
+tous publiés par Traefik sur la seule adresse `BIND_ADDRESS` de `.env` (D-047), jamais sur `0.0.0.0` ni `[::]`.
 **Ne lance jamais une seconde pile sur le même hôte** : elle partagerait le journal d'audit et les fichiers de travail, et casserait le routage.
 
 **Images et versions** (phase 2 bis, D-040) : toutes les images tierces sont épinglées par condensat dans `docker-compose.yml` ; les images
@@ -84,12 +95,19 @@ Paquets Python de `app` : `app/requirements.lock` (empreintes) ; `pip` est retir
 les deux copies doivent rester identiques. Retour arrière : `docker-compose.rollback-2bis.yml`.
 
 **Adresse fixe de Traefik** : `10.89.18.10` sur `app-internal` (`10.89.18.0/24`, hors des pools par défaut de Docker), seule source de confiance
-d'oauth2-proxy pour les en-têtes de transfert (`trusted_proxy_ips`). À changer aux trois endroits ensemble. PKCE S256 exigé entre
+d'oauth2-proxy (`trusted_proxy_ips`) et de Keycloak (`KC_PROXY_TRUSTED_ADDRESSES`) pour les en-têtes de transfert. À changer aux quatre endroits ensemble. PKCE S256 exigé entre
 oauth2-proxy (`code_challenge_method`) et le client Keycloak (*PKCE method*) : l'un sans l'autre bloque toute connexion (EXT-49). Keycloak 26.8 sur le volume
 `keycloak-data-v26-8` (la base H2 de développement ne se migre pas d'une version à l'autre : export puis import du royaume).
 
+**Keycloak = laboratoire uniquement** (D-046) : profil Compose `lab` (`COMPOSE_PROFILES=lab` dans le `.env` du laboratoire, sinon
+`docker compose --profile lab …`), mode développement, réseau `app-internal` seul (aucun accès sortant), joint par Traefik (point d'entrée
+`keycloak`, `BIND_ADDRESS:8080`). Sans le profil, oauth2-proxy redémarre en boucle : c'est attendu. Le pilote et la production utilisent le
+fournisseur d'identité de l'établissement, avec des secrets neufs (D-045 §C point 16).
+
 **Modules existants à réutiliser** : `antivirus.py` (ICAP), `supervision.py` (alertes, syslog), journal d'audit, `branding.py`,
 `text_api.py` (API texte, limiteur et file bornée).
+**Nouveau module Python** (D-051) : quand du code nouveau forme un ensemble cohérent, il va dans un nouveau module de `app/` (typé, `mypy --strict`),
+avec sa ligne `COPY` explicite dans `app/Dockerfile`, **sans demander d'accord** ; plus de nouveau code dans `main.py` dans ce cas.
 
 **Tests** : l'image de production ne contient ni `pytest` ni les tests (EXT-09 corrigé). **Ne lance jamais la suite dans le conteneur `app`** :
 elle écrirait dans le vrai journal d'audit et les vrais fichiers de travail. Méthode (D-016 mis à jour) : `app/run-tests.sh`, conteneur jetable de
@@ -107,6 +125,9 @@ le worker unique de l'analyseur.
 « fictif ». Les jetons de test au format réel (Stripe, Slack, GitHub…) sont **générés à l'exécution** (préfixe + remplissage déterministe), jamais
 écrits en littéral dans le dépôt, **sans exception** : les exemples publiés par les fournisseurs (`AKIA…EXAMPLE`, clé Azurite…) suivent
 la même règle (décision humaine du 2026-10-04). Les comptes de test sont lus à l'exécution depuis `~/.obfusk8-test-accounts`, hors dépôt, et désignés par un libellé.
+
+**Secrets du laboratoire jetables** (D-049) : une exposition d'un secret du laboratoire dans une session se signale en une ligne dans le compte
+rendu, sans arrêt ni proposition de régénération. Exigence maintenue : aucun secret dans le dépôt ni dans un commit, vérifié avant chaque commit.
 
 ---
 
@@ -238,7 +259,8 @@ ou les fichiers de travail, note leur état ; n'efface jamais leur contenu sans 
 désactiver une protection, ajouter de la télémétrie, contacter un service externe depuis l'application.
 
 **Soumis à accord explicite** : toute modification de `docker-compose.yml`, de `oauth2-proxy.cfg`, des fichiers Traefik, du profil seccomp ou des Dockerfiles,
-**sauf** les changements précisément autorisés par le prompt de phase. Également : nouveau service ou port, changement d'un contrat d'API existant,
+**sauf** les changements précisément autorisés par le prompt de phase et la ligne `COPY` d'un nouveau module Python dans `app/Dockerfile`
+(D-051, voir §1). Également : nouveau service ou port, changement d'un contrat d'API existant,
 nouvelle dépendance de production, migration de données.
 
 ---
