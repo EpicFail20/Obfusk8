@@ -558,3 +558,21 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
      externe), et avertit que le Keycloak de laboratoire tourne en mode développement et ne doit jamais servir en production.
 - **D-045 §C point 4** remplacé en conséquence : « brancher oauth2-proxy sur le fournisseur d'identité de l'établissement, avec un accès
   sortant dédié et limité à ce fournisseur ».
+
+## D-047 — Publication des ports sur une seule adresse — décision humaine du 2026-10-07
+
+- **Contexte** : EXT-56 (et EXT-54) : Traefik (80, 443) et Keycloak (8080) publiés sur `0.0.0.0` et `[::]`, donc sur l'adresse IPv6
+  publique de la VM ; console d'administration de Keycloak en HTTP. Défaut présent depuis l'état initial du dépôt.
+- **Décision** : les trois ports sont publiés sur la seule adresse `BIND_ADDRESS` du `.env`. Valeur par défaut `127.0.0.1` dans
+  `docker-compose.yml` et dans `env.fr.example` / `env.en.example` (sûre par défaut : accès depuis la VM seulement) ; adresse du réseau
+  local à renseigner pour un accès depuis d'autres postes (laboratoire : `192.168.1.35`). Correspond à l'option B1 de D-045, étendue à
+  Traefik et rendue paramétrable.
+- **Alternatives écartées** : adresse codée en dur dans Compose (fige l'adresse de la VM, D-045 §B1) ; pare-feu de l'hôte seul (D-045 §B3) ;
+  Keycloak derrière Traefik (D-045 §B2), sans objet depuis D-046 (Keycloak réservé au laboratoire).
+- **Conséquences** :
+  - sans `BIND_ADDRESS` dans `.env`, l'application n'est plus joignable que depuis la VM : la variable doit être ajoutée aux `.env`
+    existants avant redéploiement (guides `deploiement-lab.md` / `deployment-lab.md` §4) ;
+  - restent ouverts : HTTP et mode développement de Keycloak, console joignable depuis tout le réseau local (EXT-54), accès sortant de
+    Keycloak (EXT-55) ; traités par les suites de D-046 ;
+  - si le test depuis l'extérieur montre que l'exposition était effective, renouvellement des secrets à décider (mot de passe
+    administrateur de Keycloak, secret du client OIDC, secret de cookie d'oauth2-proxy, secret de passerelle).
