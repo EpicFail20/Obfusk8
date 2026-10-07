@@ -554,6 +554,12 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 17. **Dimensionner `MAX_PENDING_JOBS`** (D-051, EXT-59) selon le nombre d'utilisateurs du pilote, après mesure de la mémoire de `app` :
     les documents en attente de révision sont gardés en mémoire (original complet par document), limite du conteneur 1 Go.
 
+**Bloquants pour la production** (ajouté le 2026-10-07, D-054)
+
+18. **Option 2 de D-010 implémentée et testée** : l'extension s'authentifie par un jeton OIDC qui lui est propre (PKCE S256, client public
+    déclaré chez le fournisseur d'identité, audience vérifiée strictement côté serveur). Le mode « session » (option 3) est réservé au
+    laboratoire et au prototype ; la construction de production de l'extension le refuse.
+
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
 - **Contexte** : D-045 §B et §C point 4 laissaient ouvert le fournisseur d'identité du pilote (Keycloak en mode production ou Entra ID).
@@ -697,3 +703,41 @@ Inventaire présenté en session (étape A) : image Presidio publiée reproduite
    sous `~/.cache/obfusk8-devtools.avant-py314` (retour arrière : `OBFUSK8_DEVTOOLS=…`). `app/run-tests.sh` inchangé.
 6. **Workflow de publication** : la base Python est lue dans `docker-compose.build.yml` par une étape `sed` qui échoue si elle est vide,
    puis passée en `build-args` (seules lignes ajoutées, D-052 point 5) ; `actionlint` 1.7.12 sans constat.
+
+## D-054 — Phase 3 (prototype de l'extension) : décisions de l'étape A — décision humaine du 2026-10-07
+
+**Décisions du prompt de phase** :
+- **Authentification du prototype : option 3 de D-010** (réutilisation du cookie de session d'oauth2-proxy). **Option 2 obligatoire pour la
+  production** (D-045 §C point 18, bloquante) : le code de l'extension la prévoit (abstraction d'authentification, stratégie OIDC fermée,
+  construction de production qui refuse le mode « session »).
+- **Dépôt de l'extension séparé et privé** (`obfusk8-extension`) jusqu'au pentest.
+- **Documents** : l'extension n'en traite aucun ; un bouton ouvre l'interface existante (H-3, D-023).
+- **Mode guidé uniquement** : ni script injecté, ni blocage, ni suivi des téléchargements (H-4, D-024, phase ultérieure).
+
+**Décisions sur la conception présentée à l'étape A** (prototype jetable de l'option 3 : cookie `_oauth2_proxy` `SameSite=Lax` envoyé
+depuis le panneau latéral avec `credentials: "include"` et la permission d'hôte, `Sec-Fetch-Site: none` ; `Origin: chrome-extension://<id>`
+sur les POST, absent sur les GET ; observé dans Chromium de Playwright 1.63.0) :
+
+1. **Navigateurs** : Chrome et Edge 116 et plus, Manifest V3, API `sidePanel`. Firefox plus tard, avec l'option 2 : l'origine d'une extension
+   Firefox est propre à chaque installation, une liste blanche figée ne peut pas la couvrir.
+2. **Certificat du laboratoire** : autorité de certification propre au laboratoire, **restreinte par `nameConstraints` aux noms `.lab.local`**,
+   clé privée hors du dépôt ; certificat `obfusk8.lab.local` servi par Traefik (accord donné pour les fichiers Traefik). Le certificat par
+   défaut de Traefik, régénéré à chaque démarrage et sans le nom du service, ne pouvait pas recevoir la confiance d'un poste. Documenter
+   l'import sur le poste (Chrome/Edge) et le retrait en fin de laboratoire ; vérifier qu'un certificat d'un autre domaine signé par cette
+   autorité est refusé par le navigateur.
+3. **Pseudonymisation dans l'extension, à partir de `/analyze`** (et non par `/pseudonymize`) : seule façon de ne pas masquer une détection
+   décochée sans paramètre client qui affaiblirait la détection, et de garder une numérotation cohérente d'un prompt à l'autre dans une
+   conversation. **Test de conformité obligatoire** : sur tout le corpus des bancs, sans détection décochée, le résultat de l'extension est
+   identique octet pour octet à celui de `/pseudonymize`. Vérifier si la propagation D-012 est incluse dans la réponse d'`/analyze` ; sinon,
+   la reproduire dans l'extension, testée.
+4. **Masquage manuel** d'un passage oublié : oui.
+5. **Décochage par valeur** (toutes les occurrences d'une même valeur ensemble) : oui.
+6. **Règle d'origine sur `/api/v1/`** : liste blanche `EXTENSION_ALLOWED_ORIGINS` (vide par défaut) ; POST : origine autorisée exigée ;
+   GET `/api/v1/version` : origine absente acceptée, origine présente non autorisée refusée ; refus en 403. Accord pour `docker-compose.yml`.
+   La documentation de l'option 2 précise que cette règle vise l'authentification par cookie et devra être réexaminée pour les jetons.
+7. **Catégorie d'audit `origin_refused`** pour ces refus.
+8. **Clé de l'extension de laboratoire** : clé publique versionnée (identifiant stable), clé privée détruite. L'identifiant de production
+   relèvera de l'option 2.
+
+**Non tranché par la décision** (recommandation de l'étape A appliquée, à confirmer au compte rendu) : durée de vie maximale de la
+correspondance 60 min par défaut (égale à `cookie_expire`), copie du texte restauré autorisée avec avertissement ; TypeScript 7.0.2.
