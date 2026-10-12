@@ -24,7 +24,7 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phases « disponibilité » et « Python »). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phases « disponibilité », « Python » et 3). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
 (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
@@ -37,7 +37,8 @@ Toute route de l'application doit rester derrière ce mécanisme et derrière `o
 
 **Routage Traefik par labels** : des routeurs dédiés existent pour `/api/detect` et `/api/finalize` (limitation de débit par adresse IP **et**
 par utilisateur + plafond de corps), `/api/cancel/` (routeur `app-cancel` : mêmes limites, plafond de corps de 4 096 octets, sans redirection),
-`/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, **désactivée jusqu'à la phase 3**, `ENABLE_EXTENSION_API=false` dans `.env`, D-041 ; limitation de débit **par utilisateur**
+`/api/preview_image` (limitation de débit), `/api/v1/` (routeur `app-text` : API texte de l'extension, activée au laboratoire depuis la phase 3 (D-054), désactivée par défaut ;
+liste blanche `EXTENSION_ALLOWED_ORIGINS` : POST avec l'`Origin` d'une extension autorisée, 403 `origin_refused` sinon, §8.1 du contrat ; limitation de débit **par utilisateur**
 sur `X-Auth-Request-User`, plafond de corps dérivé de `MAX_TEXT_CHARS`, voir `docs/api-extension.md` §7) et `/metrics` (liste d'IP autorisées). **Toute autre route tombe dans le routeur `app` par défaut :
 authentifiée, mais sans limitation de débit ni plafond de corps en bordure.** Toute nouvelle route exposée exige donc son propre routeur.
 Les routes de documents utilisent `doc-auth-errors` (redirection vers la connexion sur 401 seulement) : `oauth2-errors` (401-403) transformait
@@ -49,6 +50,10 @@ EXT-47) et `Origin` (à défaut `Referer`) égal à `https://${APP_DOMAIN}` sur 
 absent = tout refusé). Toute nouvelle route qui modifie un état applique le même contrôle d'origine. Tests : `tests/doc_headers.py` (en-têtes
 d'une requête légitime) et `tests/conftest.py` (origine de test). Bancs : `BENCH_RESOLVE_ADDRESS=<BIND_ADDRESS>`, session vérifiée par
 `/oauth2/auth` (EXT-52).
+**Extension** (phase 3) : dépôt séparé et privé `obfusk8-extension` (son propre `CLAUDE.md`), panneau latéral MV3. Prototype authentifié par
+le cookie de session (option 3) ; **option 2 (jeton OIDC) obligatoire avant la production** (D-045 §C point 18, `docs/extension-oidc.md`).
+L'extension pseudonymise elle-même à partir de `/analyze` : toute modification des règles de `text_api.pseudonymize` (D-004) impose de
+rejouer sa conformité (`benchmarks/conformity/`, puis `tools/run.sh conformity` dans l'extension).
 
 **Plafonds en double** : la taille des requêtes est bornée en bordure (Traefik) **et** dans l'application (`MAX_REQUEST_BODY_BYTES` dans `main.py`).
 Les deux valeurs doivent rester cohérentes et leur lien doit être commenté.
@@ -107,6 +112,9 @@ les deux copies doivent rester identiques. Retour arrière : `docker-compose.rol
 d'oauth2-proxy (`trusted_proxy_ips`) et de Keycloak (`KC_PROXY_TRUSTED_ADDRESSES`) pour les en-têtes de transfert. À changer aux quatre endroits ensemble. PKCE S256 exigé entre
 oauth2-proxy (`code_challenge_method`) et le client Keycloak (*PKCE method*) : l'un sans l'autre bloque toute connexion (EXT-49). Keycloak 26.8 sur le volume
 `keycloak-data-v26-8` (la base H2 de développement ne se migre pas d'une version à l'autre : export puis import du royaume).
+**Certificat du laboratoire** : autorité restreinte à `.lab.local` (`traefik/generate-lab-cert.sh`, clé privée dans `~/.obfusk8-lab-ca`,
+jamais dans le dépôt), certificat servi par `traefik/dynamic/lab-tls.yml`. Bancs : `REQUESTS_CA_BUNDLE=~/.obfusk8-lab-ca/ca.crt`
+plutôt que `BENCH_INSECURE_TLS`. Le compte de test n° 4 ne se connecte pas (EXT-63).
 
 **Keycloak = laboratoire uniquement** (D-046) : profil Compose `lab` (`COMPOSE_PROFILES=lab` dans le `.env` du laboratoire, sinon
 `docker compose --profile lab …`), mode développement, réseau `app-internal` seul (aucun accès sortant), joint par Traefik (point d'entrée
