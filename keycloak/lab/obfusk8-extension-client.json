@@ -1,0 +1,39 @@
+{
+  "clientId": "obfusk8-extension",
+  "name": "Obfusk8 browser extension (LAB ONLY, option 2 of D-010)",
+  "description": "Public OIDC client of the lab extension: PKCE S256, exact chromiumapp.org redirect, audience obfusk8-api, no refresh token. D-057.",
+  "protocol": "openid-connect",
+  "enabled": true,
+  "publicClient": true,
+  "standardFlowEnabled": true,
+  "implicitFlowEnabled": false,
+  "directAccessGrantsEnabled": false,
+  "serviceAccountsEnabled": false,
+  "consentRequired": false,
+  "fullScopeAllowed": false,
+  "redirectUris": ["https://glaimpfdmfkidcgalcblojmkomplcgpa.chromiumapp.org/"],
+  "webOrigins": ["chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa"],
+  "attributes": {
+    "pkce.code.challenge.method": "S256",
+    "use.refresh.tokens": "false",
+    "access.token.lifespan": "300",
+    "post.logout.redirect.uris": "https://glaimpfdmfkidcgalcblojmkomplcgpa.chromiumapp.org/",
+    "oauth2.device.authorization.grant.enabled": "false",
+    "oidc.ciba.grant.enabled": "false"
+  },
+  "defaultClientScopes": ["basic", "email", "groups"],
+  "optionalClientScopes": [],
+  "protocolMappers": [
+    {
+      "name": "audience-obfusk8-api",
+      "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": {
+        "included.custom.audience": "obfusk8-api",
+        "access.token.claim": "true",
+        "id.token.claim": "false",
+        "introspection.token.claim": "true"
+      }
+    }
+  ]
+}
