@@ -562,6 +562,17 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     déclaré chez le fournisseur d'identité, audience vérifiée strictement côté serveur). Le mode « session » (option 3) est réservé au
     laboratoire et au prototype ; la construction de production de l'extension le refuse.
 
+**Extension sur les postes du pilote** (ajouté le 2026-10-12, décisions humaines sur la phase « ajustements » de l'extension)
+
+19. **Bloquant pour tout déploiement de l'extension sur des postes partagés** : effacement automatique du travail en cours et de la
+    correspondance au verrouillage de la session ou après une inactivité (`chrome.idle`, permission `idle` à justifier). Non implémenté :
+    backlog de l'extension (`docs/BACKLOG.md`, EXT-E-12 de l'extension), où sont notés les faits vérifiés dans la documentation officielle
+    (états `active`, `idle`, `locked` ; délai par défaut 60 s, minimum de 15 s fixé par le code source de Chromium). En attendant :
+    durée de vie par défaut de 30 min (D-006 de l'extension) et rappel de « Tout effacer » en fin de tâche dans la formation des agents.
+20. **Presse-papiers des postes du pilote** : désactiver par stratégie de groupe l'historique du presse-papiers et sa synchronisation
+    entre appareils (le texte restauré copié depuis l'extension y resterait ; EXT-E-01 de l'extension, bouton de copie conservé avec
+    son avertissement). Stratégies exactes à vérifier avec la DSI, non vérifiées ici.
+
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
 - **Contexte** : D-045 §B et §C point 4 laissaient ouvert le fournisseur d'identité du pilote (Keycloak en mode production ou Entra ID).
