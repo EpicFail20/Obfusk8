@@ -594,7 +594,8 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     séparément.
 25. **Journaux** (D-058) : durée de conservation des journaux (conteneurs, audit) à fixer avec la DPO ; validation par le RSSI que les
     journaux du fournisseur d'identité couvrent la traçabilité des connexions (le journal d'oauth2-proxy ne garde plus d'identifiant
-    direct, EXT-67).
+    direct, EXT-67). Les journaux d'oauth2-proxy sont des **données à accès restreint et à conservation courte** : ils gardent les
+    réclamations d'un jeton refusé (EXT-70, risque accepté, D-059).
 
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
@@ -877,3 +878,15 @@ différente du courriel). Aucun réglage d'oauth2-proxy n'est donc nécessaire p
 6. **Risque accepté** : EXT-66 (jeton dont l'audience est le client d'oauth2-proxy, accepté) reste 🟡 ; seul oauth2-proxy, détenteur du
    secret de ce client, peut obtenir un tel jeton. Avec la cible du point 2 (inscription unique chez Entra ID), ce cas devient le cas
    nominal du jeton de l'extension.
+
+## D-059 — Écarts de la note de fin de phase « option 2 » — décision humaine du 2026-10-12
+
+1. **`oidc.scopes` validé** (extension D-016) : `offline_access` refusé ; vérifié que ce réglage ne vient que de la construction ou de la
+   stratégie gérée (lecture seule pour l'extension), jamais de l'agent, test à l'appui ; portée Entra ID à renseigner
+   `api://<identifiant>/access_as_user` (`docs/extension-oidc.md` §6, exemple `config/production.entra.example.json` de l'extension).
+2. **EXT-67** : proposition validée (journal d'authentification et de requêtes sans `Username` ni `Message` : adresse IP, identifiant de
+   requête, résultat, horodatage), **préparée pour application sans être appliquée** : correctif `docs/patches/EXT-67-oauth2-proxy-logging.patch`,
+   test `benchmarks/e2e/check_no_identifier_in_logs.py` (référence d'avant observée). **Limite du journal standard** (réclamations d'un jeton
+   refusé) : **risque accepté (🟡, EXT-70)** ; journaux d'oauth2-proxy à accès restreint et conservation courte (D-045 point 25).
+3. **Diffs des deux `CLAUDE.md` validés et appliqués.**
+4. Suite annoncée par l'humain : test manuel (§7 du compte rendu serveur), puis fusions des deux dépôts.

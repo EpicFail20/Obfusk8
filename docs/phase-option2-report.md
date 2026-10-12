@@ -233,3 +233,12 @@ Serveur : documentation seulement dans ce complément (aucun code modifié ; sui
 1. `oidc.scopes` (extension D-015 point 6) : à valider.
 2. EXT-67 : couper ou non le journal standard d'oauth2-proxy (il garde les réclamations d'un jeton refusé) ; accepter que le `sub`
    n'apparaisse pas dans le journal d'authentification ; appliquer la configuration proposée (fichier `oauth2-proxy.cfg`, accord requis).
+
+## 11. Complément (D-059)
+
+- `oidc.scopes` : sources de configuration vérifiées et figées par test (construction et stratégie gérée seulement) ; exemple Entra ID
+  (extension `2fc76c1`).
+- EXT-67 préparé, non appliqué : `git apply docs/patches/EXT-67-oauth2-proxy-logging.patch`, puis `docker compose up -d oauth2-proxy`, puis
+  `check_no_identifier_in_logs.py` (attendu : 0 partout ; avant, observé : 6 courriels et 1 nom d'utilisateur dans oauth2-proxy). EXT-70 en
+  risque accepté.
+- `CLAUDE.md` des deux dépôts : diffs validés appliqués.
