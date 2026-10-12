@@ -561,6 +561,10 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 18. **Option 2 de D-010 implémentée et testée** : l'extension s'authentifie par un jeton OIDC qui lui est propre (PKCE S256, client public
     déclaré chez le fournisseur d'identité, audience vérifiée strictement côté serveur). Le mode « session » (option 3) est réservé au
     laboratoire et au prototype ; la construction de production de l'extension le refuse.
+    *Mise à jour du 2026-10-12 (phase « option 2 », D-057) : fait et prouvé au laboratoire (Keycloak), serveur et extension, vrai flux de
+    bout en bout sans onglet obfusk8 ; jeton d'une autre application du même émetteur refusé. Reste : la configuration chez le
+    fournisseur de l'établissement (inscriptions d'applications, `EXTENSION_OIDC_*`, `EXTENSION_REQUIRE_BEARER=true`) et le point
+    d'identité sous Entra ID (EXT-68).*
 
 **Extension sur les postes du pilote** (ajouté le 2026-10-12, décisions humaines sur la phase « ajustements » de l'extension)
 
@@ -569,6 +573,9 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     backlog de l'extension (`docs/BACKLOG.md`, EXT-E-12 de l'extension), où sont notés les faits vérifiés dans la documentation officielle
     (états `active`, `idle`, `locked` ; délai par défaut 60 s, minimum de 15 s fixé par le code source de Chromium). En attendant :
     durée de vie par défaut de 30 min (D-006 de l'extension) et rappel de « Tout effacer » en fin de tâche dans la formation des agents.
+    *Mise à jour du 2026-10-12 (phase « option 2 ») : fait (D-014 de l'extension) : travail, correspondance et jeton effacés au
+    verrouillage et après 10 min d'inactivité, dans toutes les vues ; identifiants redemandés à la connexion suivante (`prompt=login`).
+    Détection du verrouillage selon le système à vérifier au test manuel sur les postes du pilote (EXT-E-14 de l'extension).*
 20. **Presse-papiers des postes du pilote** : désactiver par stratégie de groupe l'historique du presse-papiers et sa synchronisation
     entre appareils (le texte restauré copié depuis l'extension y resterait ; EXT-E-01 de l'extension, bouton de copie conservé avec
     son avertissement). Stratégies exactes à vérifier avec la DSI, non vérifiées ici.
