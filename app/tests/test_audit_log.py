@@ -15,7 +15,7 @@
 Regression tests for audit point 3.5 ("injection into the audit log"):
 cover both the write mechanism (`_record_audit_event`) and the
 untrusted entry point that feeds its `user` field (the
-`X-Auth-Request-Email` HTTP header, see 3.7).
+`X-Auth-Request-User` HTTP header since D-057, see 3.7).
 
 Two layers tested separately so a regression on one is not masked if
 the other compensates for it:

@@ -578,7 +578,7 @@ def _strip_unicode_control_and_format_chars(value: str) -> str:
     formatting characters (category Cf, e.g. U+202E "Right-to-
     Left Override"), valid in UTF-8 and therefore rewritten as-is in the
     file AND in the JSON response of `/api/audit`. Such a character in
-    `X-Auth-Request-Email` would allow this field to be displayed in a
+    `X-Auth-Request-User` would allow this field to be displayed in a
     misleading order to anyone reading the log (terminal or audit UI) — not
     a format integrity flaw, but a visual spoofing risk on a
     log whose value relies precisely on its human readability.
@@ -1060,7 +1060,7 @@ MAX_REQUEST_BODY_BYTES = (MAX_UPLOAD_MB + 2) * 1024 * 1024
 # known only to Traefik and `app`. Traefik injects it, overwriting any
 # client-supplied value, on every request routed to `app`; `app` verifies it HERE,
 # BEFORE any processing, in constant time (hmac.compare_digest, never ==).
-# Missing or incorrect -> immediate 401, before even reading X-Auth-Request-Email.
+# Missing or incorrect -> immediate 401, before even reading X-Auth-Request-User.
 #
 # The secret is mounted as a Docker secret (`/run/secrets/gateway_secret`, same
 # convention as oauth2_*), never in cleartext in docker-compose.yml. Traefik
@@ -1096,7 +1096,7 @@ if not GATEWAY_SECRET:
         "dev/test. En production, générer et monter le Docker secret "
         "`gateway_secret` (generate-secrets.sh) — sinon un conteneur voisin "
         "du même réseau Docker peut joindre `app` directement, hors Traefik, "
-        "et forger X-Auth-Request-Email."
+        "et forger X-Auth-Request-User."
     )
 
 
@@ -1126,7 +1126,7 @@ def _filename_hash(filename: str) -> str:
 class _GatewaySecretMiddleware:
     """Checks the shared secret injected by Traefik (section 3.7) BEFORE any
     request processing — so before any endpoint at all reads
-    `X-Auth-Request-Email`. `/health` is exempted: an optional Docker
+    `X-Auth-Request-User`. `/health` is exempted: an optional Docker
     HEALTHCHECK queries the container over loopback, not via Traefik, and must
     not start failing because of this check. Constant-time
     comparison. No-op if no secret is configured (see GATEWAY_SECRET)."""
@@ -3369,22 +3369,22 @@ def _detect_document_sync(request: Request, raw: bytes, upload_filename: str | N
 
     # Sanitized once, at the source: the same value is the job's owner, the
     # quota key and the audit identity (EXT-47: never a shared fallback).
-    user_email = _document_user(request)
+    user_sub = _document_user(request)
 
     # Quotas of jobs pending review (independent of the Traefik rate
     # limits): per user first (EXT-51), then global — raw documents never
     # accumulate in memory beyond a safe threshold. The place is reserved
     # until the job is stored or the detection fails.
     with _PENDING_JOBS_LOCK:
-        _reserve_pending_place(user_email)
+        _reserve_pending_place(user_sub)
     try:
-        return _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb)
+        return _detect_reserved(raw, kind, theme, filename_hash, user_sub, size_mb)
     finally:
         with _PENDING_JOBS_LOCK:
-            _release_pending_place(user_email)
+            _release_pending_place(user_sub)
 
 
-def _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb):
+def _detect_reserved(raw, kind, theme, filename_hash, user_sub, size_mb):
     """Rest of _detect_document_sync, once a pending place is reserved."""
 
     # The `theme` field is a form field freely controlled by the
@@ -3393,11 +3393,11 @@ def _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb):
     # AND the output file name (`theme_slug`). Without handling here:
     #  - a Unicode formatting character (RTL override U+202E, category
     #    Cf) passes through intact and enables the same visual log spoofing
-    #    already neutralized on `X-Auth-Request-Email` (audit section 3.5);
+    #    already neutralized on `X-Auth-Request-User` (audit section 3.5);
     #  - a very long value produces a `theme_slug` exceeding the
     #    system's filename length limit (Errno 36), causing
     #    finalization to fail with a misleading message ("corrupted file").
-    # Sanitized once, at the source, exactly like `user_email` above,
+    # Sanitized once, at the source, exactly like `user_sub` above,
     # then length-bounded (a real theme is short: medical/it/accounting).
     theme = _strip_unicode_control_and_format_chars(theme)[:MAX_THEME_CHARS]
 
@@ -3408,15 +3408,15 @@ def _detect_reserved(raw, kind, theme, filename_hash, user_email, size_mb):
     job_id = uuid.uuid4().hex
 
     if kind == "docx":
-        return _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
+        return _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb)
     if kind == "csv":
-        return _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
+        return _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb)
     if kind == "image":
-        return _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
-    return _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb)
+        return _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb)
+    return _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb)
 
 
-def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
+def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb):
     """PDF detection logic — unchanged from the PDF-only version,
     only extracted into its own function to allow dispatching."""
     try:
@@ -3476,7 +3476,7 @@ def _handle_detect_pdf(raw, theme, selected_theme, job_id, filename_hash, user_e
             "clusters": {c["id"]: c["member_ids"] for c in clusters},
             "theme": theme,
             "filename_hash": filename_hash,
-            "user_email": user_email,
+            "user_sub": user_sub,
             "size_mb": size_mb,
             "created_at": time.time(),
         }
@@ -3712,7 +3712,7 @@ def _build_pixel_review_page(
     """)
 
 
-def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
+def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb):
     """
     Image detection: input validation (_open_and_validate_image), OCR +
     PII detection (_detect_image), then the same pixel review screen as
@@ -3753,7 +3753,7 @@ def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user
             "clusters": {c["id"]: c["member_ids"] for c in clusters},
             "theme": theme,
             "filename_hash": filename_hash,
-            "user_email": user_email,
+            "user_sub": user_sub,
             "size_mb": size_mb,
             "created_at": time.time(),
         }
@@ -3768,7 +3768,7 @@ def _handle_detect_image(raw, theme, selected_theme, job_id, filename_hash, user
     return _build_pixel_review_page(job_id, len(clusters), pages_html)
 
 
-def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
+def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb):
     try:
         document = WordDocument(io.BytesIO(raw))
     except Exception as exc:
@@ -3804,7 +3804,7 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
             "clusters": {c["id"]: c["member_ids"] for c in clusters},
             "theme": theme,
             "filename_hash": filename_hash,
-            "user_email": user_email,
+            "user_sub": user_sub,
             "size_mb": size_mb,
             "created_at": time.time(),
         }
@@ -3856,7 +3856,7 @@ def _handle_detect_docx(raw, theme, selected_theme, job_id, filename_hash, user_
     )
 
 
-def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_email, size_mb):
+def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_sub, size_mb):
     text, _encoding = _decode_csv_bytes(raw)
     delimiter = _detect_csv_delimiter(text)
     rows = _parse_csv_rows(text, delimiter)
@@ -3892,7 +3892,7 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
             "clusters": {c["id"]: c["member_ids"] for c in clusters},
             "theme": theme,
             "filename_hash": filename_hash,
-            "user_email": user_email,
+            "user_sub": user_sub,
             "size_mb": size_mb,
             "created_at": time.time(),
         }
@@ -3935,25 +3935,32 @@ def _handle_detect_csv(raw, theme, selected_theme, job_id, filename_hash, user_e
 
 
 def _request_user(request: Request) -> str:
-    """Caller e-mail for the text API's audit (`/api/v1/`, which refuses a
-    request without identity beforehand, D-035). The document flow uses
-    _document_user, which has no fallback (EXT-47)."""
+    """Caller identity (OIDC `sub`, D-057 point 9) for the text API's audit
+    (`/api/v1/`, which refuses a request without identity beforehand, D-035).
+    The document flow uses _document_user, which has no fallback (EXT-47)."""
     return _strip_unicode_control_and_format_chars(
-        request.headers.get("x-auth-request-email", "inconnu")
+        request.headers.get("x-auth-request-user", "inconnu")
     )
 
 
 def _document_user(request: Request) -> str:
     """Caller identity of the document flow as guaranteed by oauth2-proxy via
-    Traefik (`X-Auth-Request-Email`, replaced — never passed through as-is —
+    Traefik (`X-Auth-Request-User`, replaced — never passed through as-is —
     by the forwardAuth), sanitized like every logged value so that ownership
     comparisons are exact.
 
+    D-057 point 9: the identity is the OIDC `sub`, which oauth2-proxy puts in
+    X-Auth-Request-User for a cookie session and for a bearer token alike
+    (observed on the lab stack on 2026-10-12, v7.15.5). The e-mail is not an
+    identity any more: optional in a token, and replaced by the `sub` when a
+    token has none, it would split one person into two owners and quotas.
+
     EXT-47: a missing or empty identity used to fall back to "inconnu",
     shared by every such request (ownership of their jobs, one common quota).
-    Unreachable through Traefik (a session without e-mail stops at
-    oauth2-proxy, EXT-43), refused anyway: 403, like /api/v1/ (D-035)."""
-    user = _strip_unicode_control_and_format_chars(request.headers.get("x-auth-request-email", ""))
+    Reachable through Traefik: oauth2-proxy accepts a bearer token whose
+    `sub` is empty and sets no identity header (throwaway trial of the
+    "option 2" phase): 403, like /api/v1/ (D-035)."""
+    user = _strip_unicode_control_and_format_chars(request.headers.get("x-auth-request-user", ""))
     if not user.strip():
         raise HTTPException(status_code=403, detail=STRINGS["identity_missing"])
     return user
@@ -4001,7 +4008,7 @@ def _reserve_pending_place(user: str) -> None:
     Retry-After when their own quota is full (EXT-51), 503 when the global
     cap is. Caller holds _PENDING_JOBS_LOCK."""
     if MAX_PENDING_JOBS_PER_USER:
-        created_ats = [job["created_at"] for job in PENDING_JOBS.values() if job.get("user_email") == user]
+        created_ats = [job["created_at"] for job in PENDING_JOBS.values() if job.get("user_sub") == user]
         if len(created_ats) + _PENDING_RESERVATIONS.get(user, 0) >= MAX_PENDING_JOBS_PER_USER:
             log.warning("Quota par utilisateur atteint (%d document(s) en attente)", MAX_PENDING_JOBS_PER_USER)
             raise HTTPException(
@@ -4040,7 +4047,7 @@ def _get_pending_job_for(job_id: str, request: Request, pop: bool = False) -> di
     user = _document_user(request)
     with _PENDING_JOBS_LOCK:
         job = PENDING_JOBS.get(job_id)
-        if job is None or job.get("user_email") != user:
+        if job is None or job.get("user_sub") != user:
             raise HTTPException(status_code=404, detail=STRINGS["job_not_found_expired"])
         if pop:
             PENDING_JOBS.pop(job_id, None)
@@ -4548,7 +4555,7 @@ def _finalize_document_sync(
     _record_audit_event(
         job_id=job_id,
         format=kind,
-        user=job["user_email"],
+        user=job["user_sub"],
         theme=theme or "aucun",
         file_size_mb=round(job["size_mb"], 2),
         filename_hash=job["filename_hash"],
@@ -4684,7 +4691,7 @@ async def cancel_document(job_id: str, request: Request) -> JSONResponse:
         event="cancellation",
         job_id=job_id,
         format=job["kind"],
-        user=job["user_email"],
+        user=job["user_sub"],
         theme=job["theme"] or "aucun",
         file_size_mb=round(job["size_mb"], 2),
         filename_hash=job["filename_hash"],

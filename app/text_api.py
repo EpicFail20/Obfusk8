@@ -109,13 +109,14 @@ _PLACEHOLDER_CLOSE = "⟧"
 # must never be labelled as something less sensitive.
 _PRIORITY_TYPE = "SECRET"
 
-# D-035 (phase 2 bis): both identity headers that Traefik's forwardAuth copies
-# from oauth2-proxy (authResponseHeaders). X-Auth-Request-User keys the
-# per-user rate limit at the edge, X-Auth-Request-Email is the identity the
-# application audits (main._request_user, which falls back to "inconnu" when
-# it is missing): a request lacking either one is refused, never served under
-# a shared or empty identity.
-_IDENTITY_HEADERS = ("x-auth-request-user", "x-auth-request-email")
+# D-035 (phase 2 bis), D-057 point 9: the identity header that Traefik's
+# forwardAuth copies from oauth2-proxy (authResponseHeaders). X-Auth-Request-User
+# carries the OIDC `sub` for a cookie session and a bearer token alike: it keys
+# the per-user rate limit at the edge and is the identity the application
+# audits (main._request_user). The e-mail is no longer required: a token may
+# lack it. A request without the identity is refused, never served under a
+# shared or empty identity.
+_IDENTITY_HEADERS = ("x-auth-request-user",)
 
 # Phase 3 (D-054 point 6): Origin of an allowed browser extension. Chrome's
 # extension ids are 32 letters a-p (base-16 digits of a SHA-256, shifted to
@@ -388,7 +389,7 @@ def pseudonymize(text: str, spans: Sequence[Span]) -> tuple[str, list[MappingEnt
 
 
 def has_identity(request: Request) -> bool:
-    """True when every identity header carries something visible: control
+    """True when the identity header carries something visible: control
     and format characters (category C) and white space do not count, so a
     value made only of them is as empty as a missing header."""
     for name in _IDENTITY_HEADERS:

@@ -13,10 +13,12 @@
 # along with this program. If not, see <https://www.gnu.org/licenses/>.
 """Headers of a legitimate document-flow request, as Traefik forwards it
 from the review interface: identity set by oauth2-proxy (EXT-47) and the
-application's own origin (D-048 point 3). Fictitious values only."""
+application's own origin (D-048 point 3). Fictitious values only.
+The identity is the OIDC `sub` in X-Auth-Request-User (D-057 point 9); any
+fictitious string stands for it."""
 
 TEST_ORIGIN = "https://obfusk8.test.invalid"
 
 
-def doc_headers(email: str = "alice@exemple.invalid") -> dict[str, str]:
-    return {"x-auth-request-email": email, "origin": TEST_ORIGIN}
+def doc_headers(user: str = "alice@exemple.invalid") -> dict[str, str]:
+    return {"x-auth-request-user": user, "origin": TEST_ORIGIN}

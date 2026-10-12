@@ -798,7 +798,9 @@ def test_budget_epuise_pendant_l_appel_classe_timeout_sans_alerte(audit_dir, ext
 
 
 # ---------------------------------------------------------------------------
-# D-035 (phase 2 bis): identity required on every /api/v1/ route
+# D-035 (phase 2 bis): identity required on every /api/v1/ route. Since D-057
+# point 9 the identity is X-Auth-Request-User (OIDC `sub`) alone: the e-mail
+# is no longer required (a bearer token may lack it), see the test below.
 # ---------------------------------------------------------------------------
 
 
@@ -807,12 +809,10 @@ def test_budget_epuise_pendant_l_appel_classe_timeout_sans_alerte(audit_dir, ext
     [
         {},
         {"x-auth-request-email": USER},
-        {"x-auth-request-user": "id-fictif-0001"},
         {"x-auth-request-user": "", "x-auth-request-email": USER},
-        {"x-auth-request-user": "id-fictif-0001", "x-auth-request-email": "  "},
         {"x-auth-request-user": "\u00a0\t\u00ad", "x-auth-request-email": USER},
     ],
-    ids=["aucun", "sans-user", "sans-email", "user-vide", "email-blanc", "user-invisible"],
+    ids=["aucun", "sans-user", "user-vide", "user-invisible"],
 )
 @pytest.mark.parametrize("path", [ANALYZE, PSEUDO])
 def test_identite_absente_ou_vide_refusee_403(audit_dir, extension_dir, caplog, headers, path):
@@ -826,6 +826,23 @@ def test_identite_absente_ou_vide_refusee_403(audit_dir, extension_dir, caplog, 
     (line,) = _audit_lines(audit_dir)
     assert line["outcome"] == "forbidden" and line["text_chars"] is None
     assert CANARY not in json.dumps(line) and CANARY not in caplog.text
+
+
+@pytest.mark.parametrize(
+    "headers",
+    [
+        {"x-auth-request-user": "id-fictif-0001"},
+        {"x-auth-request-user": "id-fictif-0001", "x-auth-request-email": "  "},
+    ],
+    ids=["sans-email", "email-blanc"],
+)
+def test_courriel_non_exige_le_sub_suffit(audit_dir, extension_dir, headers):
+    """D-057 point 9: these two cases were refused under D-035 (both headers
+    required); the e-mail is no longer an identity, the sub alone is served."""
+    app = _app(_deps(audit_dir, extension_dir, _regex_detector(DETECT)))
+    status, _, _, _ = _post(app, ANALYZE, {"text": f"Bonjour {CANARY}"}, identity=False, headers=headers)
+    assert status == 200
+    assert _audit_lines(audit_dir)[0]["outcome"] == "ok"
 
 
 def test_version_sans_identite_refusee_403(audit_dir, extension_dir, monkeypatch):

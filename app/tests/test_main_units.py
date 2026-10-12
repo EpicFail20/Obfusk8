@@ -978,7 +978,7 @@ def _seed_csv_job(job_id: str, theme: str = "") -> None:
             "clusters": {},
             "theme": theme,
             "filename_hash": "deadbeef",
-            "user_email": "alice@exemple.invalid",
+            "user_sub": "alice@exemple.invalid",
             "size_mb": 0.01,
             "created_at": _time.time(),
         }
@@ -1341,7 +1341,7 @@ def _seed_image_job(job_id: str, user: str) -> None:
         main.PENDING_JOBS[job_id] = {
             "kind": "image", "image_format": "PNG", "raw_image": _make_solid_png(8, (255, 0, 0)),
             "detections": [], "clusters": {}, "theme": "", "filename_hash": "deadbeef",
-            "user_email": user, "size_mb": 0.01, "created_at": _time.time(),
+            "user_sub": user, "size_mb": 0.01, "created_at": _time.time(),
         }
 
 
@@ -1353,10 +1353,10 @@ def test_preview_image_refuse_le_job_d_un_autre_utilisateur():
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
         with pytest.raises(HTTPException) as exc:
-            _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "mallory@hopital.fr"})))
+            _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-user": "mallory@hopital.fr"})))
         assert exc.value.status_code == 404
         assert job_id in main.PENDING_JOBS, "the owner's job was removed by a third party's attempt"
-        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice@hopital.fr"})))
+        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-user": "alice@hopital.fr"})))
         assert resp.status_code == 200 and resp.media_type == "image/png"
     finally:
         main.PENDING_JOBS.pop(job_id, None)
@@ -1369,7 +1369,7 @@ def test_finalize_refuse_le_job_d_un_autre_utilisateur_sans_le_detruire():
     job_id = "55555555666666667777777788888888"
     _seed_csv_job(job_id)
     with main._PENDING_JOBS_LOCK:
-        main.PENDING_JOBS[job_id]["user_email"] = "alice@hopital.fr"
+        main.PENDING_JOBS[job_id]["user_sub"] = "alice@hopital.fr"
     try:
         with pytest.raises(HTTPException) as exc:
             _drive(main.finalize_document(
@@ -1399,7 +1399,7 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
     job_id = "99999999aaaaaaaabbbbbbbbcccccccc"
     _seed_image_job(job_id, "alice@hopital.fr")
     try:
-        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-email": "alice\u202e@hopital.fr"})))
+        resp = _drive(main.preview_image(job_id, 0, _FakeRequest({"x-auth-request-user": "alice\u202e@hopital.fr"})))
         assert resp.status_code == 200
     finally:
         main.PENDING_JOBS.pop(job_id, None)
@@ -1409,7 +1409,7 @@ def test_identite_comparee_apres_le_meme_assainissement_qu_a_la_creation():
 # Section 3.7: shared gateway secret (Traefik -> app).
 #
 # The bypass (a neighboring container on the same Docker network joins
-# `app` directly, outside Traefik, and forges X-Auth-Request-Email) was
+# `app` directly, outside Traefik, and forges X-Auth-Request-User) was
 # empirically confirmed. `_GatewaySecretMiddleware` requires, before any
 # processing, a secret that only Traefik knows and injects. These tests
 # go through the FULL ASGI stack via `_asgi_request`, exactly the level
@@ -1422,12 +1422,12 @@ _GATEWAY_TEST_SECRET = "s3cr3t-passerelle-de-test"
 def test_gateway_requete_sans_le_secret_rejetee_401(monkeypatch):
     """A caller who did not go through Traefik (hence without the
     injected secret) is rejected with 401 before even reaching the code
-    that reads X-Auth-Request-Email — this is precisely the Phase 1
+    that reads X-Auth-Request-User — this is precisely the Phase 1
     bypass."""
     monkeypatch.setattr(main, "GATEWAY_SECRET", _GATEWAY_TEST_SECRET)
     status, _headers, _body, consumed = _asgi_request(
         "POST", "/api/detect",
-        headers={"x-auth-request-email": "admin@usurpe.fr"},
+        headers={"x-auth-request-user": "admin@usurpe.fr"},
     )
     assert status == 401
     assert consumed == 0, "the body must not even start being read for a gateway 401"

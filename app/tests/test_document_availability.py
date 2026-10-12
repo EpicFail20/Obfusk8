@@ -191,7 +191,7 @@ def test_gestionnaire_d_erreur_transmet_retry_after() -> None:
 def test_ext47_identite_absente_ou_vide_refusee_403_partout(email: str | None) -> None:
     headers = {"origin": TEST_ORIGIN, **CANCEL_HEADERS}
     if email is not None:
-        headers["x-auth-request-email"] = email
+        headers["x-auth-request-user"] = email
     job_id = _job_id(_detect(doc_headers(ALICE)))
     calls = {
         "detect": lambda: _detect(headers),
@@ -222,7 +222,7 @@ def test_ext47_identite_absente_ou_vide_refusee_403_partout(email: str | None) -
 )
 def test_requete_d_une_autre_origine_refusee_403_sur_chaque_route(origin_headers: dict[str, str]) -> None:
     job_id = _job_id(_detect(doc_headers(ALICE)))
-    headers = {"x-auth-request-email": ALICE, **CANCEL_HEADERS, **origin_headers}
+    headers = {"x-auth-request-user": ALICE, **CANCEL_HEADERS, **origin_headers}
     calls = {
         "detect": lambda: _detect(headers),
         "finalize": lambda: _run(main.finalize_document(_req(headers), job_id=job_id)),
@@ -235,7 +235,7 @@ def test_requete_d_une_autre_origine_refusee_403_sur_chaque_route(origin_headers
 
 
 def test_referer_de_la_meme_origine_accepte_a_defaut_d_origin() -> None:
-    headers = {"x-auth-request-email": ALICE, "referer": TEST_ORIGIN + "/api/detect"}
+    headers = {"x-auth-request-user": ALICE, "referer": TEST_ORIGIN + "/api/detect"}
     assert _detect(headers).status_code == 200
 
 
@@ -283,7 +283,7 @@ def test_detect_http_origine_etrangere_refusee_avant_tout_traitement(monkeypatch
         headers={
             "content-type": "multipart/form-data; boundary=XBOUNDARYX",
             "accept": "application/json",
-            "x-auth-request-email": ALICE,
+            "x-auth-request-user": ALICE,
             "origin": "https://attaquant.invalid",
         },
         body_chunks=[body],
@@ -430,7 +430,7 @@ def test_page_de_revision_pdf_porte_aussi_le_bouton() -> None:
 
 
 def test_referer_mal_forme_refuse() -> None:
-    headers = {"x-auth-request-email": ALICE, "referer": "https://[obfusk8.test.invalid/"}
+    headers = {"x-auth-request-user": ALICE, "referer": "https://[obfusk8.test.invalid/"}
     status, detail, _ = _status(lambda: _detect(headers))
     assert (status, detail) == (403, main.STRINGS["cross_origin_refused"])
 
