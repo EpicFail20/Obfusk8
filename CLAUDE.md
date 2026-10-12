@@ -24,13 +24,16 @@ personnalisés, **révision humaine obligatoire**, fonctionnement **100 % hors l
 
 ## 1. Particularités de ce dépôt
 
-Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) et le 7 octobre 2026 (phases « disponibilité », « Python » et 3). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
+Constatées dans le dépôt le 2 octobre 2026, complétées le 4 octobre 2026 (enseignements de la phase 1), le 5 octobre 2026 (phases 2 et 2 bis) le 7 octobre 2026 (phases « disponibilité », « Python » et 3) et le 12 octobre 2026 (phase « option 2 »). **Revérifie-les en début de session** : si une ligne ci-dessous n'est plus vraie, signale-le et propose la mise à jour de ce fichier.
 
 **Chaîne de requête** : Traefik → `oauth2-proxy` (forward auth, en-têtes `X-Auth-Request-User` / `X-Auth-Request-Email`) → `app`
 (FastAPI, port 8000) → `presidio-analyzer` (image construite depuis `presidio/analyzer-build`), appelé en HTTP sur le réseau interne `backend`.
 Le service `presidio-anonymizer` a été **retiré** (phase 2 bis, D-040 : jamais appelé, EXT-20) ; le caviardage est fait par `app` elle-même.
 Point d'entrée unique vers l'analyseur : `main._analyze_normalized` (normalisation D-014 avec table de correspondance). PyMuPDF ne traite
 qu'un document à la fois, sur un fil dédié (D-019) ; repli de localisation PDF par positions de caractères (D-026).
+**Identité** (D-057, D-058) : le `sub` (`X-Auth-Request-User`) dans tous les flux (audit, quotas, propriété des documents, débit) ; le
+courriel n'est plus une identité. `_document_user` et `_request_user` le lisent ; identité vide refusée (403). Chez Entra ID, le `sub`
+est propre à chaque application : cible, une seule inscription d'application pour oauth2-proxy et l'API (EXT-68, D-045 point 24).
 
 **Secret de passerelle** (audit 3.7) : `_GatewaySecretMiddleware` vérifie un secret injecté par Traefik (`gateway-secret@file`).
 Toute route de l'application doit rester derrière ce mécanisme et derrière `oidc-auth`. Ne crée jamais de contournement.
@@ -43,6 +46,10 @@ sur `X-Auth-Request-User`, plafond de corps dérivé de `MAX_TEXT_CHARS`, voir `
 authentifiée, mais sans limitation de débit ni plafond de corps en bordure.** Toute nouvelle route exposée exige donc son propre routeur.
 Les routes de documents utilisent `doc-auth-errors` (redirection vers la connexion sur 401 seulement) : `oauth2-errors` (401-403) transformait
 un 403 de l'application en déconnexion de l'utilisateur (EXT-57). Ne mets jamais `oauth2-errors` sur une route qui peut répondre 403.
+**Jeton de l'extension** (option 2, D-057) : `ENABLE_EXTENSION_OIDC` (variables `OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS` et
+`OAUTH2_PROXY_EXTRA_JWT_ISSUERS` dans `docker-compose.yml`, jamais dans `oauth2-proxy.cfg`), audience exacte
+`EXTENSION_OIDC_AUDIENCE`, jamais `oidc_extra_audiences` ; `EXTENSION_REQUIRE_BEARER=true` en production. Middleware
+`strip-authorization` avant `oidc-auth` sur tout routeur web : toute nouvelle route web le reprend.
 
 **Flux documents** (phase « disponibilité », D-048) : quota par utilisateur de documents en attente (`MAX_PENDING_JOBS_PER_USER`, 429 +
 `Retry-After`, plafond commun `MAX_PENDING_JOBS` en 503), annulation (`ENABLE_JOB_CANCEL`), identité obligatoire (`_document_user`, 403,
@@ -54,6 +61,9 @@ d'une requête légitime) et `tests/conftest.py` (origine de test). Bancs : `BEN
 le cookie de session (option 3) ; **option 2 (jeton OIDC) obligatoire avant la production** (D-045 §C point 18, `docs/extension-oidc.md`).
 L'extension pseudonymise elle-même à partir de `/analyze` : toute modification des règles de `text_api.pseudonymize` (D-004) impose de
 rejouer sa conformité (`benchmarks/conformity/`, puis `tools/run.sh conformity` dans l'extension).
+Effacement côté extension (D-058) : l'échéance du travail (30 min) n'efface pas la connexion ; le verrouillage (immédiat), l'inactivité
+(60 min par défaut, une stratégie gérée ne peut que raccourcir), « Tout effacer » et la déconnexion effacent tout, jeton compris, et
+imposent une reconnexion interactive (`prompt=login`).
 
 **Plafonds en double** : la taille des requêtes est bornée en bordure (Traefik) **et** dans l'application (`MAX_REQUEST_BODY_BYTES` dans `main.py`).
 Les deux valeurs doivent rester cohérentes et leur lien doit être commenté.
@@ -120,6 +130,8 @@ plutôt que `BENCH_INSECURE_TLS`. Le compte de test n° 4 ne se connecte pas (EX
 `docker compose --profile lab …`), mode développement, réseau `app-internal` seul (aucun accès sortant), joint par Traefik (point d'entrée
 `keycloak`, `BIND_ADDRESS:8080`). Sans le profil, oauth2-proxy redémarre en boucle : c'est attendu. Le pilote et la production utilisent le
 fournisseur d'identité de l'établissement, avec des secrets neufs (D-045 §C point 16).
+Clients de l'extension : `keycloak/lab/apply-clients.sh` (fichiers versionnés), jamais à la main ; ne touche pas `anonymiseur-app`.
+Bancs : `benchmarks/e2e/e2e_extension_oidc.py` (vrais jetons), `check_tokens_not_logged.py`.
 
 **Modules existants à réutiliser** : `antivirus.py` (ICAP), `supervision.py` (alertes, syslog), journal d'audit, `branding.py`,
 `text_api.py` (API texte, limiteur et file bornée).
