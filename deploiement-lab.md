@@ -224,6 +224,40 @@ prompt avant son envoi à un service d'IA. Contrat complet : [`docs/api-extensio
 - L'analyseur Presidio n'a qu'un worker, partagé avec le flux documents : un traitement de document en cours retarde les prompts, et
   inversement dans une moindre mesure (mesures dans `benchmarks/results/`).
 
+## 8 bis. (Facultatif) Jeton OIDC propre à l'extension (option 2)
+
+L'extension obtient son propre jeton auprès du fournisseur d'identité et n'a plus besoin d'un onglet obfusk8 connecté. Détail, preuves et
+modèle de menace : [`docs/extension-oidc.md`](./docs/extension-oidc.md) (D-057). Prérequis : §8 (API texte activée).
+
+1. Créer les clients Keycloak de l'extension, décrits par les fichiers versionnés de `keycloak/lab/` (client public `obfusk8-extension`,
+   PKCE S256, redirection exacte, audience `obfusk8-api`, sans jeton de rafraîchissement ; client témoin `obfusk8-test-autre-application`
+   pour les tests) :
+   ```bash
+   keycloak/lab/apply-clients.sh
+   ```
+   Le script recrée ces deux clients à l'identique à chaque exécution ; il ne touche jamais `anonymiseur-app`.
+2. Dans `.env` :
+   ```bash
+   ENABLE_EXTENSION_OIDC=true
+   EXTENSION_OIDC_ISSUER=http://keycloak.lab.local:8080/realms/lab
+   EXTENSION_OIDC_AUDIENCE=obfusk8-api
+   EXTENSION_REQUIRE_BEARER=false   # true : le cookie n'ouvre plus l'API (production)
+   ```
+3. Recréer la pile et vérifier :
+   ```bash
+   docker compose up -d
+   docker compose logs oauth2-proxy | grep "Skipping JWT tokens from extra JWT issuer"
+   docker compose logs app | grep "jeton porteur exigé"
+   ```
+4. Test de bout en bout (vrais jetons, aucun affiché) : en-tête de `benchmarks/e2e/e2e_extension_oidc.py`.
+
+À savoir :
+- Le jeton n'ouvre que `/api/v1/` : les routeurs web retirent l'en-tête `Authorization` avant `oidc-auth`.
+- Un jeton invalide, expiré ou d'une autre application reçoit **403** (texte brut) ; avec `EXTENSION_REQUIRE_BEARER=true`, une requête
+  sans jeton reçoit **401** JSON `bearer_required`.
+- L'identité de tous les flux est le `sub` (audit pseudonymisé) : [`docs/audit-identite.md`](./docs/audit-identite.md).
+- L'émetteur en HTTP n'est admis qu'au laboratoire ; en production, émetteur HTTPS obligatoire (D-045 point 21).
+
 ## Changer de domaine après coup
 
 Quatre endroits à mettre à jour si `APP_DOMAIN` change après une installation fonctionnelle :
@@ -279,6 +313,9 @@ installation, secrets neufs (`./generate-secrets.sh` sur la nouvelle machine, D-
    doit joindre le fournisseur (découverte OIDC, jetons) **et lui seul** : réseau sortant dédié à oauth2-proxy, filtré vers les adresses du
    fournisseur. Ce branchement est conçu et testé pendant la phase du pilote ; ne rattache pas `app-internal` ni `app` à un réseau ouvert.
 4. Tant que le fournisseur n'est pas configuré, oauth2-proxy redémarre en boucle (échec de la découverte OIDC) : c'est attendu.
+5. **Extension** (si le pilote l'inclut) : option 2 obligatoire (D-045 §C point 18) : `ENABLE_EXTENSION_OIDC=true`, émetteur **HTTPS** et
+   audience exacte de l'application API (`EXTENSION_OIDC_ISSUER`, `EXTENSION_OIDC_AUDIENCE`), `EXTENSION_REQUIRE_BEARER=true`. Inscription
+   des applications chez le fournisseur et point d'identité à trancher (EXT-68) : [`docs/extension-oidc.md`](./docs/extension-oidc.md) §6.
 
 ### Exemple : Entra ID
 

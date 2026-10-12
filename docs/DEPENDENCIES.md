@@ -250,3 +250,18 @@ Outils utilisés hors des images, en conteneurs jetables (jamais dans le dépôt
 | OpenSSL de l'hôte | 3.5.7 | Debian | `traefik/generate-lab-cert.sh` |
 
 Les dépendances de l'extension (TypeScript, Biome, Playwright…) sont tracées dans son dépôt (`obfusk8-extension/docs/DEPENDENCIES.md`).
+
+## Phase « option 2 » — jeton OIDC de l'extension (2026-10-12)
+
+**Aucune dépendance de production ajoutée ni mise à jour.** La vérification des jetons utilise les capacités existantes d'oauth2-proxy
+(v7.15.5, image inchangée, condensat inchangé : `skip_jwt_bearer_tokens`, `extra_jwt_issuers`, `bearer_token_login_fallback`, vérifiées
+dans la documentation officielle 7.15.x et le code source de la version en service) ; le retrait d'`Authorization` sur les routeurs web
+utilise le middleware `headers` de Traefik 3.7 (image inchangée). L'application n'ajoute aucune bibliothèque JWT : elle ne vérifie pas le
+jeton (oauth2-proxy l'a fait), elle contrôle seulement la présence de l'en-tête. Profil seccomp inchangé (suite et bouts en bout sous
+`app-enforce.json`, `Seccomp: 2`).
+
+| Outil | Version | Épinglage | Rôle |
+|---|---|---|---|
+| `kcadm.sh` (Keycloak 26.8.0, déjà en service) | 26.8.0 | image existante `sha256:b0f60d48…` | `keycloak/lab/apply-clients.sh` : clients de l'extension du laboratoire |
+| Python et `requests` de l'image `app` | ceux de l'image | image construite | `benchmarks/e2e/e2e_extension_oidc.py` dans un conteneur jetable |
+| OpenSSL de l'hôte | 3.5.7 | Debian | essai jetable de l'étape A (clés RSA de l'émetteur fictif, détruites) |

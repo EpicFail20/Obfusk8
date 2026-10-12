@@ -222,6 +222,39 @@ Good to know:
 - The Presidio analyzer has a single worker, shared with the document flow: a document being processed delays prompts, and the other
   way round to a lesser extent (measurements in `benchmarks/results/`).
 
+## 8 bis. (Optional) The extension's own OIDC token (option 2)
+
+The extension obtains its own token from the identity provider and no longer needs a signed-in obfusk8 tab. Details, proofs and threat
+model: [`docs/extension-oidc.en.md`](./docs/extension-oidc.en.md) (D-057). Prerequisite: §8 (text API enabled).
+
+1. Create the extension's Keycloak clients, described by the versioned files of `keycloak/lab/` (public client `obfusk8-extension`,
+   PKCE S256, exact redirect, audience `obfusk8-api`, no refresh token; test fixture `obfusk8-test-autre-application`):
+   ```bash
+   keycloak/lab/apply-clients.sh
+   ```
+   The script recreates both clients identically on every run; it never touches `anonymiseur-app`.
+2. In `.env`:
+   ```bash
+   ENABLE_EXTENSION_OIDC=true
+   EXTENSION_OIDC_ISSUER=http://keycloak.lab.local:8080/realms/lab
+   EXTENSION_OIDC_AUDIENCE=obfusk8-api
+   EXTENSION_REQUIRE_BEARER=false   # true: the cookie no longer opens the API (production)
+   ```
+3. Recreate the stack and check:
+   ```bash
+   docker compose up -d
+   docker compose logs oauth2-proxy | grep "Skipping JWT tokens from extra JWT issuer"
+   docker compose logs app | grep "jeton porteur exigé"
+   ```
+4. End-to-end test (real tokens, none printed): header of `benchmarks/e2e/e2e_extension_oidc.py`.
+
+Good to know:
+- The token opens `/api/v1/` only: the web routers drop the `Authorization` header before `oidc-auth`.
+- An invalid, expired or other-application token gets **403** (plain text); with `EXTENSION_REQUIRE_BEARER=true`, a request without a
+  token gets a **401** JSON `bearer_required`.
+- The identity of every flow is the `sub` (pseudonymised audit): [`docs/audit-identity.md`](./docs/audit-identity.md).
+- An HTTP issuer is accepted in the lab only; in production, an HTTPS issuer is mandatory (D-045 point 21).
+
 ## Changing the domain later
 
 Four places to update if `APP_DOMAIN` changes after a working install:
@@ -278,6 +311,9 @@ A pilot or production does **not** use the lab Keycloak (D-046) and reuses **no*
    to the provider's addresses. This connection is designed and tested during the pilot phase; never attach `app-internal` or `app` to an
    open network.
 4. Until the provider is configured, oauth2-proxy keeps restarting (OIDC discovery fails): this is expected.
+5. **Extension** (if the pilot includes it): option 2 is mandatory (D-045 §C point 18): `ENABLE_EXTENSION_OIDC=true`, an **HTTPS** issuer
+   and the API application's exact audience (`EXTENSION_OIDC_ISSUER`, `EXTENSION_OIDC_AUDIENCE`), `EXTENSION_REQUIRE_BEARER=true`. App
+   registrations at the provider and the identity point to settle (EXT-68): [`docs/extension-oidc.en.md`](./docs/extension-oidc.en.md) §6.
 
 ### Example: Entra ID
 
