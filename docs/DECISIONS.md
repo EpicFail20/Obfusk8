@@ -573,6 +573,11 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     entre appareils (le texte restauré copié depuis l'extension y resterait ; EXT-E-01 de l'extension, bouton de copie conservé avec
     son avertissement). Stratégies exactes à vérifier avec la DSI, non vérifiées ici.
 
+**Option 2 de l'extension** (ajouté le 2026-10-12, D-057)
+
+21. **Émetteur OIDC en HTTPS obligatoire** pour le pilote et la production : la construction de production de l'extension refuse un
+    émetteur `http:` ; seule la construction de laboratoire l'accepte, pour les noms `.lab.local` (Keycloak du laboratoire en HTTP).
+
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
 - **Contexte** : D-045 §B et §C point 4 laissaient ouvert le fournisseur d'identité du pilote (Keycloak en mode production ou Entra ID).
@@ -779,3 +784,59 @@ correspondance 60 min par défaut (égale à `cookie_expire`), copie du texte re
 6. **Retour arrière** : images d'avant la phase étiquetées `obfusk8-local:avant-phase3-app` et `-presidio-analyzer` (l'analyseur n'est
    pas reconstruit). `.env` du laboratoire : `ENABLE_EXTENSION_API=true`, `EXTENSION_ALLOWED_ORIGINS=chrome-extension://glaimpfdmfkidcgalcblojmkomplcgpa`.
 
+
+## D-056 — Mode forcé : mode à part entière, configurable par l'établissement — décision humaine du 2026-10-12 (consignée, non implémentée)
+
+- **Décision** : le mode forcé n'est **pas** un mode par défaut mais un **mode à part entière**, choisi par l'établissement :
+  - *guidé* (défaut, comportement actuel) ;
+  - *averti* : bandeau quand l'agent colle ou dépose directement sur un site d'IA, il peut continuer ;
+  - *forcé* : collage et dépôt directs bloqués et redirigés vers le panneau ; fichiers téléchargés depuis obfusk8 acceptés selon H-4 (D-024) ;
+  - éventuellement réglables **par site d'IA**.
+- **Réglages** : liste des sites concernés, seuil de longueur de collage, types de fichiers contrôlés, journalisation d'audit
+  (métadonnées seulement : site, action, décision, jamais le contenu).
+- **Sources de configuration** : la **stratégie gérée** de l'extension (`chrome.storage.managed`), qui fixe un niveau minimal non
+  modifiable par l'agent ; une **politique centrale** servie par le serveur (`/api/v1/policy`), réglée dans `.env` ou un fichier monté
+  (jamais dans le Dockerfile, qui ne sert qu'à construire l'image). **La plus restrictive l'emporte** : la politique serveur peut durcir
+  la stratégie gérée, jamais l'assouplir ; l'agent ne peut rien abaisser.
+- **Activation** réservée à l'établissement, après le cadre juridique (information des agents, CSE, AIPD).
+- **Phase « option 2 »** : aucune route `/api/v1/policy`, aucun script injecté, aucun blocage. La configuration de l'extension est
+  seulement préparée pour accueillir ces réglages sans refonte (combinateurs « le plus restrictif », dépôt `obfusk8-extension`, D-013).
+
+## D-057 — Phase « option 2 » : décisions de l'étape A — décision humaine du 2026-10-12
+
+Contexte : conception présentée à l'étape A (jeton OIDC propre à l'extension, option 2 de D-010). **Essai jetable** (réseau Docker
+interne, émetteur OIDC minimal, image oauth2-proxy en service v7.15.5) : jeton d'audience `obfusk8-api` → 202 ; autre audience,
+`account`, audience absente, expiré, signature fausse ou d'une autre clé, `alg: none`, autre émetteur, `email_verified=false` → 403 ;
+sans groupe autorisé → 401. Code source v7.15.5 lu : audiences acceptées = identifiant du client d'oauth2-proxy + audience de chaque
+couple `extra_jwt_issuers` (+ `oidc_extra_audiences`, à ne jamais renseigner) ; le jeton porteur est lu avant le cookie ; avec
+`bearer_token_login_fallback=false`, tout en-tête `Authorization` invalide reçoit 403.
+
+1. **Branches** : l'humain a fusionné `feat/ajustements` dans `main` de l'extension et créé `feat/option2` depuis `main` (vérifié :
+   `main` = `origin/main` = `feat/option2` = `43bb864`, avance rapide).
+2. **Retrait d'`Authorization`** sur les routeurs web (`app`, `app-upload`, `app-cancel`, `app-preview`), avant `oidc-auth` : accord.
+   Un jeton de l'extension n'ouvre pas le flux documents.
+3. **Émetteur du laboratoire en HTTP** : accepté **uniquement** par la construction de laboratoire de l'extension et pour les noms
+   `.lab.local`, avec test ; production en `https:` seulement. D-045 : émetteur HTTPS obligatoire (point 21).
+4. **Échange du code par CORS** (« Web origins » du client chez le fournisseur), sans permission d'hôte sur le fournisseur.
+5. **Pas de jeton de rafraîchissement** ; renouvellement silencieux (`prompt=none`) ; repli prévu si le silencieux échoue (étape C).
+   **Règle** : après tout effacement (verrouillage, inactivité, « Tout effacer », déconnexion), la connexion suivante est
+   **obligatoirement interactive** ; le renouvellement silencieux n'est réautorisé qu'après elle. But : sur un poste partagé, empêcher
+   qu'un autre agent obtienne en silence un jeton au nom du précédent grâce à la session du fournisseur. Test dédié.
+6. **Déconnexion** : locale avec effacement complet par défaut ; déconnexion auprès du fournisseur comme action explicite séparée
+   (« Se déconnecter partout »), avec avertissement qu'elle ferme aussi la session web.
+7. **Inactivité** : 10 min par défaut, de 1 à 60 min, une stratégie ne pouvant que raccourcir.
+8. **`EXTENSION_REQUIRE_BEARER`** : désactivé par défaut (laboratoire), activé en production.
+9. **Identité unifiée sur le `sub`**, dans les deux modes (cookie et jeton) et dans tous les flux (API texte et documents) : le `sub`
+   (`X-Auth-Request-User`) sert d'identité pour l'audit, les quotas de documents en attente, la propriété des documents (annulation,
+   aperçu, finalisation) et la limitation de débit. Le courriel n'est plus exigé ni utilisé comme identité. Identité vide refusée
+   (D-035, EXT-47). Tests de non-régression des quotas, de l'annulation et de la limitation de débit. Documentation pour la DPO :
+   audit pseudonymisé et procédure de ré-identification.
+10. **Diff du `CLAUDE.md`** du compte rendu de la phase 3 (§9) : appliqué.
+11. **Risque accepté** (EXT-66) : un jeton dont l'audience est l'identifiant du client d'oauth2-proxy est accepté (vérificateur
+    principal) ; seul oauth2-proxy, détenteur du secret de ce client, peut obtenir un tel jeton.
+
+**Constat de mise en œuvre (observé le 2026-10-12)** : oauth2-proxy v7.15.5 renseigne **déjà** `X-Auth-Request-User` avec le `sub`
+pour le parcours par cookie (`ProviderData.UserClaim` vaut `sub` par défaut et aucune option ne le change ; `user_id_claim`, obsolète,
+ne modifie que la réclamation du courriel) ; vérifié sur la pile du laboratoire avec le compte de test n° 1 (valeur de forme UUID,
+différente du courriel). Aucun réglage d'oauth2-proxy n'est donc nécessaire pour le point 9 ; la limitation de débit de Traefik
+(`sourcecriterion.requestheadername=X-Auth-Request-User`) était déjà fondée sur le `sub`.
