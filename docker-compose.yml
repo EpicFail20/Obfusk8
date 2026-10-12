@@ -285,6 +285,24 @@ services:
       # port — no subdomain, no other host: no open redirect. Derived from
       # APP_DOMAIN for the same reason as the redirect URL above.
       - OAUTH2_PROXY_WHITELIST_DOMAINS=${APP_DOMAIN}
+      # Phase "option 2" (D-057): the browser extension's OWN OIDC access
+      # token, sent as `Authorization: Bearer`. ENABLE_EXTENSION_OIDC=false
+      # (default): Authorization is ignored, sessions only (observed on a
+      # throwaway v7.15.5: a valid token gets 401, exactly as today).
+      # true: oauth2-proxy verifies signature (issuer's JWKS), issuer, expiry
+      # and the audience, which must be EXACTLY EXTENSION_OIDC_AUDIENCE (or
+      # this proxy's own client id, EXT-66): a token of the same issuer issued
+      # to another application is refused (403, proven on the throwaway trial
+      # of the phase). Never a broad audience ("account", one shared with
+      # other applications) and never oidc_extra_audiences.
+      # true with an empty issuer: oauth2-proxy refuses to start (observed).
+      # Set in the environment only, never also in oauth2-proxy.cfg.
+      - OAUTH2_PROXY_SKIP_JWT_BEARER_TOKENS=${ENABLE_EXTENSION_OIDC:-false}
+      - OAUTH2_PROXY_EXTRA_JWT_ISSUERS=${EXTENSION_OIDC_ISSUER:-}=${EXTENSION_OIDC_AUDIENCE:-}
+      # An invalid token gets 403 instead of falling back to the session
+      # cookie: a request that reaches `app` with a bearer token was
+      # authenticated BY that token (EXTENSION_REQUIRE_BEARER relies on it).
+      - OAUTH2_PROXY_BEARER_TOKEN_LOGIN_FALLBACK=false
     secrets:
       - oauth2_client_secret
       - oauth2_cookie_secret
@@ -434,6 +452,15 @@ services:
       # cookie, any other extension holding a host permission on the server
       # could otherwise call the API as the user. Malformed entry = startup fails.
       - EXTENSION_ALLOWED_ORIGINS=${EXTENSION_ALLOWED_ORIGINS:-}
+      # Phase "option 2" (D-057): same switch as oauth2-proxy's above, read by
+      # the app only to refuse EXTENSION_REQUIRE_BEARER without it (startup
+      # fails: a session cookie plus a forged Authorization would pass).
+      - ENABLE_EXTENSION_OIDC=${ENABLE_EXTENSION_OIDC:-false}
+      # true (production, D-057 point 8): /api/v1/ refuses (401) any request
+      # without a bearer token, i.e. authenticated by the session cookie,
+      # which any extension holding a host permission could ride. false
+      # (default, lab): the session-mode extension keeps working.
+      - EXTENSION_REQUIRE_BEARER=${EXTENSION_REQUIRE_BEARER:-false}
       # MAX_TEXT_CHARS: measured on this VM (analyzer alone): 0.71 s at
       # 20000 characters, 2.7 s at 50000 — the analyzer has ONE worker shared
       # with the document flow. If changed, recompute the text-bodylimit
@@ -525,12 +552,20 @@ services:
       - "traefik.http.middlewares.doc-auth-errors.errors.service=auth@docker"
       - "traefik.http.middlewares.doc-auth-errors.errors.query=/oauth2/sign_in?rd={url}"
       - "traefik.http.middlewares.doc-auth-errors.errors.statusRewrites.401=302"
+      # Phase "option 2" (D-057 point 2): the extension's bearer token opens
+      # /api/v1/ only. oauth2-proxy's /oauth2/auth serves every router and
+      # reads a bearer token before the cookie, so the web routers drop any
+      # Authorization header BEFORE oidc-auth: a stolen extension token does
+      # not open the document flow, which authenticates by session only
+      # (empty value = header removed, Traefik 3.7 headers middleware). The
+      # web interface never sends Authorization: no visible change.
+      - "traefik.http.middlewares.strip-authorization.headers.customrequestheaders.Authorization="
       - "traefik.http.routers.app-upload.rule=Host(`${APP_DOMAIN}`) && (PathPrefix(`/api/detect`) || PathPrefix(`/api/finalize`))"
       - "traefik.http.routers.app-upload.entrypoints=websecure"
       - "traefik.http.routers.app-upload.tls=true"
       - "traefik.http.routers.app-upload.priority=100"
       - "traefik.http.routers.app.priority=1"
-      - "traefik.http.routers.app-upload.middlewares=doc-auth-errors,oidc-auth,upload-ratelimit,upload-user-ratelimit,upload-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-upload.middlewares=doc-auth-errors,strip-authorization,oidc-auth,upload-ratelimit,upload-user-ratelimit,upload-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-upload.service=app"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.average=5"
       - "traefik.http.middlewares.upload-ratelimit.ratelimit.period=1m"
@@ -553,7 +588,7 @@ services:
       - "traefik.http.routers.app-cancel.entrypoints=websecure"
       - "traefik.http.routers.app-cancel.tls=true"
       - "traefik.http.routers.app-cancel.priority=100"
-      - "traefik.http.routers.app-cancel.middlewares=oidc-auth,upload-ratelimit,upload-user-ratelimit,cancel-bodylimit,gateway-secret@file"
+      - "traefik.http.routers.app-cancel.middlewares=strip-authorization,oidc-auth,upload-ratelimit,upload-user-ratelimit,cancel-bodylimit,gateway-secret@file"
       - "traefik.http.routers.app-cancel.service=app"
       - "traefik.http.middlewares.cancel-bodylimit.buffering.maxRequestBodyBytes=4096"
       - "traefik.http.middlewares.cancel-bodylimit.buffering.memRequestBodyBytes=4096"
@@ -578,7 +613,7 @@ services:
       - "traefik.http.routers.app-preview.entrypoints=websecure"
       - "traefik.http.routers.app-preview.tls=true"
       - "traefik.http.routers.app-preview.priority=100"
-      - "traefik.http.routers.app-preview.middlewares=doc-auth-errors,oidc-auth,preview-ratelimit,gateway-secret@file"
+      - "traefik.http.routers.app-preview.middlewares=doc-auth-errors,strip-authorization,oidc-auth,preview-ratelimit,gateway-secret@file"
       - "traefik.http.routers.app-preview.service=app"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.average=120"
       - "traefik.http.middlewares.preview-ratelimit.ratelimit.period=1m"
@@ -631,7 +666,7 @@ services:
       - "traefik.http.routers.app-metrics.middlewares=metrics-allowlist,gateway-secret@file"
       - "traefik.http.routers.app-metrics.service=app"
       - "traefik.http.middlewares.metrics-allowlist.ipallowlist.sourcerange=127.0.0.1/32"
-      - "traefik.http.routers.app.middlewares=oauth2-errors,oidc-auth,gateway-secret@file"
+      - "traefik.http.routers.app.middlewares=oauth2-errors,strip-authorization,oidc-auth,gateway-secret@file"
       - "traefik.docker.network=obfusk8_app-internal"
       - "traefik.enable=true"
       - "traefik.http.routers.app.rule=Host(`${APP_DOMAIN}`)"
