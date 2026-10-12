@@ -137,5 +137,6 @@
   "text_api_analyzer_unavailable": "Analysis engine unavailable. Try again later.",
   "text_api_internal_error": "Unexpected internal error. Give the request identifier to the administrator.",
   "text_api_identity_missing": "User identity missing: access denied. Sign in again; if the problem persists, give the request identifier to the administrator.",
-  "text_api_origin_refused": "Request refused: this extension is not allowed on this server. Give the request identifier to the administrator."
+  "text_api_origin_refused": "Request refused: this extension is not allowed on this server. Give the request identifier to the administrator.",
+  "text_api_bearer_required": "Sign-in required: sign in from the extension (access token missing or not accepted). If the problem persists, give the request identifier to the administrator."
 }

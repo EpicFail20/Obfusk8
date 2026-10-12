@@ -88,7 +88,8 @@ DISK_FREE_BYTES = Gauge(
 
 # Text API for the browser extension (text_api.py) — closed categories only:
 # route in {"analyze", "pseudonymize"}; outcome in {"ok", "too_large",
-# "invalid", "busy", "timeout", "analyzer_unavailable", "error"}.
+# "invalid", "busy", "timeout", "analyzer_unavailable", "error", "forbidden",
+# "origin_refused", "bearer_required"}.
 TEXT_API_REQUESTS = Counter(
     "anonymiseur_text_api_requests_total",
     "Number of text API requests, by route and outcome",

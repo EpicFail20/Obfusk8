@@ -124,6 +124,13 @@ _IDENTITY_HEADERS = ("x-auth-request-user",)
 # be listed: it comes with option 2 of D-010 (tokens), not here.
 _EXTENSION_ORIGIN = re.compile(r"chrome-extension://[a-p]{32}")
 
+# Phase "option 2" (D-057 point 8): `Authorization: Bearer <token>`, exactly as
+# oauth2-proxy v7.15.5 recognizes it (scheme "Bearer", case-sensitive, one
+# space, a token without white space; jwt_session.go). The application never
+# verifies the token: oauth2-proxy did (issuer, signature, audience, expiry)
+# and, with bearer_token_login_fallback=false, refused any invalid one.
+_BEARER = re.compile(r"Bearer [^\s]+")
+
 
 class TextApiConfigError(RuntimeError):
     """Invalid configuration — raised at startup, never per request."""
@@ -180,6 +187,19 @@ class TextApiSettings:
     # request of any extension that holds a host permission on the server:
     # this list keeps the API to the obfusk8 extension (D-054 point 6).
     allowed_origins: frozenset[str] = frozenset()
+    # Phase "option 2" (D-057): oauth2-proxy verifies the extension's own
+    # OIDC token (ENABLE_EXTENSION_OIDC, read here only to check the next
+    # setting against it); EXTENSION_REQUIRE_BEARER refuses the requests that
+    # carry no such token, i.e. the ones authenticated by the session cookie
+    # (production). Both off by default: behaviour unchanged.
+    oidc_enabled: bool = False
+    require_bearer: bool = False
+
+    def __post_init__(self) -> None:
+        # Without token verification, oauth2-proxy ignores Authorization and
+        # authenticates by cookie: a cookie plus a forged header would pass.
+        if self.require_bearer and not self.oidc_enabled:
+            raise TextApiConfigError("EXTENSION_REQUIRE_BEARER=true requires ENABLE_EXTENSION_OIDC=true")
 
     @property
     def max_body_bytes(self) -> int:
@@ -197,6 +217,8 @@ class TextApiSettings:
             max_concurrency=_env_positive(source, "MAX_TEXT_CONCURRENCY", cls.max_concurrency),
             max_queue=_env_positive(source, "MAX_TEXT_QUEUE", cls.max_queue),
             allowed_origins=_env_origins(source, "EXTENSION_ALLOWED_ORIGINS"),
+            oidc_enabled=_env_bool(source, "ENABLE_EXTENSION_OIDC", False),
+            require_bearer=_env_bool(source, "EXTENSION_REQUIRE_BEARER", False),
         )
 
 
@@ -410,6 +432,13 @@ def origin_allowed(request: Request, allowed: frozenset[str], *, required: bool)
     return len(values) == 1 and values[0] in allowed
 
 
+def bearer_present(request: Request) -> bool:
+    """D-057 point 8: exactly one Authorization header holding a bearer token.
+    Several headers are refused: oauth2-proxy verified the first one only."""
+    values = request.headers.getlist("authorization")
+    return len(values) == 1 and _BEARER.fullmatch(values[0]) is not None
+
+
 class ApiError(Exception):
     """A client-facing error: closed `outcome` category, i18n key."""
 
@@ -498,7 +527,7 @@ class _TextApi:
         log.info(
             "API texte activée : MAX_TEXT_CHARS=%d, plafond de corps=%d octets, délai=%ds, "
             "concurrence=%d, file=%d, %d reconnaisseur(s) propre(s), configuration=%s, "
-            "%d origine(s) d'extension autorisée(s)",
+            "%d origine(s) d'extension autorisée(s), jeton porteur exigé=%s",
             settings.max_text_chars,
             settings.max_body_bytes,
             settings.max_analysis_seconds,
@@ -507,6 +536,7 @@ class _TextApi:
             len(self.extension_recognizers),
             self.fingerprint,
             len(settings.allowed_origins),
+            settings.require_bearer,
         )
         if not settings.allowed_origins:
             log.warning("EXTENSION_ALLOWED_ORIGINS vide : toute analyse ou pseudonymisation sera refusée (403, D-054)")
@@ -691,6 +721,8 @@ class _TextApi:
         try:
             if not has_identity(request):
                 raise ApiError(403, "forbidden", "text_api_identity_missing")
+            if self.settings.require_bearer and not bearer_present(request):
+                raise ApiError(401, "bearer_required", "text_api_bearer_required")
             if not origin_allowed(request, self.settings.allowed_origins, required=True):
                 raise ApiError(403, "origin_refused", "text_api_origin_refused")
             payload, theme = await self._parse(request, outcome)
@@ -767,6 +799,8 @@ class _TextApi:
         request_id = uuid.uuid4().hex
         if not has_identity(request):
             return self._error_response(ApiError(403, "forbidden", "text_api_identity_missing"), request_id)
+        if self.settings.require_bearer and not bearer_present(request):
+            return self._error_response(ApiError(401, "bearer_required", "text_api_bearer_required"), request_id)
         if not origin_allowed(request, self.settings.allowed_origins, required=False):
             return self._error_response(ApiError(403, "origin_refused", "text_api_origin_refused"), request_id)
         if self.recognizers_fingerprint is None:
