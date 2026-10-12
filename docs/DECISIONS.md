@@ -574,7 +574,7 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
     (états `active`, `idle`, `locked` ; délai par défaut 60 s, minimum de 15 s fixé par le code source de Chromium). En attendant :
     durée de vie par défaut de 30 min (D-006 de l'extension) et rappel de « Tout effacer » en fin de tâche dans la formation des agents.
     *Mise à jour du 2026-10-12 (phase « option 2 ») : fait (D-014 de l'extension) : travail, correspondance et jeton effacés au
-    verrouillage et après 10 min d'inactivité, dans toutes les vues ; identifiants redemandés à la connexion suivante (`prompt=login`).
+    verrouillage et après le délai d'inactivité (10 min, porté à 60 min par défaut par D-058), dans toutes les vues ; identifiants redemandés à la connexion suivante (`prompt=login`).
     Détection du verrouillage selon le système à vérifier au test manuel sur les postes du pilote (EXT-E-14 de l'extension).*
 20. **Presse-papiers des postes du pilote** : désactiver par stratégie de groupe l'historique du presse-papiers et sa synchronisation
     entre appareils (le texte restauré copié depuis l'extension y resterait ; EXT-E-01 de l'extension, bouton de copie conservé avec
@@ -584,6 +584,17 @@ Compilée depuis le dépôt (décisions, constats, comptes rendus) ; ordre propo
 
 21. **Émetteur OIDC en HTTPS obligatoire** pour le pilote et la production : la construction de production de l'extension refuse un
     émetteur `http:` ; seule la construction de laboratoire l'accepte, pour les noms `.lab.local` (Keycloak du laboratoire en HTTP).
+22. **Postes partagés sans verrouillage automatique** (ajouté le 2026-10-12, D-058) : raccourcir le délai d'inactivité de l'extension par
+    stratégie gérée (`idleMinutes`, 60 min par défaut) ; le verrouillage du poste efface immédiatement.
+23. **`prompt=login` selon le type de poste** (D-058) : évaluer avec la DSI un réglage par stratégie gérée (postes partagés : toujours ;
+    postes personnels avec authentification unique : à discuter), la valeur sûre (`prompt=login`) restant le défaut. Non implémenté.
+24. **Identité chez Entra ID** (EXT-68, D-058, à valider avec la DSI) : **cible**, une **seule inscription d'application** pour
+    oauth2-proxy et l'API, pour que le `sub` soit le même dans les deux modes (configuration attendue : `docs/extension-oidc.md` §6) ;
+    **repli** documenté, deux pseudonymes par agent, ré-identification couvrant les deux, quotas et limitations de débit comptés
+    séparément.
+25. **Journaux** (D-058) : durée de conservation des journaux (conteneurs, audit) à fixer avec la DPO ; validation par le RSSI que les
+    journaux du fournisseur d'identité couvrent la traçabilité des connexions (le journal d'oauth2-proxy ne garde plus d'identifiant
+    direct, EXT-67).
 
 ## D-046 — Keycloak réservé au laboratoire — décision humaine du 2026-10-07
 
@@ -831,7 +842,7 @@ couple `extra_jwt_issuers` (+ `oidc_extra_audiences`, à ne jamais renseigner) ;
    qu'un autre agent obtienne en silence un jeton au nom du précédent grâce à la session du fournisseur. Test dédié.
 6. **Déconnexion** : locale avec effacement complet par défaut ; déconnexion auprès du fournisseur comme action explicite séparée
    (« Se déconnecter partout »), avec avertissement qu'elle ferme aussi la session web.
-7. **Inactivité** : 10 min par défaut, de 1 à 60 min, une stratégie ne pouvant que raccourcir.
+7. **Inactivité** : 10 min par défaut, de 1 à 60 min, une stratégie ne pouvant que raccourcir (défaut porté à 60 min par D-058).
 8. **`EXTENSION_REQUIRE_BEARER`** : désactivé par défaut (laboratoire), activé en production.
 9. **Identité unifiée sur le `sub`**, dans les deux modes (cookie et jeton) et dans tous les flux (API texte et documents) : le `sub`
    (`X-Auth-Request-User`) sert d'identité pour l'audit, les quotas de documents en attente, la propriété des documents (annulation,
@@ -847,3 +858,22 @@ pour le parcours par cookie (`ProviderData.UserClaim` vaut `sub` par défaut et 
 ne modifie que la réclamation du courriel) ; vérifié sur la pile du laboratoire avec le compte de test n° 1 (valeur de forme UUID,
 différente du courriel). Aucun réglage d'oauth2-proxy n'est donc nécessaire pour le point 9 ; la limitation de débit de Traefik
 (`sourcecriterion.requestheadername=X-Auth-Request-User`) était déjà fondée sur le `sub`.
+
+## D-058 — Décisions sur le compte rendu de la phase « option 2 » — décision humaine du 2026-10-12
+
+1. **Reconnexion et inactivité** (extension D-015) : `prompt=login` à chaque connexion interactive **validé** ; délai d'inactivité par
+   défaut **60 min** (1 à 60, une stratégie ne pouvant que raccourcir), verrouillage toujours immédiat ; l'**échéance du travail** (30 min)
+   n'efface **pas** la connexion (vérifié dans le code, tests dédiés) ; seuls le verrouillage, l'inactivité, « Tout effacer » et la
+   déconnexion l'effacent. D-045 points 22 et 23.
+2. **Identité chez Entra ID** (EXT-68) : cible, une seule inscription d'application pour oauth2-proxy et l'API ; repli, deux pseudonymes.
+   D-045 point 24 ; configuration attendue dans `docs/extension-oidc.md` §6. Mise en œuvre liée côté extension : portées supplémentaires
+   par configuration (`oidc.scopes`, extension D-015 point 6), sans laquelle Entra ID ne délivre pas de jeton pour l'API.
+3. **Journal d'authentification d'oauth2-proxy** (EXT-67) : **conservé, sans courriel ni donnée directement identifiante** (adresse IP,
+   résultat, horodatage). La ré-identification passe par l'annuaire ou les journaux du fournisseur, sous le contrôle de la DSI.
+   Configuration et test **proposés, non appliqués** (EXT-67). La note `docs/audit-identite.md` est **acceptée en l'état** comme
+   proposition à soumettre à la DPO. D-045 point 25.
+4. **Laboratoire** : `ENABLE_EXTENSION_OIDC=true` et le client témoin `obfusk8-test-autre-application` gardés (jetables avec la VM, D-049).
+5. **Diffs des `CLAUDE.md`** : présentés à l'humain pour relecture, non appliqués.
+6. **Risque accepté** : EXT-66 (jeton dont l'audience est le client d'oauth2-proxy, accepté) reste 🟡 ; seul oauth2-proxy, détenteur du
+   secret de ce client, peut obtenir un tel jeton. Avec la cible du point 2 (inscription unique chez Entra ID), ce cas devient le cas
+   nominal du jeton de l'extension.

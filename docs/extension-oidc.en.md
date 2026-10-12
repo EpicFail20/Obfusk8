@@ -93,21 +93,32 @@ oauth2-proxy's client (`anonymiseur-app`) is never modified. The admin password 
 Lab `.env`: `ENABLE_EXTENSION_OIDC=true`, `EXTENSION_OIDC_ISSUER=http://keycloak.lab.local:8080/realms/lab`,
 `EXTENSION_OIDC_AUDIENCE=obfusk8-api`, `EXTENSION_REQUIRE_BEARER=false` (the extension in `session` mode remains usable).
 
-### Entra ID (to configure at the establishment, not done)
+### Entra ID (to configure at the establishment, not done; to validate with the IT department, D-058)
 
-- **API application** ("obfusk8-api"): expose a scope (e.g. `access_as_user`), version 2 access tokens
-  (`requestedAccessTokenVersion: 2`). `EXTENSION_OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0`;
-  `EXTENSION_OIDC_AUDIENCE` = **the API application's client id (GUID)** (in v2, `aud` is always the API's client id, Microsoft
-  documentation).
-- **Extension application**: public client; "Single-page application" platform to redeem the code through CORS from the extension's page
-  (assumed, to be validated); one redirect URI `https://<identifier>.chromiumapp.org/` per published identifier (Chrome Web Store, Edge
-  Add-ons); delegated permission on the API's scope, admin consent.
-- **Claims**: groups as **GUIDs** (adapt `allowed_groups`); `email` absent by default from access tokens (the `sub` then replaces it in
-  `X-Auth-Request-Email`, with no effect on the identity, which is the `sub`). `email_verified` absent: treated as true by oauth2-proxy
-  (source code).
-- **Identity, to settle before the pilot (EXT-68)**: in Entra ID the `sub` is **specific to each application**; the cookie
-  (oauth2-proxy's client) and the token (API application) may carry two different `sub` values for one agent. Lead to test: a single app
-  registration for oauth2-proxy and the API.
+**Target: a single app registration** for oauth2-proxy and the API. In Entra ID the `sub` is specific to each application (EXT-68): with a
+single registration, the cookie (oauth2-proxy's ID token) and the extension's token (access token for the API) carry the **same** `sub`
+(assumed from Microsoft's documentation, to check with a test account at the establishment). Expected configuration of that registration:
+- **Web platform** (oauth2-proxy, confidential client): redirect URI `https://<APP_DOMAIN>/oauth2/callback`, secret in
+  `secrets/oauth2_client_secret.txt` (never in the extension).
+- **"Single-page application" platform** (extension, no secret, PKCE): one redirect URI `https://<extension identifier>.chromiumapp.org/`
+  per published identifier (Chrome Web Store, Edge Add-ons); redeeming the code through CORS from the extension's page assumes this
+  platform (assumed, to validate).
+- **Expose an API**: Application ID URI (e.g. `api://<client id>`) and a delegated scope `access_as_user`; version 2 access tokens
+  (`requestedAccessTokenVersion: 2` in the manifest): `aud` = the registration's **client id (GUID)**.
+- **Consent**: admin consent for the `access_as_user` scope (the application calls itself); assignment of the allowed users or group.
+- **Optional claims**: `email` (ID token and access token); security groups (`groupMembershipClaims`), as **GUIDs**, hence `allowed_groups`
+  as GUIDs.
+- **Server**: `oidc_issuer_url` and `EXTENSION_OIDC_ISSUER` = `https://login.microsoftonline.com/<tenant>/v2.0`; `EXTENSION_OIDC_AUDIENCE`
+  = the registration's client id (the same as oauth2-proxy's: the extension's token then goes through oauth2-proxy's main verifier, the
+  case of EXT-66, accepted); `EXTENSION_REQUIRE_BEARER=true`.
+- **Extension** (production configuration): `oidc.clientId` = the registration's client id, `oidc.audience` = the same value,
+  `oidc.scopes` = `["api://<client id>/access_as_user"]` (without this scope, Entra ID issues a token for Microsoft Graph, refused by
+  the server).
+
+**Fallback** (if the single registration is not retained): two registrations (oauth2-proxy; API and extension), hence **two pseudonyms per
+agent** (cookie `sub` in `audit.log`, token `sub` in `audit-extension.log`). Re-identification must cover both (the provider's sign-in
+logs per application); document quotas and rate limits are counted separately (document flow by cookie, text API by token in production).
+
 - **Network**: oauth2-proxy must reach the provider's public keys (outbound access of D-046 / D-045 §C point 4).
 
 ## 7. Identity and audit

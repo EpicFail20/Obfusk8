@@ -151,9 +151,17 @@ incomplet d'une ligne du journal d'oauth2-proxy) ; aucun mot de passe affiché.
 7. Ouvrir le panneau : « Non connecté », message « Connexion requise ». **Se connecter** : la fenêtre Keycloak s'ouvre, compte de test
    n° 1 → « Connecté … jusqu'à HH:MM ». Analyser, décocher, pseudonymiser, coller une réponse, restaurer.
 8. Attendre plus de 4 min, puis analyser : aucune demande de connexion (renouvellement silencieux).
+8 bis. **Échéance du travail** (D-058) : saisir un texte, attendre plus de 30 min **en utilisant le poste** (sans le verrouiller, sans
+   rester 60 min inactif), rouvrir le panneau : le texte et la correspondance sont effacés, mais l'état reste « Connecté » et l'analyse
+   suivante part **sans** demande de connexion ni saisie du mot de passe.
 9. **Verrouiller le poste** (Win+L), déverrouiller : « Votre travail a été effacé au verrouillage du poste » dans le panneau et dans
    l'onglet s'il est ouvert ; **Se connecter** : Keycloak **redemande le mot de passe**.
-10. Inactivité : ne rien toucher pendant 10 min (ou stratégie gérée `idleMinutes: 1`) → « … après une période d'inactivité ».
+9 bis. **Verrouillage sous Linux** : `Super + L`, ou `loginctl lock-session` dans un terminal, puis déverrouiller. Effacement immédiat
+   attendu (message « au verrouillage du poste ») ; si l'environnement de bureau ne signale pas le verrouillage à Chrome (EXT-E-14 de
+   l'extension), l'effacement n'arrive qu'au bout du délai d'inactivité, avec le message « après une période d'inactivité » : noter
+   lequel des deux pour chaque système testé.
+10. Inactivité : ne rien toucher pendant **60 min** (délai par défaut, D-058), ou stratégie gérée `idleMinutes: 1` pour un essai
+    rapide → « … après une période d'inactivité » ; **Se connecter** redemande le mot de passe.
 11. **Se déconnecter** : travail effacé, message. **Se déconnecter partout** : confirmation, puis l'interface web d'obfusk8 n'est plus
     connectée non plus.
 
@@ -198,3 +206,30 @@ incomplet d'une ligne du journal d'oauth2-proxy) ; aucun mot de passe affiché.
 +Clients de l'extension : `keycloak/lab/apply-clients.sh` (fichiers versionnés), jamais à la main ; ne touche pas `anonymiseur-app`.
 +Bancs : `benchmarks/e2e/e2e_extension_oidc.py` (vrais jetons), `check_tokens_not_logged.py`.
 ```
+
+## 10. Compte rendu complémentaire (décisions humaines du 2026-10-12, D-058)
+
+| Point | Fait | Où |
+|---|---|---|
+| `prompt=login` validé | Consigné | Serveur D-058, extension D-015 |
+| Inactivité 60 min par défaut, verrouillage immédiat | `DEFAULT_IDLE_MINUTES = 60`, construction par défaut, schéma géré, documentation FR/EN, tests | Extension `2882b90`, `664e754` |
+| Échéance du travail sans effet sur la connexion | **Vérifié dans le code, aucune correction nécessaire** (`SessionStore.clear()` ne retire que `mapping`, `work`, `deadline` ; la clé `auth` reste). Tests dédiés : unitaire (renouvellement silencieux `prompt=none` après l'échéance) et navigateur (vue rouverte après l'échéance : travail effacé, toujours connectée, aucune demande d'autorisation) ; verrouillage, inactivité, « Tout effacer », déconnexion : reconnexion interactive avec `prompt=login` (tests existants) | Extension `6f1d127` |
+| Portées supplémentaires (Entra ID) | Ajout de `oidc.scopes` dans la configuration de l'extension (sans elle, Entra ID ne délivre pas de jeton pour l'API ; écart à l'exigence « sans changement de code » trouvé en documentant l'inscription unique) | Extension `87ce329`, D-015 point 6 |
+| Identité chez Entra ID | Cible (inscription unique) et repli documentés | `extension-oidc.md` §6 FR/EN, D-045 point 24 |
+| Journal d'oauth2-proxy | Proposition de configuration et de test, **non appliquée** ; le `sub` ne peut pas figurer dans ce journal (aucune variable de gabarit) | EXT-67, D-045 point 25 |
+| D-045 | Points 22 à 25 | `docs/DECISIONS.md` |
+| Laboratoire | `ENABLE_EXTENSION_OIDC=true` et client témoin gardés | D-058 point 4 |
+| EXT-66 | Risque accepté (🟡) confirmé | D-058 point 6 |
+
+**Sorties utiles** (extension, branche `feat/option2`) :
+```
+tools/run.sh check    → ℹ tests 134  ℹ pass 134  ℹ fail 0   (types, Biome, interdits, construction : verts)
+tools/run.sh browser  → ℹ tests 55   ℹ pass 55   ℹ fail 0
+  ✔ work expiry (30 min): work and mapping erased, still signed in, no sign-in asked (D-015)
+```
+Serveur : documentation seulement dans ce complément (aucun code modifié ; suite inchangée, 635 tests verts au commit précédent).
+
+**Décisions qui te reviennent** (nouvelles) :
+1. `oidc.scopes` (extension D-015 point 6) : à valider.
+2. EXT-67 : couper ou non le journal standard d'oauth2-proxy (il garde les réclamations d'un jeton refusé) ; accepter que le `sub`
+   n'apparaisse pas dans le journal d'authentification ; appliquer la configuration proposée (fichier `oauth2-proxy.cfg`, accord requis).

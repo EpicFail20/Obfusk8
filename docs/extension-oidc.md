@@ -96,21 +96,36 @@ Le client d'oauth2-proxy (`anonymiseur-app`) n'est jamais modifié. Le mot de pa
 `.env` du laboratoire : `ENABLE_EXTENSION_OIDC=true`, `EXTENSION_OIDC_ISSUER=http://keycloak.lab.local:8080/realms/lab`,
 `EXTENSION_OIDC_AUDIENCE=obfusk8-api`, `EXTENSION_REQUIRE_BEARER=false` (l'extension en mode `session` reste utilisable).
 
-### Entra ID (à configurer chez l'établissement, non fait)
+### Entra ID (à configurer chez l'établissement, non fait ; à valider avec la DSI, D-058)
 
-- **Application API** (« obfusk8-api ») : exposer une portée (par exemple `access_as_user`), jetons d'accès en version 2
-  (`requestedAccessTokenVersion: 2`). `EXTENSION_OIDC_ISSUER=https://login.microsoftonline.com/<tenant>/v2.0` ;
-  `EXTENSION_OIDC_AUDIENCE` = **identifiant (GUID) de l'application API** (en v2, `aud` est toujours l'identifiant client de l'API,
-  documentation Microsoft).
-- **Application de l'extension** : cliente publique ; plateforme « Single-page application » pour l'échange du code par CORS depuis la
-  page de l'extension (supposé, à valider) ; une URI de redirection `https://<identifiant>.chromiumapp.org/` par identifiant publié
-  (Chrome Web Store, Edge Add-ons) ; permission déléguée sur la portée de l'API, consentement de l'administrateur.
-- **Réclamations** : groupes en **GUID** (`allowed_groups` à adapter) ; `email` absent par défaut des jetons d'accès (le `sub` le remplace
-  alors dans `X-Auth-Request-Email`, sans effet sur l'identité, qui est le `sub`). `email_verified` absent : considéré vrai par
-  oauth2-proxy (code source).
-- **Identité, à trancher avant le pilote (EXT-68)** : chez Entra ID, le `sub` est **propre à chaque application** ; le cookie (client
-  d'oauth2-proxy) et le jeton (application API) peuvent porter deux `sub` différents pour un même agent. Piste à tester : une seule
-  inscription d'application pour oauth2-proxy et l'API.
+**Cible : une seule inscription d'application** pour oauth2-proxy et l'API. Chez Entra ID, le `sub` est propre à chaque application
+(EXT-68) : avec une seule inscription, le cookie (ID token d'oauth2-proxy) et le jeton de l'extension (jeton d'accès pour l'API)
+portent le **même** `sub` (supposé d'après la documentation Microsoft, à vérifier avec un compte de test chez l'établissement).
+Configuration attendue de cette inscription :
+- **Plateforme Web** (oauth2-proxy, client confidentiel) : URI de redirection `https://<APP_DOMAIN>/oauth2/callback`, secret dans
+  `secrets/oauth2_client_secret.txt` (jamais dans l'extension).
+- **Plateforme « Single-page application »** (extension, sans secret, PKCE) : une URI de redirection
+  `https://<identifiant de l'extension>.chromiumapp.org/` par identifiant publié (Chrome Web Store, Edge Add-ons) ; l'échange du code
+  par CORS depuis la page de l'extension suppose cette plateforme (supposé, à valider).
+- **Exposer une API** : URI d'ID d'application (par exemple `api://<identifiant client>`) et une portée déléguée `access_as_user` ;
+  jetons d'accès en version 2 (`requestedAccessTokenVersion: 2` dans le manifeste) : `aud` = **identifiant client (GUID)** de
+  l'inscription.
+- **Consentement** : consentement administrateur pour la portée `access_as_user` (l'application s'appelle elle-même) ; affectation des
+  utilisateurs ou du groupe autorisé.
+- **Réclamations facultatives** : `email` (ID token et jeton d'accès) ; groupes de sécurité (`groupMembershipClaims`), en **GUID**,
+  d'où `allowed_groups` en GUID.
+- **Serveur** : `oidc_issuer_url` et `EXTENSION_OIDC_ISSUER` = `https://login.microsoftonline.com/<tenant>/v2.0` ;
+  `EXTENSION_OIDC_AUDIENCE` = identifiant client de l'inscription (le même que celui d'oauth2-proxy : le jeton de l'extension passe alors
+  par le vérificateur principal d'oauth2-proxy, cas d'EXT-66, accepté) ; `EXTENSION_REQUIRE_BEARER=true`.
+- **Extension** (configuration de production) : `oidc.clientId` = identifiant client de l'inscription, `oidc.audience` = même valeur,
+  `oidc.scopes` = `["api://<identifiant client>/access_as_user"]` (sans cette portée, Entra ID délivre un jeton pour Microsoft Graph,
+  refusé par le serveur).
+
+**Repli** (si l'inscription unique n'est pas retenue) : deux inscriptions (oauth2-proxy ; API et extension), donc **deux pseudonymes par
+agent** (`sub` du cookie dans `audit.log`, `sub` du jeton dans `audit-extension.log`). La ré-identification doit couvrir les deux (journaux
+de connexion du fournisseur par application) ; quotas de documents et limitations de débit sont comptés séparément (flux documents par
+cookie, API texte par jeton en production).
+
 - **Réseau** : oauth2-proxy doit joindre les clés publiques du fournisseur (accès sortant de D-046 / D-045 §C point 4).
 
 ## 7. Identité et audit
