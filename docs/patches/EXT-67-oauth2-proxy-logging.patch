@@ -1,0 +1,19 @@
+--- a/oauth2-proxy/oauth2-proxy.cfg	2026-10-12 20:37:20.964715359 +0000
++++ b/oauth2-proxy/oauth2-proxy.cfg	2026-10-12 20:37:20.968715306 +0000
+@@ -73,3 +73,16 @@
+ # (official documentation, configuration overview: "Use "-" to disable
+ # default footer. (Can be used to obfuscate the version)").
+ footer = "-"
++
++# EXT-67 (D-058, D-059): the authentication and request logs keep no direct
++# identifier. In v7.15.5 the default templates add {{.Username}}, which is the
++# e-mail (session.Email, else session.User), and the authentication log adds
++# {{.Message}}, which prints the whole session (e-mail, sub, username).
++# Kept: client address, request id, time, result. The sub cannot be logged
++# here (no template variable in 7.15.x, official documentation): the link
++# between a sub and its requests is the application's audit; re-identification
++# goes through the identity provider (directory, sign-in logs), under the IT
++# department's control. The standard log still prints the claims of a refused
++# bearer token: accepted risk (EXT-70), logs restricted and kept briefly.
++auth_logging_format = "{{.Client}} - {{.RequestID}} [{{.Timestamp}}] [{{.Status}}]"
++request_logging_format = "{{.Client}} - {{.RequestID}} [{{.Timestamp}}] {{.Host}} {{.RequestMethod}} {{.RequestURI}} {{.Protocol}} {{.StatusCode}} {{.ResponseSize}} {{.RequestDuration}}"
